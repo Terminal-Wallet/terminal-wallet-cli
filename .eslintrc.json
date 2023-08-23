@@ -1,0 +1,78 @@
+{
+    "env": {
+        "browser": true,
+        "es2021": true
+    },
+    "root": true,
+    "extends": [
+        "eslint:recommended",
+        "plugin:@typescript-eslint/recommended"
+    ],
+    "parser": "@typescript-eslint/parser",
+    "parserOptions": {
+        "ecmaVersion": 2021,
+        "project": [
+            "./tsconfig.json"
+        ]
+    },
+    "plugins": [
+        "@typescript-eslint",
+        "no-only-tests"
+    ],
+    "rules": {
+        "@typescript-eslint/strict-boolean-expressions": [
+            0, // disable for now. too many clutterz
+            {
+                "allowString": false,
+                "allowNumber": false
+            }
+        ],
+        "arrow-body-style": 0,
+        "import/extensions": 0,
+        "no-unused-vars": 0, // disable for now lots of these too
+        "no-use-before-define": 1,
+        "import/prefer-default-export": 0,
+        "import/no-unresolved": 0,
+        "no-restricted-syntax": 0,
+        "no-unused-expressions": 0,
+        "no-shadow": 0,
+        "no-continue": 0,
+        // "no-console": 1,
+        "default-case": 0,
+        "@typescript-eslint/switch-exhaustiveness-check": 1,
+        "@typescript-eslint/no-explicit-any": 0, // disable for now
+        "@typescript-eslint/ban-ts-comment": 0,
+        "@typescript-eslint/no-unused-vars": 0, // disable for now
+        "@typescript-eslint/no-unsafe-call": 0, // disable for now
+        "@typescript-eslint/no-unsafe-member-access": 0, // disable for now
+        "@typescript-eslint/no-unsafe-assignment": 0, // disable for now, 
+        "@typescript-eslint/no-unsafe-argument": 0, // disable for now
+        "@typescript-eslint/no-unsafe-return": 0,
+        "@typescript-eslint/require-await": 0,
+        "import/order": 0,
+        "consistent-return": 0,
+        "prefer-destructuring": 1,
+        "lines-between-class-members": 0,
+        "@typescript-eslint/no-empty-function": 0,
+        "no-promise-executor-return": 0,
+        "@typescript-eslint/no-floating-promises": 0,
+        "@typescript-eslint/no-non-null-assertion": 1,
+        "no-warning-comments": 1,
+        "@typescript-eslint/no-duplicate-enum-values": 1,
+        "no-only-tests/no-only-tests": 1,
+        "no-async-promise-executor": 1,
+        "prefer-const": 1,
+        "@typescript-eslint/no-var-requires": 0,
+        "no-case-declarations": 1,
+        "no-fallthrough": 1,
+        "no-unsafe-finally": 1,
+        "no-empty": 1,
+        "@typescript-eslint/ban-types": 1,
+        "no-var": 1,
+        "no-control-regex": 1
+    },
+    "ignorePatterns": [
+        "src/**/*.test.ts",
+        "src/frontend/generated/*"
+    ]
+}

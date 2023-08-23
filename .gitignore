@@ -1,0 +1,12 @@
+node_modules
+.wallets
+.walletsV2
+.railgun.db
+.artifacts
+.zKeyChains
+dist
+patched_modules
+build
+releases
+TODO*
+.DS_Store

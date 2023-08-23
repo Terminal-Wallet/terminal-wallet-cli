@@ -1,0 +1,181 @@
+import { ChainType, NetworkName } from "@railgun-community/shared-models";
+import {
+  TokenAddressArbitrum,
+  TokenAddressBSC,
+  TokenAddressEthereum,
+  TokenAddressPolygonPOS,
+} from "../models/token-models";
+import { getProviderObjectFromURL } from "../models/network-models";
+
+export default {
+  apiKeys: {
+    zeroXApi: "6470059b-ed6f-4ca5-8ad7-7e8ee9b65c8a",
+  },
+  engine: {
+    artifactPath: ".artifacts",
+    databasePath: ".railgun.db",
+    keyChainPath: ".zKeyChains",
+    defaultChain: NetworkName.Ethereum,
+    defaultNetworks: [
+      NetworkName.Ethereum,
+      NetworkName.BNBChain,
+      NetworkName.Polygon,
+      NetworkName.Arbitrum,
+      NetworkName.EthereumGoerli,
+      NetworkName.ArbitrumGoerli,
+    ],
+  },
+  tokenConfig: {
+    [NetworkName.Ethereum]: [
+      TokenAddressEthereum.USDT,
+      TokenAddressEthereum.WETH,
+      TokenAddressEthereum.WBTC,
+      TokenAddressEthereum.WBTC,
+      TokenAddressEthereum.DAI,
+      TokenAddressEthereum.USDC,
+      TokenAddressEthereum.RAIL,
+    ],
+    [NetworkName.BNBChain]: [
+      TokenAddressBSC.BTCB,
+      TokenAddressBSC.BUSD,
+      TokenAddressBSC.CAKE,
+      TokenAddressBSC.DAI,
+      TokenAddressBSC.ETH,
+      TokenAddressBSC.RAILBSC,
+      TokenAddressBSC.USDC,
+      TokenAddressBSC.USDT,
+      TokenAddressBSC.WBNB,
+    ],
+    [NetworkName.Polygon]: [
+      TokenAddressPolygonPOS.BNB,
+      TokenAddressPolygonPOS.DAI,
+      TokenAddressPolygonPOS.RAILPOLY,
+      TokenAddressPolygonPOS.USDC,
+      TokenAddressPolygonPOS.USDT,
+      TokenAddressPolygonPOS.WBTC,
+      TokenAddressPolygonPOS.WETH,
+      TokenAddressPolygonPOS.WMATIC,
+    ],
+    [NetworkName.Arbitrum]: [
+      TokenAddressArbitrum.ARB,
+      TokenAddressArbitrum.DAI,
+      TokenAddressArbitrum.TUSD,
+      TokenAddressArbitrum.UNI,
+      TokenAddressArbitrum.USDC,
+      TokenAddressArbitrum.USDT,
+      TokenAddressArbitrum.WBTC,
+      TokenAddressArbitrum.WETH,
+    ],
+    [NetworkName.Railgun]: [],
+    [NetworkName.ArbitrumGoerli]: [],
+    [NetworkName.EthereumGoerli]: [],
+    [NetworkName.EthereumRopsten_DEPRECATED]: [],
+    [NetworkName.PolygonMumbai]: [],
+    [NetworkName.Hardhat]: [],
+  },
+  networkConfig: {
+    [NetworkName.Ethereum]: {
+      name: "Ethereum",
+      type: ChainType.EVM,
+      chainId: 1,
+      blockscan: "https://etherscan.io/",
+      providers: [
+        getProviderObjectFromURL("https://rpc.ankr.com/eth"),
+        getProviderObjectFromURL("https://cloudflare-eth.com/"),
+        getProviderObjectFromURL("https://ethereum.publicnode.com"),
+      ],
+    },
+    [NetworkName.Polygon]: {
+      name: "Polygon",
+      type: ChainType.EVM,
+      chainId: 137,
+      blockscan: "https://polygonscan.com/",
+      providers: [
+        getProviderObjectFromURL("https://rpc-mainnet.matic.quiknode.pro"),
+        getProviderObjectFromURL("https://polygon-bor.publicnode.com"),
+        getProviderObjectFromURL("https://polygon-rpc.com"),
+        getProviderObjectFromURL("https://rpc-mainnet.maticvigil.com"),
+      ],
+    },
+    [NetworkName.BNBChain]: {
+      name: "Binance",
+      type: ChainType.EVM,
+      chainId: 56,
+      blockscan: "https://bscscan.com/",
+      providers: [
+        getProviderObjectFromURL("https://bsc.blockpi.network/v1/rpc/public"),
+        getProviderObjectFromURL("https://bsc.rpc.blxrbdn.com"),
+        getProviderObjectFromURL("https://bsc-dataseed4.defibit.io"),
+        getProviderObjectFromURL("https://bsc-dataseed2.binance.org"),
+      ],
+    },
+    [NetworkName.Arbitrum]: {
+      name: "Arbitrum",
+      blockscan: "https://arbiscan.io/",
+      type: ChainType.EVM,
+      chainId: 42161,
+      providers: [
+        getProviderObjectFromURL(
+          "https://endpoints.omniatech.io/v1/arbitrum/one/public",
+        ),
+        getProviderObjectFromURL("https://arbitrum-one.publicnode.com"),
+        getProviderObjectFromURL("https://arbitrum.meowrpc.com	"),
+        getProviderObjectFromURL("https://arbitrum-one.public.blastapi.io"),
+      ],
+    },
+    [NetworkName.EthereumGoerli]: {
+      chainId: 5,
+      type: ChainType.EVM,
+      name: "Görli Testnet",
+      blockscan: "https://goerli.etherscan.io/",
+      providers: [
+        getProviderObjectFromURL("https://gateway.tenderly.co/public/goerli"),
+        getProviderObjectFromURL("https://ethereum-goerli.publicnode.com"),
+        getProviderObjectFromURL("https://eth-goerli.public.blastapi.io"),
+      ],
+    },
+    [NetworkName.ArbitrumGoerli]: {
+      chainId: 421613,
+      type: ChainType.EVM,
+      name: "Arbitrum Görli Testnet",
+      blockscan: "https://goerli.arbiscan.io/",
+      providers: [
+        getProviderObjectFromURL(
+          "https://arbitrum-goerli.blockpi.network/v1/rpc/public",
+        ),
+        getProviderObjectFromURL("https://arbitrum-goerli.publicnode.com"),
+        getProviderObjectFromURL("https://rpc.goerli.arbitrum.gateway.fm"),
+        getProviderObjectFromURL("https://arbitrum-goerli.public.blastapi.io"),
+      ],
+    },
+    [NetworkName.Railgun]: {
+      chainId: 1337,
+      providers: [],
+      name: "Railgun",
+      blockscan: "",
+      type: ChainType.EVM,
+    },
+    [NetworkName.EthereumRopsten_DEPRECATED]: {
+      chainId: 1337,
+      providers: [],
+      name: "EthereumRopsten_DEPRECATED",
+      blockscan: "",
+      type: ChainType.EVM,
+    },
+    [NetworkName.PolygonMumbai]: {
+      chainId: 1337,
+      providers: [],
+      name: "PolygonMumbai",
+      blockscan: "",
+      type: ChainType.EVM,
+    },
+
+    [NetworkName.Hardhat]: {
+      chainId: 1337,
+      providers: [],
+      name: "Hardhat",
+      blockscan: "",
+      type: ChainType.EVM,
+    },
+  },
+};

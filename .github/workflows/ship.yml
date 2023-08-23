@@ -1,0 +1,105 @@
+name: Ship
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  ship:
+    strategy:
+      fail-fast: false # prevents GitHub from cancelling all in-progress jobs if any matrix job fails.
+      matrix:
+        node-version: [16.x]
+        os: [ubuntu-20.04, macos-latest, windows-latest]
+        include:
+          - os: macos-latest
+            output: terminal-wallet-cli
+          - os: ubuntu-20.04
+            output: terminal-wallet-cli
+          - os: windows-latest
+            output: terminal-wallet-cli.exe
+
+    runs-on: ${{ matrix.os }}
+    outputs:
+      version: ${{ steps.versionStore.outputs.version }}
+      
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: Set up Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+
+      - name: Store Current Version
+        id: versionStore
+        run: |
+          echo "version=$(jq -r '.version' package.json)" >> $GITHUB_OUTPUT
+
+      - name: Retrieve Cached Dependencies
+        id: cache-npm
+        uses: actions/cache@v3
+        env:
+          cache-name: dep-cache
+        with:
+          path: |
+            ~/.npm
+            ~/.cargo
+            node_modules
+          key: ${{ runner.os }}-build-${{ env.cache-name }}
+          restore-keys: ${{ runner.os }}-build-${{ env.cache-name }}
+
+      - if: ${{ steps.cache-npm.outputs.cache-hit != 'true' }}
+        name: Setup nj-cli & Install Dependencies
+        continue-on-error: true
+        run: |
+          cargo install nj-cli
+          npm ci --legacy-peer-deps
+
+      - name: Ship
+        run: npm run ship
+
+      - uses: actions/upload-artifact@v3
+        with:
+          path: build/${{ matrix.output }}
+          name: cli-${{ matrix.os }}
+
+  release:
+    needs: ship
+    runs-on: ubuntu-latest
+    steps:
+    - name: Download artifacts
+      uses: actions/download-artifact@v3
+
+    - name: Prepare artifacts
+      run: |
+        mv cli-macos-latest/terminal-wallet-cli terminal-wallet-macos
+        mv cli-ubuntu-20.04/terminal-wallet-cli terminal-wallet-linux
+        mv cli-windows-latest/terminal-wallet-cli.exe terminal-wallet-win.exe
+        chmod a+x terminal-wallet-macos terminal-wallet-linux
+        tar -czf release-${{needs.ship.outputs.version}}-macos.tar.gz terminal-wallet-macos
+        tar -czf release-${{needs.ship.outputs.version}}-linux.tar.gz terminal-wallet-linux
+        tar -czf release-${{needs.ship.outputs.version}}-win.tar.gz terminal-wallet-win.exe
+        sha256sum release-* >> SHA256SUMS.sha
+
+    - name: Upload artifacts to GitHub Release
+      uses: softprops/action-gh-release@v1
+      with:
+        draft: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+        files: |
+          release-*.tar.gz
+          SHA256SUMS.sha
