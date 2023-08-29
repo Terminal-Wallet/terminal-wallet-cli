@@ -1,6 +1,6 @@
 {
   "name": "terminal-wallet-cli",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Privacy Enhanced Command Line Interface EVM Wallet",
   "type": "commonjs",
   "main": "./dist/main.js",
@@ -20,7 +20,17 @@
     "installdeps": "npm install --legacy-peer-deps",
     "release": "release-it"
   },
-  "keywords": ["defi", "crypto", "wallet", "privacy", "0x", "swap", "private swap", "0zk", "railgun"],
+  "keywords": [
+    "defi",
+    "crypto",
+    "wallet",
+    "privacy",
+    "0x",
+    "swap",
+    "private swap",
+    "0zk",
+    "railgun"
+  ],
   "author": "anon",
   "license": "LGPL-3.0-or-later",
   "devDependencies": {
