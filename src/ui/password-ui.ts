@@ -1,4 +1,6 @@
-import { computePasswordHash } from "../util/crypto";
+import { isDefined } from "@railgun-community/shared-models";
+import { computePasswordHash, hashString } from "../util/crypto";
+import { WalletManager } from "../wallet/wallet-manager";
 import { confirmPrompt } from "./confirm-ui";
 const { Password } = require("enquirer");
 
@@ -32,16 +34,21 @@ export const getPasswordPrompt = async (
 };
 
 export const confirmGetPasswordPrompt = async (
-  expectedHash: string,
+  walletManager: WalletManager,
   options?: object,
 ): Promise<boolean> => {
   const refPassword = await getPasswordPrompt(
     "Confirm your password:",
-    options,
+    {
+      validate: (value: string) => {
+        return value !== "" && value !== " " && value.length >= 8;
+      },
+    },
+    walletManager.saltedPassword,
   );
-
-  if (refPassword) {
-    return refPassword === expectedHash;
+  if (isDefined(refPassword)) {
+    const computedHash = await hashString(refPassword);
+    return computedHash === walletManager.comparisonRefHash;
   }
 
   return false;

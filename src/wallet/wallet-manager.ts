@@ -5,7 +5,7 @@ import { RailgunReadableAmount } from "../models/balance-models";
 import { RailgunBalancesEvent } from "@railgun-community/shared-models";
 import Web3 from "web3";
 
-type WalletManager = {
+export type WalletManager = {
   progressBar: ProgressBar;
   web3: Web3;
   balanceScanProgress: number;

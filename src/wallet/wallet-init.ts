@@ -97,7 +97,7 @@ export const freshRailgunWallet = async (
     }
     if (isInitilization) {
       const confirmed = await confirmGetPasswordPrompt(
-        walletManager.hashedPassword,
+        walletManager,
         {
           validate: (value: string) => {
             return value !== "" && value !== " " && value.length >= 8;
@@ -105,7 +105,7 @@ export const freshRailgunWallet = async (
         },
       );
 
-      if (confirmed) {
+      if (!confirmed) {
         throw new Error("Passwords Do Not Match.");
       }
     }
@@ -127,7 +127,7 @@ export const freshRailgunWallet = async (
     if (!confirm) {
       return undefined;
     }
-    return freshRailgunWallet(mnemonic);
+    return freshRailgunWallet(mnemonic, isInitilization);
   }
 };
 
