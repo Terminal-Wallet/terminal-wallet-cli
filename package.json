@@ -1,6 +1,6 @@
 {
   "name": "terminal-wallet-cli",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Privacy Enhanced Command Line Interface EVM Wallet",
   "type": "commonjs",
   "main": "./dist/main.js",
