@@ -5,11 +5,7 @@ import { WalletCache } from "../models/wallet-models";
 import { loadEngineProvidersForNetwork } from "../engine/engine";
 import { switchWakuNetwork } from "../waku/connect-waku";
 import { walletManager } from "./wallet-manager";
-import {
-  initilizeFreshWallet,
-  reinitWalletForChain,
-  setupWeb3Provider,
-} from "./wallet-init";
+import { initilizeFreshWallet, reinitWalletForChain } from "./wallet-init";
 import { updateCachedTokenData } from "../balance/token-util";
 import configDefaults from "../config/config-defaults";
 import { getSaltedPassword } from "./wallet-password";
@@ -42,20 +38,7 @@ export const switchRailgunNetwork = async (chainName: NetworkName) => {
   saveKeychainFile(walletManager.keyChain, keyChainPath);
   await switchWakuNetwork(chainName);
   await loadEngineProvidersForNetwork(chainName);
-
-  if (chainName === NetworkName.Ethereum || chainName === NetworkName.Polygon) {
-    setupWeb3Provider(chainName);
-  }
 };
-
-// export const awaitBalancesLoaded = async (): Promise<void> => {
-//   return new Promise(async (resolve, reject) => {
-//     while (!walletManager.merkelScanComplete) {
-//       await delay(100);
-//     }
-//     resolve();
-//   });
-// };
 
 export const switchRailgunWallet = async (
   walletName: string,

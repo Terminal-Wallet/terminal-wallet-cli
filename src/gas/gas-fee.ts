@@ -1,28 +1,15 @@
-import { NetworkName } from "@railgun-community/shared-models";
-import { getWalletWeb3 } from "../wallet/wallet-util";
+import { NetworkName, isDefined } from "@railgun-community/shared-models";
 import { formatUnits } from "ethers";
-
-type FeeHistoryBlock = {
-  blockNumber: number | string;
-  baseFeePerGas: bigint;
-  gasUsedRatio: number;
-  priorityFeePerGas: bigint[];
-};
+import { getFirstPollingProviderForChain } from "../network/network-util";
+import { promiseTimeout } from "../util/util";
+import { FeeHistoryResponse } from "../models/gas-models";
+import { CustomGasEstimate } from "../models/gas-models";
+import { FeeHistoryBlock } from "../models/gas-models";
 
 const avg = (arr: bigint[]): bigint => {
   const sum = arr.reduce((a, v) => a + v);
   const avgsum = BigInt(Math.round(Number(sum) / arr.length));
   return avgsum;
-};
-
-export type CustomGasEstimate = {
-  gasPrice: bigint;
-  maxFeePerGas: bigint;
-  maxPriorityFeePerGas: bigint;
-  baseFeePerGas: bigint;
-  slow: bigint;
-  average: bigint;
-  fast: bigint;
 };
 
 export const formatFeeHistory = (
@@ -34,7 +21,10 @@ export const formatFeeHistory = (
   let index = 0;
   const blocks: FeeHistoryBlock[] = [];
 
-  while (blockNum < result.oldestBlock + BigInt(result.reward.length)) {
+  while (
+    blockNum < result.oldestBlock + BigInt(result.reward.length) &&
+    isDefined(result.reward[index])
+  ) {
     const newPriorityFeePerGas = result.reward[index].map((x: string) =>
       BigInt(x),
     );
@@ -64,25 +54,50 @@ export const getGasEstimates = async (
   chainName: NetworkName,
 ): Promise<CustomGasEstimate> => {
   const historicalBlocks = 40;
-  const web3 = getWalletWeb3();
+  const currentBlockNumber = "latest";
+  const rewardPercentiles = [60, 80, 95];
+  const provider = getFirstPollingProviderForChain(chainName);
 
-  const gasPrice = await web3.eth.getGasPrice();
-  const currentBlockNumber = "pending";
+  const gasPricePromise = await promiseTimeout(
+    provider.send("eth_gasPrice", []),
+    10 * 1000,
+  ).catch((err) => {
+    console.log(err.message);
+    return undefined;
+  });
 
-  const feeHistory = (await web3.eth.getFeeHistory(
-    historicalBlocks,
-    currentBlockNumber,
-    [60, 80, 95],
-  )) as unknown as {
-    oldestBlock: bigint;
-    reward: [string[]];
-    baseFeePerGas: bigint[];
-    gasUsedRatio: bigint[];
-  };
+  if (!isDefined(gasPricePromise)) {
+    throw new Error("Unable to get Gas Price");
+  }
+
+  const gasPrice = BigInt(gasPricePromise);
+  if (!isDefined(gasPrice)) {
+    throw new Error("Gas Price is Null");
+  }
+
+  const feeHistoryPromise = await promiseTimeout(
+    provider.send("eth_feeHistory", [
+      historicalBlocks,
+      currentBlockNumber,
+      rewardPercentiles,
+    ]),
+    10 * 1000,
+  ).catch((err) => {
+    console.log(err.message);
+    return undefined;
+  });
+
+  if (!isDefined(feeHistoryPromise)) {
+    throw new Error("Unable to get gas fee history.");
+  }
+
+  const feeHistory = feeHistoryPromise as FeeHistoryResponse;
 
   const baseFeePerGas = feeHistory.baseFeePerGas[
     feeHistory.baseFeePerGas.length - 1
   ] as bigint;
+
+  feeHistory.oldestBlock = BigInt(feeHistory.oldestBlock);
 
   const blocks: FeeHistoryBlock[] = formatFeeHistory(
     feeHistory,
@@ -93,7 +108,7 @@ export const getGasEstimates = async (
   const average = avg(blocks.map((b) => b.priorityFeePerGas[1] as bigint));
   const fast = avg(blocks.map((b) => b.priorityFeePerGas[2] as bigint));
 
-  const maxPriorityFeePerGas = average; 
+  const maxPriorityFeePerGas = average;
 
   const maxFeePerGas = maxPriorityFeePerGas + baseFeePerGas;
 

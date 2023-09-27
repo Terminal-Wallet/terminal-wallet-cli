@@ -7,11 +7,6 @@ import { saveKeychainFile } from "./wallet-cache";
 import configDefaults from "../config/config-defaults";
 
 
-
-export const getWalletWeb3 = () => {
-  return walletManager.web3;
-};
-
 export const isMenuResponsive = () => {
   return walletManager.responsiveMenu;
 };

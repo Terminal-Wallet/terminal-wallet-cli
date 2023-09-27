@@ -35,7 +35,6 @@ import { getSaltedPassword } from "./wallet-password";
 import { confirmGetPasswordPrompt } from "../ui/password-ui";
 import { computePasswordHash, getIV } from "../util/crypto";
 import configDefaults from "../config/config-defaults";
-import Web3 from "web3";
 
 export const generateKeychainPrompt = async (
   index: number = 0,
@@ -216,15 +215,6 @@ export const initRailgunWallet = async (): Promise<
   await processSafeExit();
 };
 
-export const setupWeb3Provider = (chainName: NetworkName) => {
-  const providerURL = getProviderURLForChain(chainName);
-  if (!isDefined(walletManager.web3)) {
-    walletManager.web3 = new Web3(providerURL);
-  } else {
-    walletManager.web3.setProvider(providerURL);
-  }
-};
-
 export const initializeWalletSystems = async () => {
   try {
     await initRailgunEngine();
@@ -292,12 +282,6 @@ export const initializeWalletSystems = async () => {
     await initializeEthersWallet();
   }
 
-  if (
-    currentNetwork === NetworkName.Ethereum ||
-    currentNetwork === NetworkName.Polygon
-  ) {
-    setupWeb3Provider(currentNetwork);
-  }
 };
 
 export const reinitWalletForChain = async (chainName: NetworkName) => {
