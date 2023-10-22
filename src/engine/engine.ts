@@ -3,7 +3,7 @@ import {
   startRailgunEngine,
   stopRailgunEngine,
   getProver,
-  Groth16,
+  SnarkJSGroth16 as Groth16,
   pauseAllPollingProviders,
   resumeIsolatedPollingProviderForNetwork,
   scanUpdatesForMerkletreeAndWallets,
