@@ -5,7 +5,7 @@ import {
   getWalletMnemonic,
   loadWalletByID,
   setOnBalanceUpdateCallback,
-  setOnMerkletreeScanCallback,
+  setOnUTXOMerkletreeScanCallback,
 } from "@railgun-community/wallet";
 import {
   NetworkName,
@@ -95,14 +95,11 @@ export const freshRailgunWallet = async (
       throw new Error("Hashed Password Timed Out");
     }
     if (isInitilization) {
-      const confirmed = await confirmGetPasswordPrompt(
-        walletManager,
-        {
-          validate: (value: string) => {
-            return value !== "" && value !== " " && value.length >= 8;
-          },
+      const confirmed = await confirmGetPasswordPrompt(walletManager, {
+        validate: (value: string) => {
+          return value !== "" && value !== " " && value.length >= 8;
         },
-      );
+      });
 
       if (!confirmed) {
         throw new Error("Passwords Do Not Match.");
@@ -228,7 +225,7 @@ export const initializeWalletSystems = async () => {
 
   walletManager.keyChain = await initializeKeychainSystem();
   setOnBalanceUpdateCallback(scanBalancesCallback);
-  setOnMerkletreeScanCallback(merkelTreeScanCallback);
+  setOnUTXOMerkletreeScanCallback(merkelTreeScanCallback);
 
   const currentNetwork =
     walletManager.keyChain.currentNetwork ?? NetworkName.Ethereum;
@@ -281,7 +278,6 @@ export const initializeWalletSystems = async () => {
     await loadEngineProvidersForNetwork(currentNetwork);
     await initializeEthersWallet();
   }
-
 };
 
 export const reinitWalletForChain = async (chainName: NetworkName) => {

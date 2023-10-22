@@ -40,10 +40,14 @@ import {
   confirmPromptCatchRetry,
   confirmPromptExit,
 } from "./confirm-ui";
-import { NetworkName, isDefined } from "@railgun-community/shared-models";
+import {
+  NetworkName,
+  TXIDVersion,
+  isDefined,
+} from "@railgun-community/shared-models";
 import {
   refreshRailgunBalances,
-  rescanFullMerkletreesAndWallets,
+  rescanFullUTXOMerkletreesAndWallets,
 } from "@railgun-community/wallet";
 import {
   clearHashedPassword,
@@ -180,7 +184,7 @@ const runWalletToolsPrompt = async (chainName: NetworkName) => {
       case "full-balance-rescan": {
         const chain = getChainForName(chainName);
         resetMenuForScan();
-        rescanFullMerkletreesAndWallets(chain);
+        rescanFullUTXOMerkletreesAndWallets(chain);
         break;
       }
       case "destruct-wallet": {
@@ -663,12 +667,13 @@ export const runMainMenu = async () => {
     case "refresh-balances": {
       const chain = getChainForName(networkName);
       const railgunWalletID = getCurrentRailgunID();
+      const txIDVersion = TXIDVersion.V2_PoseidonMerkle;
       const fullRescan = true;
       resetMenuForScan();
       setStatusText(
         "Starting Balance Refresh. This may take some time... ".yellow,
       );
-      refreshRailgunBalances(chain, railgunWalletID, fullRescan);
+      refreshRailgunBalances(txIDVersion, chain, railgunWalletID, fullRescan);
       break;
     }
     case "rpc-tools": {
