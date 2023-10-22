@@ -69,6 +69,7 @@ export default {
     [NetworkName.Railgun]: [],
     [NetworkName.ArbitrumGoerli]: [],
     [NetworkName.EthereumGoerli]: [],
+    [NetworkName.EthereumSepolia]: [],
     [NetworkName.EthereumRopsten_DEPRECATED]: [],
     [NetworkName.PolygonMumbai]: [],
     [NetworkName.Hardhat]: [],
@@ -146,6 +147,19 @@ export default {
         getProviderObjectFromURL("https://arbitrum-goerli.publicnode.com"),
         getProviderObjectFromURL("https://rpc.goerli.arbitrum.gateway.fm"),
         getProviderObjectFromURL("https://arbitrum-goerli.public.blastapi.io"),
+      ],
+    },
+    [NetworkName.EthereumSepolia]: {
+      chainId: 11155111,
+      type: ChainType.EVM,
+      name: "Sepolia Testnet",
+      blockscan: "https://sepolia.etherscan.io/",
+      providers: [
+        getProviderObjectFromURL("https://rpc.ankr.com/eth_sepolia"),
+        getProviderObjectFromURL(
+          "https://ethereum-sepolia.blockpi.network/v1/rpc/public",
+        ),
+        getProviderObjectFromURL("https://ethereum-sepolia.publicnode.com"),
       ],
     },
     [NetworkName.Railgun]: {
