@@ -13,6 +13,7 @@ import {
   NetworkName,
   RailgunERC20Recipient,
   SelectedRelayer,
+  TXIDVersion,
   isDefined,
 } from "@railgun-community/shared-models";
 import configDefaults from "../../config/config-defaults";
@@ -84,7 +85,7 @@ export const getZer0XSwapInputs = async (
     const swap = new ZeroXSwapRecipe(
       sellERC20Info,
       buyERC20Info,
-      slippagePercentage,
+      BigInt(slippagePercentage),
       privateSwapRecipient,
     );
     const recipeInput: RecipeInput = {
@@ -129,7 +130,7 @@ export const getZer0XSwapInputs = async (
     networkName: chainName,
     sellERC20Amount: relayAdaptUnshieldERC20Amounts[0],
     buyERC20Info,
-    slippagePercentage,
+    slippageBasisPoints: BigInt(slippagePercentage),
     isRailgun: false,
   };
   const quote = await ZeroXQuote.getSwapQuote(quoteParams);
@@ -166,7 +167,7 @@ export const getSwapQuote = async (
     networkName: chainName,
     sellERC20Amount,
     buyERC20Info,
-    slippagePercentage: slippagePercentage,
+    slippageBasisPoints: BigInt(slippagePercentage),
     isRailgun: true,
   };
   const quote = await ZeroXQuote.getSwapQuote(quoteParams);
@@ -180,6 +181,7 @@ export const getZer0XSwapTransactionGasEstimate = async (
   relayerSelection?: SelectedRelayer,
 ): Promise<PrivateGasEstimate | undefined> => {
   const railgunWalletID = getCurrentRailgunID();
+  const txIDVersion = TXIDVersion.V2_PoseidonMerkle;
 
   const gasDetailsResult = await getTransactionGasDetails(
     chainName,
@@ -207,6 +209,7 @@ export const getZer0XSwapTransactionGasEstimate = async (
   } = zer0XSwapInputs;
 
   const { gasEstimate } = await gasEstimateForUnprovenCrossContractCalls(
+    txIDVersion,
     chainName,
     railgunWalletID,
     encryptionKey,
@@ -237,6 +240,8 @@ export const getProvedZer0XSwapTransaction = async (
 ) => {
   const chainName = getCurrentNetwork();
   const railgunWalletID = getCurrentRailgunID();
+  const txIDVersion = TXIDVersion.V2_PoseidonMerkle;
+
   const progressBar = new ProgressBar("Starting Proof Generation");
   const progressCallback = (
     progress: number,
@@ -268,6 +273,7 @@ export const getProvedZer0XSwapTransaction = async (
     typeof relayerFeeERC20Recipient !== "undefined" ? false : true;
   try {
     await generateCrossContractCallsProof(
+      txIDVersion,
       chainName,
       railgunWalletID,
       encryptionKey,
@@ -290,6 +296,7 @@ export const getProvedZer0XSwapTransaction = async (
       });
 
     const { transaction, nullifiers } = await populateProvedCrossContractCalls(
+      txIDVersion,
       chainName,
       railgunWalletID,
       relayAdaptUnshieldERC20Amounts,

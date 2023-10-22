@@ -9,6 +9,7 @@ import {
   SelectedRelayer,
   TransactionGasDetailsType2,
   isDefined,
+  TXIDVersion,
 } from "@railgun-community/shared-models";
 import {
   calculateRelayerFeeERC20Amount,
@@ -163,7 +164,7 @@ export const getPrivateTransactionGasEstimate = async (
   memoText = "",
 ): Promise<PrivateGasEstimate | undefined> => {
   const railgunWalletID = getCurrentRailgunID();
-
+  const txIDVersion = TXIDVersion.V2_PoseidonMerkle;
   const gasDetailsResult = await getTransactionGasDetails(
     chainName,
     relayerSelection,
@@ -182,6 +183,7 @@ export const getPrivateTransactionGasEstimate = async (
   console.log("Getting Gas Estimate for Transaction...");
 
   const { gasEstimate } = await gasEstimateForUnprovenTransfer(
+    txIDVersion,
     chainName,
     railgunWalletID,
     encryptionKey,
@@ -238,6 +240,7 @@ export const getProvedPrivateTransaction = async (
 ) => {
   const chainName = getCurrentNetwork();
   const railgunWalletID = getCurrentRailgunID();
+  const txIDVersion = TXIDVersion.V2_PoseidonMerkle;
 
   const progressBar = new ProgressBar("Starting Proof Generation");
   const progressCallback = (
@@ -267,6 +270,7 @@ export const getProvedPrivateTransaction = async (
   const proofStartTime = Date.now();
   try {
     await generateTransferProof(
+      txIDVersion,
       chainName,
       railgunWalletID,
       encryptionKey,
@@ -289,6 +293,7 @@ export const getProvedPrivateTransaction = async (
     const proofTimeElapsed = (proofEndTime - proofStartTime) / 1000;
     console.log(`Proof Generation Took ${proofTimeElapsed}s`);
     const { transaction, nullifiers } = await populateProvedTransfer(
+      txIDVersion,
       chainName,
       railgunWalletID,
       showSenderAddressToRecipient,

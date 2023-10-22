@@ -3,6 +3,7 @@ import {
   NetworkName,
   RailgunERC20AmountRecipient,
   SelectedRelayer,
+  TXIDVersion,
   TransactionGasDetails,
   isDefined,
 } from "@railgun-community/shared-models";
@@ -75,6 +76,7 @@ export const getUnshieldERC20TransactionGasEstimate = async (
   relayerSelection?: SelectedRelayer,
 ): Promise<PrivateGasEstimate | undefined> => {
   const railgunWalletID = getCurrentRailgunID();
+  const txIDVersion = TXIDVersion.V2_PoseidonMerkle;
 
   const gasDetailsResult = await getTransactionGasDetails(
     chainName,
@@ -97,6 +99,7 @@ export const getUnshieldERC20TransactionGasEstimate = async (
   );
   const { gasEstimate, relayerFeeCommitment } =
     await gasEstimateForUnprovenUnshield(
+      txIDVersion,
       chainName,
       railgunWalletID,
       encryptionKey,
@@ -123,6 +126,7 @@ export const getProvedUnshieldERC20Transaction = async (
 ) => {
   const chainName = getCurrentNetwork();
   const railgunWalletID = getCurrentRailgunID();
+  const txIDVersion = TXIDVersion.V2_PoseidonMerkle;
 
   const progressBar = new ProgressBar("Starting Proof Generation");
   const progressCallback = (
@@ -149,6 +153,7 @@ export const getProvedUnshieldERC20Transaction = async (
 
   try {
     await generateUnshieldProof(
+      txIDVersion,
       chainName,
       railgunWalletID,
       encryptionKey,
@@ -163,6 +168,7 @@ export const getProvedUnshieldERC20Transaction = async (
     });
 
     const { transaction, nullifiers } = await populateProvedUnshield(
+      txIDVersion,
       chainName,
       railgunWalletID,
       erc20AmountRecipients,
