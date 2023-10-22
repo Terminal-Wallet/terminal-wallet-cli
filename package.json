@@ -60,11 +60,11 @@
     "typescript": "5.1.6"
   },
   "dependencies": {
-    "@railgun-community/cookbook": "2.3.12",
-    "@railgun-community/curve25519-scalarmult-rsjs": "~0.1.10",
-    "@railgun-community/shared-models": "5.3.6",
-    "@railgun-community/waku-relayer-client": "4.3.3",
-    "@railgun-community/wallet": "5.5.8",
+    "@railgun-community/cookbook": "2.5.0",
+    "@railgun-community/curve25519-scalarmult-rsjs": "0.2.1",
+    "@railgun-community/shared-models": "5.8.1",
+    "@railgun-community/waku-relayer-client": "4.6.1",
+    "@railgun-community/wallet": "5.14.1",
     "bn": "1.0.5",
     "colors": "^1.4.0",
     "enquirer": "2.3.6",
