@@ -1,4 +1,7 @@
-import { RailgunERC20Amount } from "@railgun-community/shared-models";
+import {
+  RailgunERC20Amount,
+  RailgunWalletBalanceBucket,
+} from "@railgun-community/shared-models";
 
 export type RailgunBalance = {
   tokenAddress: string;
@@ -20,6 +23,11 @@ export type RailgunBalanceCache = {
 
 export type BalanceCacheMap = NumMapType<
   NumMapType<MapType<RailgunBalanceCache>>
+>;
+
+// chain.type >> chain.id >> balancebucket >> tokenaddr >> cache
+export type BalanceBucketCacheMap = NumMapType<
+  NumMapType<MapType<MapType<RailgunBalanceCache>>>
 >;
 
 export type RailgunReadableAmount = RailgunERC20Amount & {

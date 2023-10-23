@@ -1,8 +1,12 @@
 import {
   NetworkName,
   RailgunBalancesEvent,
+  RailgunWalletBalanceBucket,
 } from "@railgun-community/shared-models";
-import { BalanceCacheMap } from "../models/balance-models";
+import {
+  BalanceBucketCacheMap,
+  BalanceCacheMap,
+} from "../models/balance-models";
 import {
   getERC20AddressesForChain,
   getERC20Balance,
@@ -19,7 +23,7 @@ import { ChainIDToNameMap } from "../models/network-models";
 const CACHE_TIMEOUT = 10 * 1000; // 5 minutes;
 
 export const publicERC20BalanceCache: BalanceCacheMap = {};
-export const privateERC20BalanceCache: BalanceCacheMap = {};
+export const privateERC20BalanceCache: BalanceBucketCacheMap = {};
 
 //not currently used
 export const getBalanceCaches = () => {
@@ -45,29 +49,29 @@ export const loadTokenDBCache = (tokenDBCache: TokenDatabaseMap) => {
 };
 
 //not currently used
-export const loadBalanceCaches = (
-  publicCache: BalanceCacheMap,
-  privateCache: BalanceCacheMap,
-) => {
-  const pubTypes = Object.keys(publicCache);
-  pubTypes?.forEach((_type) => {
-    const type = parseInt(_type);
-    const chainIDs = Object.keys(publicCache[type]);
-    chainIDs?.forEach((_id) => {
-      const id = parseInt(_id);
-      publicERC20BalanceCache[type][id] = publicCache[type][id];
-    });
-  });
-  const privTypes = Object.keys(privateCache);
-  privTypes?.forEach((_type) => {
-    const type = parseInt(_type);
-    const chainIDs = Object.keys(privateCache[type]);
-    chainIDs?.forEach((_id) => {
-      const id = parseInt(_id);
-      privateERC20BalanceCache[type][id] = privateCache[type][id];
-    });
-  });
-};
+// export const loadBalanceCaches = (
+//   publicCache: BalanceCacheMap,
+//   privateCache: BalanceCacheMap,
+// ) => {
+//   const pubTypes = Object.keys(publicCache);
+//   pubTypes?.forEach((_type) => {
+//     const type = parseInt(_type);
+//     const chainIDs = Object.keys(publicCache[type]);
+//     chainIDs?.forEach((_id) => {
+//       const id = parseInt(_id);
+//       publicERC20BalanceCache[type][id] = publicCache[type][id];
+//     });
+//   });
+//   const privTypes = Object.keys(privateCache);
+//   privTypes?.forEach((_type) => {
+//     const type = parseInt(_type);
+//     const chainIDs = Object.keys(privateCache[type]);
+//     chainIDs?.forEach((_id) => {
+//       const id = parseInt(_id);
+//       privateERC20BalanceCache[type][id] = privateCache[type][id];
+//     });
+//   });
+// };
 
 export const initPublicBalanceCachesForChain = (chainName: NetworkName) => {
   const chain = getChainForName(chainName);
@@ -77,10 +81,14 @@ export const initPublicBalanceCachesForChain = (chainName: NetworkName) => {
   publicERC20BalanceCache[chain.type][chain.id] ??= {};
 };
 
-export const initPrivateBalanceCachesForChain = (chainName: NetworkName) => {
+export const initPrivateBalanceCachesForChain = (
+  chainName: NetworkName,
+  balanceBucket: RailgunWalletBalanceBucket = RailgunWalletBalanceBucket.Spendable,
+) => {
   const chain = getChainForName(chainName);
   privateERC20BalanceCache[chain.type] ??= {};
   privateERC20BalanceCache[chain.type][chain.id] ??= {};
+  privateERC20BalanceCache[chain.type][chain.id][balanceBucket] ??= {};
 };
 
 export const resetPublicBalanceCachesForChain = (chainName: NetworkName) => {
@@ -141,9 +149,9 @@ export const updatePrivateBalancesForChain = async (
   erc20Balances: RailgunBalancesEvent,
 ): Promise<void> => {
   const chain = getChainForName(chainName);
-  initPrivateBalanceCachesForChain(chainName);
 
-  const { erc20Amounts /*nftAmounts*/ } = erc20Balances;
+  const { erc20Amounts, balanceBucket /*nftAmounts*/ } = erc20Balances;
+  initPrivateBalanceCachesForChain(chainName, balanceBucket);
 
   for (const erc20Amount of erc20Amounts) {
     const { tokenAddress, amount } = erc20Amount;
@@ -155,7 +163,9 @@ export const updatePrivateBalancesForChain = async (
       continue;
     }
     const { decimals } = info;
-    privateERC20BalanceCache[chain.type][chain.id][tokenAddress] = {
+    privateERC20BalanceCache[chain.type][chain.id][balanceBucket][
+      tokenAddress
+    ] = {
       timestamp: Date.now(),
       balance: { tokenAddress, amount: bigIntToHex(amount), decimals },
     };
@@ -165,11 +175,13 @@ export const updatePrivateBalancesForChain = async (
 export const getPrivateERC20BalanceForChain = (
   chainName: NetworkName,
   tokenAddress: string,
+  balanceBucket: RailgunWalletBalanceBucket = RailgunWalletBalanceBucket.Spendable,
 ): bigint => {
   const chain = getChainForName(chainName);
-  initPrivateBalanceCachesForChain(chainName);
+  initPrivateBalanceCachesForChain(chainName, balanceBucket);
 
-  const token = privateERC20BalanceCache[chain.type][chain.id][tokenAddress];
+  const token =
+    privateERC20BalanceCache[chain.type][chain.id][balanceBucket][tokenAddress];
   if (token) {
     return BigInt(token.balance.amount);
   }
