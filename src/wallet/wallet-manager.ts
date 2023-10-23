@@ -2,10 +2,14 @@ import { ProgressBar } from "../ui/progressBar-ui";
 import { KeychainFile, WalletCache } from "../models/wallet-models";
 import { Wallet } from "ethers";
 import { RailgunReadableAmount } from "../models/balance-models";
-import { RailgunBalancesEvent } from "@railgun-community/shared-models";
+import {
+  POIProofProgressEvent,
+  RailgunBalancesEvent,
+} from "@railgun-community/shared-models";
 import Web3 from "web3";
 
 export type WalletManager = {
+  poiProgressEvent: POIProofProgressEvent;
   progressBar: ProgressBar;
   web3: Web3;
   balanceScanProgress: number;
@@ -36,7 +40,10 @@ export const walletManager: WalletManager = {
 } as any;
 
 export const getScanProgressString = () => {
-  if (walletManager.balanceScanProgress !== 100) {
+  if (
+    walletManager.balanceScanProgress > 0 &&
+    walletManager.balanceScanProgress !== 100
+  ) {
     return `Balance Scan Progress  |  [${walletManager.balanceScanProgress.toFixed(
       2,
     )}%]\n`;
