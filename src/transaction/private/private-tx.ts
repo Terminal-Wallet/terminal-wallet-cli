@@ -292,20 +292,21 @@ export const getProvedPrivateTransaction = async (
     const proofEndTime = Date.now();
     const proofTimeElapsed = (proofEndTime - proofStartTime) / 1000;
     console.log(`Proof Generation Took ${proofTimeElapsed}s`);
-    const { transaction, nullifiers } = await populateProvedTransfer(
-      txIDVersion,
-      chainName,
-      railgunWalletID,
-      showSenderAddressToRecipient,
-      memoText,
-      erc20AmountRecipients,
-      [], // nftAmountRecipients
-      relayerFeeERC20Recipient,
-      sendWithPublicWallet,
-      overallBatchMinGasPrice,
-      estimatedGasDetails,
-    );
-    return { transaction, nullifiers };
+    const { transaction, nullifiers, preTransactionPOIsPerTxidLeafPerList } =
+      await populateProvedTransfer(
+        txIDVersion,
+        chainName,
+        railgunWalletID,
+        showSenderAddressToRecipient,
+        memoText,
+        erc20AmountRecipients,
+        [], // nftAmountRecipients
+        relayerFeeERC20Recipient,
+        sendWithPublicWallet,
+        overallBatchMinGasPrice,
+        estimatedGasDetails,
+      );
+    return { transaction, nullifiers, preTransactionPOIsPerTxidLeafPerList };
   } catch (err) {
     const error = err as Error;
     console.log(error.message);
@@ -317,13 +318,15 @@ export const getRelayerTranaction = async (
   networkName: NetworkName,
   useRelayAdapt: boolean,
 ) => {
+  const txidVersion = TXIDVersion.V2_PoseidonMerkle;
   const { to, data } = tx.transaction;
-  const { nullifiers } = tx;
+  const { nullifiers, preTransactionPOIsPerTxidLeafPerList } = tx;
   const relayerFeesID = tx.feesID;
   const chain = getChainForName(networkName);
   const overallBatchMinGasPrice = tx.transaction.gasPrice;
   const relayTx = getWakuTransaction();
   const encryptedTransaction = await relayTx.create(
+    txidVersion,
     to,
     data,
     tx.selectedRelayerAddress,
@@ -332,6 +335,7 @@ export const getRelayerTranaction = async (
     nullifiers,
     overallBatchMinGasPrice,
     useRelayAdapt,
+    preTransactionPOIsPerTxidLeafPerList,
   );
   return encryptedTransaction;
 };
