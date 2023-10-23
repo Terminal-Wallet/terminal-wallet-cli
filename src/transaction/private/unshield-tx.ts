@@ -167,18 +167,19 @@ export const getProvedUnshieldERC20Transaction = async (
       progressBar.complete();
     });
 
-    const { transaction, nullifiers } = await populateProvedUnshield(
-      txIDVersion,
-      chainName,
-      railgunWalletID,
-      erc20AmountRecipients,
-      [], // nftAmountRecipients
-      relayerFeeERC20Recipient,
-      sendWithPublicWallet,
-      overallBatchMinGasPrice,
-      estimatedGasDetails,
-    );
-    return { transaction, nullifiers };
+    const { transaction, nullifiers, preTransactionPOIsPerTxidLeafPerList } =
+      await populateProvedUnshield(
+        txIDVersion,
+        chainName,
+        railgunWalletID,
+        erc20AmountRecipients,
+        [], // nftAmountRecipients
+        relayerFeeERC20Recipient,
+        sendWithPublicWallet,
+        overallBatchMinGasPrice,
+        estimatedGasDetails,
+      );
+    return { transaction, nullifiers, preTransactionPOIsPerTxidLeafPerList };
   } catch (err) {
     const error = err as Error;
     console.log(error.message);

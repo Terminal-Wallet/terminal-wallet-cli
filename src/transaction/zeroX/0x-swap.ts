@@ -295,22 +295,23 @@ export const getProvedZer0XSwapTransaction = async (
         progressBar.complete();
       });
 
-    const { transaction, nullifiers } = await populateProvedCrossContractCalls(
-      txIDVersion,
-      chainName,
-      railgunWalletID,
-      relayAdaptUnshieldERC20Amounts,
-      [],
-      relayAdaptShieldERC20Addresses,
-      [],
-      crossContractCalls,
-      relayerFeeERC20Recipient,
-      sendWithPublicWallet,
-      overallBatchMinGasPrice,
-      estimatedGasDetails,
-    );
+    const { transaction, nullifiers, preTransactionPOIsPerTxidLeafPerList } =
+      await populateProvedCrossContractCalls(
+        txIDVersion,
+        chainName,
+        railgunWalletID,
+        relayAdaptUnshieldERC20Amounts,
+        [],
+        relayAdaptShieldERC20Addresses,
+        [],
+        crossContractCalls,
+        relayerFeeERC20Recipient,
+        sendWithPublicWallet,
+        overallBatchMinGasPrice,
+        estimatedGasDetails,
+      );
 
-    return { transaction, nullifiers };
+    return { transaction, nullifiers, preTransactionPOIsPerTxidLeafPerList };
   } catch (err) {
     const error = err as Error;
     console.log(error.message);

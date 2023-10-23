@@ -98,7 +98,7 @@ import {
 import {
   resetBalanceScan,
   resetMenuForScan,
-  resetPrivateCache,
+  // resetPrivateCache,
 } from "../wallet/private-wallet";
 import { setStatusText } from "../ui/status-ui";
 import { getWrappedTokenBalance } from "../balance/balance-util";
@@ -294,7 +294,7 @@ const bgWatchSelfSignedTx = async (
 
 const txScanReset = () => {
   resetBalanceScan();
-  resetPrivateCache();
+  // resetPrivateCache();
 };
 
 const sendRelayedTransaction = async (
@@ -1494,6 +1494,7 @@ export const runTransactionBuilder = async (
             // unshield-base
             // swaps
             // cookbook stuff
+
             return await sendRelayedTransaction(
               transactionType,
               provedTransaction,

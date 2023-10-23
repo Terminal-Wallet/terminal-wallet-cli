@@ -1,7 +1,9 @@
 import {
   Chain,
+  PreTransactionPOIsPerTxidLeafPerList,
   RelayerConnectionStatus,
   SelectedRelayer,
+  TXIDVersion,
 } from "@railgun-community/shared-models";
 
 export type RelayerOptions = {
@@ -41,6 +43,7 @@ export type WakuRelayerClient = {
 };
 export type WakuRelayerTransaction = {
   create: (
+    txidVersionForInputs: TXIDVersion,
     to: string,
     data: string,
     relayerRailgunAddress: string,
@@ -49,5 +52,6 @@ export type WakuRelayerTransaction = {
     nullifiers: string[],
     overallBatchMinGasPrice: bigint,
     useRelayAdapt: boolean,
+    preTransactionPOIsPerTxidLeafPerList: PreTransactionPOIsPerTxidLeafPerList,
   ) => { send: () => Promise<string> };
 };
