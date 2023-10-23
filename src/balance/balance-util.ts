@@ -1,6 +1,7 @@
 import {
   NETWORK_CONFIG,
   NetworkName,
+  RailgunWalletBalanceBucket,
   isDefined,
 } from "@railgun-community/shared-models";
 import {
@@ -122,10 +123,11 @@ export const getPublicERC20BalancesForChain = async (
 
 export const getPrivateERC20BalancesForChain = (
   chainName: NetworkName,
+  balanceBucket: RailgunWalletBalanceBucket = RailgunWalletBalanceBucket.Spendable,
 ): RailgunDisplayBalance[] => {
   const chain = getChainForName(chainName);
-  initPrivateBalanceCachesForChain(chainName);
-  const cache = privateERC20BalanceCache[chain.type][chain.id];
+  initPrivateBalanceCachesForChain(chainName, balanceBucket);
+  const cache = privateERC20BalanceCache[chain.type][chain.id][balanceBucket];
   if (!cache) {
     return [];
   }

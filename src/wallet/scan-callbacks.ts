@@ -1,5 +1,6 @@
 import {
   MerkletreeScanUpdateEvent,
+  POIProofProgressEvent,
   RailgunBalancesEvent,
   delay,
   isDefined,
@@ -28,30 +29,39 @@ export const merkelTreeScanCallback = async (
 };
 
 export const formatLatestBalancesEvent = async () => {
-  const currentPrivateBalances = walletManager.latestPrivateBalanceEvent;
+  const currentPrivateBalances = walletManager.latestPrivateBalanceEvents;
   if (!isDefined(currentPrivateBalances)) {
+    walletManager.latestPrivateBalanceEvents = [];
     return;
   }
-  if (walletManager.merkelScanComplete) {
-    const { chain, erc20Amounts } = currentPrivateBalances;
-    const chainName = ChainIDToNameMap[chain.id];
-    await updatePrivateBalancesForChain(chainName, currentPrivateBalances);
-    await updatePublicBalancesForChain(chainName);
-    const dispTokenBalances = await readableAmounts(erc20Amounts, chainName);
-    walletManager.privateBalanceCache = dispTokenBalances;
-    if (!walletManager.menuLoaded) {
-      // NEED TODO: rename menuLoaded to be more clearly defined, idk what to rename yet.
-      walletManager.menuLoaded = true;
+  if (!isDefined(walletManager.latestPrivateBalanceEvents)) {
+    return;
+  }
+  for (const balanceEvent of walletManager.latestPrivateBalanceEvents) {
+    if (walletManager.merkelScanComplete) {
+      const { chain } = balanceEvent;
+      const chainName = ChainIDToNameMap[chain.id];
+      await updatePrivateBalancesForChain(chainName, balanceEvent);
+      await updatePublicBalancesForChain(chainName);
+      // const dispTokenBalances = await readableAmounts(erc20Amounts, chainName);
+      // walletManager.privateBalanceCache = dispTokenBalances;
+      if (!walletManager.menuLoaded) {
+        // NEED TODO: rename menuLoaded to be more clearly defined, idk what to rename yet.
+        walletManager.menuLoaded = true;
+      }
     }
   }
-  delete walletManager.latestPrivateBalanceEvent;
+
+  delete walletManager.latestPrivateBalanceEvents;
+  walletManager.latestPrivateBalanceEvents = [];
 };
 
 export const scanBalancesCallback = async (
   tokenBalances: RailgunBalancesEvent,
 ) => {
-  walletManager.latestPrivateBalanceEvent = tokenBalances;
+  walletManager.latestPrivateBalanceEvents?.push(tokenBalances);
 };
+
 export const latestBalancePoller = async (pollingInterval: number) => {
   await formatLatestBalancesEvent().catch((err) => {
     setStatusText(err.message);
@@ -59,3 +69,18 @@ export const latestBalancePoller = async (pollingInterval: number) => {
   await delay(pollingInterval);
   latestBalancePoller(pollingInterval);
 };
+
+export const poiScanCallback = async (
+  poiProgressEvent: POIProofProgressEvent
+) => {
+  walletManager.poiProgressEvent = poiProgressEvent;
+  const poiStatus = `POI Proof Generation Progress: ${poiProgressEvent.progress.toFixed(
+    2,
+  )}`;
+  setStatusText(poiStatus);
+}
+
+
+// generatePOIsForWallet
+// refreshReceivePOIsForWallet
+// refreshSpentPOIsForWallet

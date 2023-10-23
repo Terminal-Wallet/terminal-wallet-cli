@@ -16,8 +16,8 @@ export type WalletManager = {
   merkelScanComplete: boolean;
   railgunWalletAddress: string;
   railgunWalletID: string;
-  latestPrivateBalanceEvent: Optional<RailgunBalancesEvent>;
-  privateBalanceCache: RailgunReadableAmount[];
+  latestPrivateBalanceEvents: Optional<RailgunBalancesEvent[]>;
+  // privateBalanceCache: RailgunReadableAmount[];
   keyChain: KeychainFile;
   activeWalletName: string;
   currentActiveWallet: WalletCache;
@@ -33,7 +33,7 @@ export type WalletManager = {
 export const walletManager: WalletManager = {
   merkelScanComplete: false,
   balanceScanComplete: false,
-  privateBalanceCache: [],
+  // privateBalanceCache: [],
   menuLoaded: false,
   displayPrivate: true,
   responsiveMenu: true,
