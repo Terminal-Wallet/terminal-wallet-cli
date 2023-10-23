@@ -16,12 +16,12 @@ export const resetMerkelScan = () => {
   walletManager.merkelScanComplete = false;
 };
 
-export const resetPrivateCache = () => {
-  walletManager.privateBalanceCache = [];
-};
+// export const resetPrivateCache = () => {
+//   walletManager.privateBalanceCache = [];
+// };
 
 export const resetBalanceScan = () => {
-  resetPrivateCache();
+  // resetPrivateCache();
   walletManager.menuLoaded = false;
 };
 export const resetMenuForScan = () => {
