@@ -53,14 +53,13 @@ export const initWakuClient = async () => {
   if (isWakuLoaded()) {
     return;
   }
-  const { RailgunWakuRelayerClient, RelayerTransaction } = (await import(
-    "@railgun-community/waku-relayer-client"
-  )) as {
-    RailgunWakuRelayerClient: WakuRelayerClient;
-    RelayerTransaction: WakuRelayerTransaction;
-  };
-  wakuClient = RailgunWakuRelayerClient;
-  wakuRelayerTransaction = RelayerTransaction;
+  const waku = await import("@railgun-community/waku-relayer-client");
+  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+  // @ts-ignore
+  wakuClient = waku.WakuRelayerClient as WakuRelayerClient;
+  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+  // @ts-ignore
+  wakuRelayerTransaction = waku.RelayerTransaction as WakuRelayerTransaction;
   wakuLoaded = true;
 };
 
