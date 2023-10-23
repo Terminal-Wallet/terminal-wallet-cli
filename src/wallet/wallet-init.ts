@@ -6,6 +6,7 @@ import {
   loadWalletByID,
   setOnBalanceUpdateCallback,
   setOnUTXOMerkletreeScanCallback,
+  setOnWalletPOIProofProgressCallback,
 } from "@railgun-community/wallet";
 import {
   NetworkName,
@@ -25,12 +26,13 @@ import {
 import { initWakuClient, startWakuClient } from "../waku/connect-waku";
 import { importKnownAddressesFromWallet } from "../ui/known-address-ui";
 import { processSafeExit } from "../util/error-util";
-import {
-  getEthersWallet,
-  getProviderURLForChain,
-} from "../network/network-util";
+import { getEthersWallet } from "../network/network-util";
 import { walletManager } from "./wallet-manager";
-import { scanBalancesCallback, merkelTreeScanCallback } from "./scan-callbacks";
+import {
+  scanBalancesCallback,
+  merkelTreeScanCallback,
+  poiScanCallback,
+} from "./scan-callbacks";
 import { getSaltedPassword } from "./wallet-password";
 import { confirmGetPasswordPrompt } from "../ui/password-ui";
 import { computePasswordHash, getIV } from "../util/crypto";
@@ -226,6 +228,7 @@ export const initializeWalletSystems = async () => {
   walletManager.keyChain = await initializeKeychainSystem();
   setOnBalanceUpdateCallback(scanBalancesCallback);
   setOnUTXOMerkletreeScanCallback(merkelTreeScanCallback);
+  setOnWalletPOIProofProgressCallback(poiScanCallback);
 
   const currentNetwork =
     walletManager.keyChain.currentNetwork ?? NetworkName.Ethereum;

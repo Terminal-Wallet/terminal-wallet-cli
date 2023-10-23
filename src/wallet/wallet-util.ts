@@ -60,9 +60,9 @@ export const getCurrentRailgunAddress = () => {
   return walletManager.railgunWalletAddress;
 };
 
-export const getPrivateBalanceCache = () => {
-  return walletManager.privateBalanceCache;
-};
+// export const getPrivateBalanceCache = () => {
+//   return walletManager.privateBalanceCache;
+// };
 
 export const getWalletNames = () => {
   if (!walletManager.keyChain || !walletManager.keyChain.wallets) {
