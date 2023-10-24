@@ -27,7 +27,7 @@ export type BalanceCacheMap = NumMapType<
 
 // chain.type >> chain.id >> balancebucket >> tokenaddr >> cache
 export type BalanceBucketCacheMap = NumMapType<
-  NumMapType<MapType<MapType<RailgunBalanceCache>>>
+  NumMapType<MapType<MapType<MapType<RailgunBalanceCache>>>>
 >;
 
 export type RailgunReadableAmount = RailgunERC20Amount & {

@@ -23,6 +23,7 @@ import { getTokenInfo } from "./token-util";
 import { formatUnits } from "ethers";
 import "colors";
 import {
+  getCurrentRailgunID,
   getCurrentWalletGasBalance,
   shouldDisplayPrivateBalances,
 } from "../wallet/wallet-util";
@@ -126,8 +127,15 @@ export const getPrivateERC20BalancesForChain = (
   balanceBucket: RailgunWalletBalanceBucket = RailgunWalletBalanceBucket.Spendable,
 ): RailgunDisplayBalance[] => {
   const chain = getChainForName(chainName);
-  initPrivateBalanceCachesForChain(chainName, balanceBucket);
-  const cache = privateERC20BalanceCache[chain.type][chain.id][balanceBucket];
+  initPrivateBalanceCachesForChain(
+    chainName,
+    balanceBucket,
+    getCurrentRailgunID(),
+  );
+  const cache =
+    privateERC20BalanceCache[chain.type][chain.id][balanceBucket][
+      getCurrentRailgunID()
+    ];
   if (!cache) {
     return [];
   }
