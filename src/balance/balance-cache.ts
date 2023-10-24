@@ -19,6 +19,8 @@ import { TokenDatabaseMap } from "../models/token-models";
 import { getChainForName } from "../network/network-util";
 import { getCurrentEthersWallet } from "../wallet/public-utils";
 import { ChainIDToNameMap } from "../models/network-models";
+import { getCurrentRailgunID } from "../wallet/wallet-util";
+import { setStatusText } from "../ui/status-ui";
 
 const CACHE_TIMEOUT = 10 * 1000; // 5 minutes;
 
@@ -84,11 +86,15 @@ export const initPublicBalanceCachesForChain = (chainName: NetworkName) => {
 export const initPrivateBalanceCachesForChain = (
   chainName: NetworkName,
   balanceBucket: RailgunWalletBalanceBucket = RailgunWalletBalanceBucket.Spendable,
+  railgunWalletID: string,
 ) => {
   const chain = getChainForName(chainName);
   privateERC20BalanceCache[chain.type] ??= {};
   privateERC20BalanceCache[chain.type][chain.id] ??= {};
   privateERC20BalanceCache[chain.type][chain.id][balanceBucket] ??= {};
+  privateERC20BalanceCache[chain.type][chain.id][balanceBucket][
+    railgunWalletID
+  ] ??= {};
 };
 
 export const resetPublicBalanceCachesForChain = (chainName: NetworkName) => {
@@ -104,7 +110,9 @@ export const resetPrivateBalanceCachesForChain = (chainName: NetworkName) => {
 };
 
 export const resetBalanceCachesForChain = (chainName: NetworkName) => {
-  resetPrivateBalanceCachesForChain(chainName);
+  // No need to do this anymore with new upgrades?
+  // Balances stored by chain.type > chain.id > BalanceBucket > walletID > tokenaddress
+  // resetPrivateBalanceCachesForChain(chainName);
   resetPublicBalanceCachesForChain(chainName);
 };
 
@@ -150,8 +158,8 @@ export const updatePrivateBalancesForChain = async (
 ): Promise<void> => {
   const chain = getChainForName(chainName);
 
-  const { erc20Amounts, balanceBucket /*nftAmounts*/ } = erc20Balances;
-  initPrivateBalanceCachesForChain(chainName, balanceBucket);
+  const { erc20Amounts, balanceBucket, railgunWalletID } = erc20Balances;
+  initPrivateBalanceCachesForChain(chainName, balanceBucket, railgunWalletID);
 
   for (const erc20Amount of erc20Amounts) {
     const { tokenAddress, amount } = erc20Amount;
@@ -162,10 +170,11 @@ export const updatePrivateBalancesForChain = async (
     if (!info) {
       continue;
     }
+
     const { decimals } = info;
     privateERC20BalanceCache[chain.type][chain.id][balanceBucket][
-      tokenAddress
-    ] = {
+      railgunWalletID
+    ][tokenAddress] = {
       timestamp: Date.now(),
       balance: { tokenAddress, amount: bigIntToHex(amount), decimals },
     };
@@ -178,10 +187,16 @@ export const getPrivateERC20BalanceForChain = (
   balanceBucket: RailgunWalletBalanceBucket = RailgunWalletBalanceBucket.Spendable,
 ): bigint => {
   const chain = getChainForName(chainName);
-  initPrivateBalanceCachesForChain(chainName, balanceBucket);
+  initPrivateBalanceCachesForChain(
+    chainName,
+    balanceBucket,
+    getCurrentRailgunID(),
+  );
 
   const token =
-    privateERC20BalanceCache[chain.type][chain.id][balanceBucket][tokenAddress];
+    privateERC20BalanceCache[chain.type][chain.id][balanceBucket][
+      getCurrentRailgunID()
+    ][tokenAddress];
   if (token) {
     return BigInt(token.balance.amount);
   }
