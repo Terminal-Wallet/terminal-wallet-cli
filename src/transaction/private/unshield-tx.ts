@@ -2,6 +2,7 @@ import {
   FeeTokenDetails,
   NetworkName,
   RailgunERC20AmountRecipient,
+  RailgunPopulateTransactionResponse,
   SelectedRelayer,
   TXIDVersion,
   TransactionGasDetails,
@@ -123,19 +124,16 @@ export const getProvedUnshieldERC20Transaction = async (
   encryptionKey: string,
   erc20AmountRecipients: RailgunERC20AmountRecipient[],
   privateGasEstimate: PrivateGasEstimate,
-) => {
+): Promise<Optional<RailgunPopulateTransactionResponse>> => {
   const chainName = getCurrentNetwork();
   const railgunWalletID = getCurrentRailgunID();
   const txIDVersion = TXIDVersion.V2_PoseidonMerkle;
 
   const progressBar = new ProgressBar("Starting Proof Generation");
-  const progressCallback = (
-    progress: number,
-    progressStats?: { done: number; total: number },
-  ) => {
+  const progressCallback = (progress: number, progressStats: string) => {
     if (isDefined(progressStats)) {
       progressBar.updateProgress(
-        `Transaction Proof Generation | [${progressStats.done}/${progressStats.total}]`,
+        `Transaction Proof Generation | [${progressStats}]`,
         progress,
       );
     } else {
