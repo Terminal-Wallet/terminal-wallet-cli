@@ -46,7 +46,10 @@ import {
   isDefined,
 } from "@railgun-community/shared-models";
 import {
+  generatePOIsForWallet,
   refreshRailgunBalances,
+  refreshReceivePOIsForWallet,
+  refreshSpentPOIsForWallet,
   rescanFullUTXOMerkletreesAndWallets,
 } from "@railgun-community/wallet";
 import {
@@ -54,7 +57,7 @@ import {
   getSaltedPassword,
 } from "../wallet/wallet-password";
 import { isWakuConnected, resetWakuClient } from "../waku/connect-waku";
-import { getScanProgressString } from "../wallet/wallet-manager";
+import { getScanProgressString, walletManager } from "../wallet/wallet-manager";
 import "colors";
 import { getStatusText, setStatusText } from "./status-ui";
 import { runRPCEditorPrompt } from "./provider-ui";
@@ -140,12 +143,66 @@ const runNetworkSelectionPrompt = async () => {
   }
 };
 
+const runPOIToolsPrompt = async (chainName: NetworkName) => {
+  const generateOptionPrompt = new Select({
+    header: " ",
+    message: "POI Tools",
+    choices: [
+      {
+        name: "generate-wallet-poi",
+        message: `Generate Wallet POI ${walletManager?.poiProgressEvent?.status}`,
+      },
+      {
+        name: "refresh-poi-recieved",
+        message: "Refresh Received POI",
+      },
+      {
+        name: "refresh-poi-spent",
+        message: "Refresh Spent POI",
+      },
+      { name: "exit-menu", message: "Go Back".grey },
+    ],
+    multiple: false,
+  });
+  const generateOption = await generateOptionPrompt
+    .run()
+    .catch(confirmPromptCatch);
+  if (generateOption) {
+    switch (generateOption) {
+      case "generate-wallet-poi": {
+        await generatePOIsForWallet(chainName, getCurrentRailgunID());
+        break;
+      }
+      case "refresh-poi-spent": {
+        await refreshSpentPOIsForWallet(
+          TXIDVersion.V2_PoseidonMerkle,
+          chainName,
+          getCurrentRailgunID(),
+        );
+        break;
+      }
+      case "refresh-poi-recieved": {
+        await refreshReceivePOIsForWallet(
+          TXIDVersion.V2_PoseidonMerkle,
+          chainName,
+          getCurrentRailgunID(),
+        );
+        break;
+      }
+      default: {
+        break;
+      }
+    }
+  }
+};
+
 const runWalletToolsPrompt = async (chainName: NetworkName) => {
   const generateOptionPrompt = new Select({
     header: " ",
     message: "Wallet Tools",
     choices: [
       { name: "add-wallet", message: "Add Wallet" },
+      { name: "poi-tools", message: "POI Tools" },
       {
         name: "show-mnemonic",
         message: "Show Current Mnemonic & Index",
@@ -171,6 +228,10 @@ const runWalletToolsPrompt = async (chainName: NetworkName) => {
           console.log(newWalletInfo);
           await confirmPromptCatchRetry("");
         }
+        break;
+      }
+      case "poi-tools": {
+        await runPOIToolsPrompt(chainName);
         break;
       }
       case "show-mnemonic": {
@@ -664,6 +725,7 @@ export const runMainMenu = async () => {
       await runWalletToolsPrompt(networkName);
       break;
     }
+
     case "refresh-balances": {
       const chain = getChainForName(networkName);
       const railgunWalletID = getCurrentRailgunID();
@@ -704,6 +766,7 @@ export const runMainMenu = async () => {
       toggleResponsiveMenu();
       break;
     }
+
     case "exit": {
       clearConsoleBuffer();
       await processSafeExit();
