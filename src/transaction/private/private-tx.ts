@@ -10,6 +10,7 @@ import {
   TransactionGasDetailsType2,
   isDefined,
   TXIDVersion,
+  RailgunPopulateTransactionResponse,
 } from "@railgun-community/shared-models";
 import {
   calculateRelayerFeeERC20Amount,
@@ -237,19 +238,16 @@ export const getProvedPrivateTransaction = async (
   erc20AmountRecipients: RailgunERC20AmountRecipient[],
   privateGasEstimate: PrivateGasEstimate,
   memoText = "",
-) => {
+): Promise<Optional<RailgunPopulateTransactionResponse>> => {
   const chainName = getCurrentNetwork();
   const railgunWalletID = getCurrentRailgunID();
   const txIDVersion = TXIDVersion.V2_PoseidonMerkle;
 
   const progressBar = new ProgressBar("Starting Proof Generation");
-  const progressCallback = (
-    progress: number,
-    progressStats?: { done: number; total: number },
-  ) => {
+  const progressCallback = (progress: number, progressStats: string) => {
     if (isDefined(progressStats)) {
       progressBar.updateProgress(
-        `Transaction Proof Generation | [${progressStats.done}/${progressStats.total}]`,
+        `Transaction Proof Generation | [${progressStats}]`,
         progress,
       );
     } else {
