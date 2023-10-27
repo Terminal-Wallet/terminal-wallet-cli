@@ -34,12 +34,28 @@ export const getStatusText = () => {
   return "";
 };
 
-export const setStatusText = (status: string, duration: number = 15000) => {
-  currentStatus.queue.push({
+export const setStatusText = (
+  status: string,
+  duration: number = 15000,
+  dequeue: boolean = false,
+) => {
+  const newStatus = {
     message: status,
     duration,
     timestamp: 0,
-  });
+  };
+
+  if (dequeue === true) {
+    newStatus.timestamp = Date.now();
+    currentStatus.current = newStatus;
+    currentStatus.queue = [];
+  } else {
+    currentStatus.queue.push({
+      message: status,
+      duration,
+      timestamp: 0,
+    });
+  }
 };
 
 export const testStatus = () => {

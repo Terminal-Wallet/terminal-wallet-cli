@@ -1,5 +1,6 @@
 import {
   MerkletreeScanUpdateEvent,
+  POIProofEventStatus,
   POIProofProgressEvent,
   RailgunBalancesEvent,
   delay,
@@ -37,8 +38,16 @@ export const formatLatestBalancesEvent = async () => {
   if (!isDefined(walletManager.latestPrivateBalanceEvents)) {
     return;
   }
+
+  // sort into each balance bucket, only take the latest one.
+  const buckets: MapType<RailgunBalancesEvent> = {};
   for (const balanceEvent of walletManager.latestPrivateBalanceEvents) {
+    buckets[balanceEvent.balanceBucket] = balanceEvent;
+  }
+
+  for (const bucketType in buckets) {
     if (walletManager.merkelScanComplete) {
+      const balanceEvent = buckets[bucketType];
       const { chain } = balanceEvent;
       const chainName = ChainIDToNameMap[chain.id];
       await updatePrivateBalancesForChain(chainName, balanceEvent);
@@ -70,17 +79,22 @@ export const latestBalancePoller = async (pollingInterval: number) => {
   latestBalancePoller(pollingInterval);
 };
 
-export const poiScanCallback = async (
-  poiProgressEvent: POIProofProgressEvent
-) => {
+export const getPOIStatusString = () => {
+  const event = walletManager.poiProgressEvent;
+  const status = `POI Status: ${event.status} | TX: ${event.index}/${
+    event.totalCount
+  } | Progress: ${event.progress.toFixed(2)}\nTxID: ${
+    event.txid
+  }\nPOI List ID: ${event.listKey}`;
+
+  return status;
+};
+
+export const poiScanCallback = async (poiProgressEvent: POIProofProgressEvent) => {
   walletManager.poiProgressEvent = poiProgressEvent;
-  const poiStatus = `POI Proof Generation Progress: ${poiProgressEvent.progress.toFixed(
-    2,
-  )}`;
-  setStatusText(poiStatus);
-}
 
-
-// generatePOIsForWallet
-// refreshReceivePOIsForWallet
-// refreshSpentPOIsForWallet
+  if (poiProgressEvent.status === POIProofEventStatus.InProgress) {
+    const poiStatus = getPOIStatusString();
+    setStatusText(poiStatus, 15000, true);
+  }
+};
