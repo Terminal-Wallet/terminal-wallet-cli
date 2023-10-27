@@ -108,14 +108,18 @@ export const initRailgunEngine = async () => {
   const shouldDebug = true;
   const useNativeArtifacts = false;
   const skipMerkelTreeScans = false;
+  const poiNodeURL = "https://poi-node.terminal-wallet.com";
+  const customPOIList = undefined;
 
-  await startRailgunEngine(
+  startRailgunEngine(
     "terminalwallet",
     engineDatabase,
     shouldDebug,
     artifactStorage,
     useNativeArtifacts,
     skipMerkelTreeScans,
+    poiNodeURL,
+    customPOIList,
   );
 
   getProver().setSnarkJSGroth16(groth16 as Groth16);
