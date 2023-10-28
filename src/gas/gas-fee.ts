@@ -93,9 +93,9 @@ export const getGasEstimates = async (
 
   const feeHistory = feeHistoryPromise as FeeHistoryResponse;
 
-  const baseFeePerGas = feeHistory.baseFeePerGas[
-    feeHistory.baseFeePerGas.length - 1
-  ] as bigint;
+  const baseFeePerGas = BigInt(
+    feeHistory.baseFeePerGas[feeHistory.baseFeePerGas.length - 1],
+  ) as bigint;
 
   feeHistory.oldestBlock = BigInt(feeHistory.oldestBlock);
 

@@ -54,7 +54,7 @@ export const getZer0XSwapInputs = async (
   sellTokenInput: Zer0XSwapTokenInput,
   buyTokenInput: Zer0XSwapTokenInput,
   amount: bigint,
-  slippagePercentage = 0.05,
+  slippageBasisPoints = 500,
   isPublic = false,
 ): Promise<Zer0XSwap> => {
   const { decimals: sellTokenDecimals } = await getTokenInfo(
@@ -86,7 +86,7 @@ export const getZer0XSwapInputs = async (
     const swap = new ZeroXSwapRecipe(
       sellERC20Info,
       buyERC20Info,
-      BigInt(slippagePercentage),
+      BigInt(slippageBasisPoints),
       privateSwapRecipient,
     );
     const recipeInput: RecipeInput = {
@@ -131,7 +131,7 @@ export const getZer0XSwapInputs = async (
     networkName: chainName,
     sellERC20Amount: relayAdaptUnshieldERC20Amounts[0],
     buyERC20Info,
-    slippageBasisPoints: BigInt(slippagePercentage),
+    slippageBasisPoints: BigInt(slippageBasisPoints),
     isRailgun: false,
   };
   const quote = await ZeroXQuote.getSwapQuote(quoteParams);
@@ -162,7 +162,7 @@ export const getSwapQuote = async (
   chainName: NetworkName,
   sellERC20Amount: RecipeERC20Amount,
   buyERC20Info: RecipeERC20Info,
-  slippagePercentage = 0.05,
+  slippagePercentage = 500,
 ): Promise<SwapQuoteData> => {
   const quoteParams: SwapQuoteParams = {
     networkName: chainName,

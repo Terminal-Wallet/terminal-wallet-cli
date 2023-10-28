@@ -679,7 +679,7 @@ export const runTransactionBuilder = async (
                   sellTokenInput,
                   buyTokenInput,
                   amount,
-                  0.032,
+                  320,
                   transactionType === RailgunTransaction.Public0XSwap,
                 );
                 if (!isDefined(zer0XInputs) || !isDefined(zer0XInputs.quote)) {
@@ -954,7 +954,7 @@ export const runTransactionBuilder = async (
                   sellTokenInput,
                   buyTokenInput,
                   amount,
-                  0.032,
+                  320,
                   transactionType === RailgunTransaction.Public0XSwap,
                 );
                 if (!isDefined(zer0XInputs) || !isDefined(zer0XInputs.quote)) {
