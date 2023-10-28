@@ -1,5 +1,12 @@
 
 
+## [1.1.1](https://github.com/Terminal-Wallet/terminal-wallet-cli/compare/v1.1.0...v1.1.1) (2023-10-28)
+
+
+### Bug Fixes
+
+* incorrect gas fee data consumption from ethers ([4afc767](https://github.com/Terminal-Wallet/terminal-wallet-cli/commit/4afc767a997b1c29ce57d8122a961a5387a6adba))
+
 ## [1.1.0](https://github.com/Terminal-Wallet/terminal-wallet-cli/compare/v1.0.2...v1.1.0) (2023-10-27)
 
 
