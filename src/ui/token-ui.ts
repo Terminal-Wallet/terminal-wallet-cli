@@ -362,7 +362,9 @@ export const tokenAmountSelectionPrompt = async (
         await delay(200);
       }
     }
-  } catch (err: any) {}
+  } catch (err: any) {
+    /* empty */
+  }
   return selections;
 };
 

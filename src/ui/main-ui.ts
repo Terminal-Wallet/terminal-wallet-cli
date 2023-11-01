@@ -67,6 +67,7 @@ const { version } = require("../../package.json");
 const { Select } = require("enquirer");
 
 const stripColors = (input: string): string => {
+  // eslint-disable-next-line no-control-regex
   return input.replace(/\x1B[[(?);]{0,2}(;?\d)*./g, "");
 };
 
