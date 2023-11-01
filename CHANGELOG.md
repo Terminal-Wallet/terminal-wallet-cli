@@ -1,5 +1,12 @@
 
 
+## [1.1.2](https://github.com/Terminal-Wallet/terminal-wallet-cli/compare/v1.1.1...v1.1.2) (2023-11-01)
+
+
+### Code Refactors
+
+* update packages & fix eslint warnings ([a65bcee](https://github.com/Terminal-Wallet/terminal-wallet-cli/commit/a65bcee5326491bd40d440b3f8ea09887b84a49b))
+
 ## [1.1.1](https://github.com/Terminal-Wallet/terminal-wallet-cli/compare/v1.1.0...v1.1.1) (2023-10-28)
 
 
