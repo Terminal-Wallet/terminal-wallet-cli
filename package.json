@@ -64,7 +64,7 @@
     "@railgun-community/curve25519-scalarmult-rsjs": "0.2.1",
     "@railgun-community/shared-models": "5.8.6",
     "@railgun-community/waku-relayer-client": "4.6.3",
-    "@railgun-community/wallet": "5.14.8",
+    "@railgun-community/wallet": "5.14.11",
     "bn": "1.0.5",
     "colors": "^1.4.0",
     "enquirer": "2.3.6",
