@@ -30,7 +30,7 @@ export const computePasswordHash = async (
   const salt = passwordSalt ?? passwordBytes;
   const keyLen = keyLength ?? 32;
   const hash = scryptSync(passwordBytes, salt, 131072, 8, 1, keyLen);
-  return hash;
+  return hash.slice(2);
 };
 
 // not currently used

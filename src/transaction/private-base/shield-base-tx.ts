@@ -2,6 +2,7 @@ import {
   NetworkName,
   RailgunERC20Amount,
   RailgunERC20AmountRecipient,
+  TXIDVersion,
   TransactionGasDetails,
 } from "@railgun-community/shared-models";
 import {
@@ -26,8 +27,10 @@ export const getShieldBaseTokenGasDetails = async (
     await getCurrentShieldPrivateKey();
 
   const wrappedInfo = getWrappedTokenInfoForChain(chainName);
+  const txIDVersion = TXIDVersion.V2_PoseidonMerkle;
 
   const { gasEstimate } = await gasEstimateForShieldBaseToken(
+    txIDVersion,
     chainName,
     wrappedERC20Amount.recipientAddress,
     shieldPrivateKey,
@@ -61,7 +64,10 @@ export const getProvedShieldBaseTokenTransaction = async (
 ) => {
   const { shieldPrivateKey, fromWalletAddress } =
     await getCurrentShieldPrivateKey();
+  const txIDVersion = TXIDVersion.V2_PoseidonMerkle;
+
   const { transaction } = await populateShieldBaseToken(
+    txIDVersion,
     chainName,
     wrappedERC20Amount.recipientAddress,
     shieldPrivateKey,

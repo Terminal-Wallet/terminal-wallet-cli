@@ -11,6 +11,7 @@ import {
 } from "@railgun-community/wallet";
 import {
   FallbackProviderJsonConfig,
+  FeesSerialized,
   NetworkName,
   getAvailableProviderJSONs,
   isDefined,
@@ -250,9 +251,13 @@ export const loadProviderList = async (chainName: NetworkName) => {
     chainName,
     rpcPollingInterval,
   );
+  const feesShield = BigInt(
+    feesSerialized.shieldFeeV3 ?? feesSerialized.shieldFeeV2,
+  );
+  const feesUnshield = BigInt(
+    feesSerialized.unshieldFeeV3 ?? feesSerialized.shieldFeeV2,
+  );
 
-  const feesShield = BigInt(feesSerialized.shield);
-  const feesUnshield = BigInt(feesSerialized.unshield);
   setRailgunFees(chainName, feesShield, feesUnshield);
   loadedRailgunNetworks[chainName] = true;
   currentLoadedNetwork = chainName;
