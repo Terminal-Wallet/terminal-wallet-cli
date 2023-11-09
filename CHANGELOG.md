@@ -1,5 +1,12 @@
 
 
+## [1.1.4](https://github.com/Terminal-Wallet/terminal-wallet-cli/compare/v1.1.3...v1.1.4) (2023-11-09)
+
+
+### Code Refactors
+
+* fix dependency changes ([cd8c205](https://github.com/Terminal-Wallet/terminal-wallet-cli/commit/cd8c2050d20921f0f0230f1c3238786c99bb0378))
+
 ## [1.1.3](https://github.com/Terminal-Wallet/terminal-wallet-cli/compare/v1.1.2...v1.1.3) (2023-11-03)
 
 ## [1.1.2](https://github.com/Terminal-Wallet/terminal-wallet-cli/compare/v1.1.1...v1.1.2) (2023-11-01)
