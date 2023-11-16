@@ -9,7 +9,7 @@ import { getProviderObjectFromURL } from "../models/network-models";
 
 export default {
   apiKeys: {
-    zeroXApi: "6470059b-ed6f-4ca5-8ad7-7e8ee9b65c8a",
+    zeroXApi: "50451a60-e839-4f7e-a971-bfef488de1cb",
   },
   engine: {
     artifactPath: ".artifacts",
