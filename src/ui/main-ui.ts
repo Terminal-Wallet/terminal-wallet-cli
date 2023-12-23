@@ -47,7 +47,7 @@ import {
 } from "@railgun-community/shared-models";
 import {
   generatePOIsForWallet,
-  refreshRailgunBalances,
+  refreshBalances,
   refreshReceivePOIsForWallet,
   refreshSpentPOIsForWallet,
   rescanFullUTXOMerkletreesAndWallets,
@@ -245,8 +245,10 @@ const runWalletToolsPrompt = async (chainName: NetworkName) => {
       }
       case "full-balance-rescan": {
         const chain = getChainForName(chainName);
+        const railgunWalletID = getCurrentRailgunID();
+
         resetMenuForScan();
-        rescanFullUTXOMerkletreesAndWallets(chain);
+        rescanFullUTXOMerkletreesAndWallets(chain, [railgunWalletID]);
         break;
       }
       case "destruct-wallet": {
@@ -284,11 +286,10 @@ const getMainPrompt = (networkName: NetworkName, baseSymbol: string) => {
   return new Select({
     logoHeader: RAILGUN_HEADER,
     header: async () => {
-      const relayerStatus = `Relayers: ${
-        isWakuConnected()
-          ? "Available".dim.green.bold
-          : "Disconnected".dim.yellow.bold
-      }`.grey;
+      const relayerStatus = `Relayers: ${isWakuConnected()
+        ? "Available".dim.green.bold
+        : "Disconnected".dim.yellow.bold
+        }`.grey;
 
       const walletName = getCurrentWalletName();
       const currentRailgunAddress = getCurrentRailgunAddress();
@@ -316,10 +317,9 @@ const getMainPrompt = (networkName: NetworkName, baseSymbol: string) => {
         walletInfoString,
         relayerStatus,
         balanceBlock,
-        `${
-          !isMenuResponsive()
-            ? "Auto Refresh Disabled, Refresh on Movement Enabled.\n".yellow.dim
-            : ""
+        `${!isMenuResponsive()
+          ? "Auto Refresh Disabled, Refresh on Movement Enabled.\n".yellow.dim
+          : ""
         }${balanceScanned}`,
       ].join("\n");
     },
@@ -471,9 +471,8 @@ const getMainPrompt = (networkName: NetworkName, baseSymbol: string) => {
       return this.render();
     },
     prefix: process.platform === "win32" ? " [*]" : "🛡️ ",
-    message: `Now arriving at Terminal Wallet ${("v" + version).grey}... ${
-      "(Featuring RAILGUN Privacy)".grey
-    }`,
+    message: `Now arriving at Terminal Wallet ${("v" + version).grey}... ${"(Featuring RAILGUN Privacy)".grey
+      }`,
     separator: " ",
     initial: lastMenuSelection ?? "private-transfer",
     choices: [
@@ -542,9 +541,8 @@ const getMainPrompt = (networkName: NetworkName, baseSymbol: string) => {
       { name: "refresh-balances", message: "Refresh Balances" },
       {
         name: "toggle-balance",
-        message: `Toggle ${
-          shouldDisplayPrivateBalances() ? "Public" : "Private"
-        } Balances`.yellow.dim,
+        message: `Toggle ${shouldDisplayPrivateBalances() ? "Public" : "Private"
+          } Balances`.yellow.dim,
       },
       { name: "reset-relayers", message: "Reset Relayer Connection" },
       { name: "edit-rpc", message: "Edit RPC Providers" },
@@ -736,7 +734,8 @@ export const runMainMenu = async () => {
       setStatusText(
         "Starting Balance Refresh. This may take some time... ".yellow,
       );
-      refreshRailgunBalances(txIDVersion, chain, railgunWalletID, fullRescan);
+      refreshBalances(chain, [railgunWalletID]);
+      // refreshRailgunBalances(txIDVersion, chain, railgunWalletID, fullRescan);
       break;
     }
     case "rpc-tools": {

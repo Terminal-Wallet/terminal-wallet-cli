@@ -66,7 +66,6 @@ export default {
       TokenAddressArbitrum.WBTC,
       TokenAddressArbitrum.WETH,
     ],
-    [NetworkName.Railgun]: [],
     [NetworkName.ArbitrumGoerli]: [],
     [NetworkName.EthereumGoerli]: [],
     [NetworkName.EthereumSepolia]: [],
@@ -161,13 +160,6 @@ export default {
         ),
         getProviderObjectFromURL("https://ethereum-sepolia.publicnode.com"),
       ],
-    },
-    [NetworkName.Railgun]: {
-      chainId: 1337,
-      providers: [],
-      name: "Railgun",
-      blockscan: "",
-      type: ChainType.EVM,
     },
     [NetworkName.EthereumRopsten_DEPRECATED]: {
       chainId: 1337,

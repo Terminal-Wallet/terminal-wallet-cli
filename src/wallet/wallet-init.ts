@@ -47,7 +47,7 @@ export const generateKeychainPrompt = async (
   if (isDefined(salt)) {
     const keychain: KeychainFile = {
       name: `.plasma_${index}`,
-      salt, // this is used to generate encryption key, computePasswordHash(inputPassword, salt)
+      salt: `0x${salt}`, // this is used to generate encryption key, computePasswordHash(inputPassword, salt)
     };
     return keychain;
   } else {

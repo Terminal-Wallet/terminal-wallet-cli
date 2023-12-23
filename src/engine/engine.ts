@@ -6,7 +6,7 @@ import {
   SnarkJSGroth16 as Groth16,
   pauseAllPollingProviders,
   resumeIsolatedPollingProviderForNetwork,
-  scanUpdatesForMerkletreeAndWallets,
+  refreshBalances as scanUpdatesForMerkletreeAndWallets,
   setLoggers,
 } from "@railgun-community/wallet";
 import {
@@ -36,7 +36,7 @@ export const isEngineRunning = () => {
 };
 
 const interceptLog = {
-  log: (log: string) => {},
+  log: (log: string) => { },
   error: (err: any) => {
     console.log(err.message);
   },
@@ -79,7 +79,7 @@ export const setCustomProviderStatus = (
   saveKeychainFile(walletManager.keyChain, keyChainPath);
 };
 
-export const getCustomProviersForChain = (
+export const getCustomProvidersForChain = (
   chainName: NetworkName,
 ): MapType<boolean> | undefined => {
   const chain = getChainForName(chainName);
@@ -119,7 +119,7 @@ export const initRailgunEngine = async () => {
     artifactStorage,
     useNativeArtifacts,
     skipMerkelTreeScans,
-    poiNodeURL,
+    [poiNodeURL],
     customPOIList,
   );
 
@@ -142,7 +142,8 @@ export const getCurrentNetwork = () => {
 export const rescanBalances = async (chainName: NetworkName) => {
   const chain = getChainForName(chainName);
 
-  await scanUpdatesForMerkletreeAndWallets(chain);
+  const walletIdFilter = walletManager.railgunWalletID;
+  await scanUpdatesForMerkletreeAndWallets(chain, [walletIdFilter]);
 };
 
 export const isDefaultProvider = (chainName: NetworkName, rpcURL: string) => {
@@ -161,7 +162,7 @@ export const getCustomProviderEnabledStatus = (
   chainName: NetworkName,
   rpcURL: string,
 ) => {
-  const chainProviders = getCustomProviersForChain(chainName);
+  const chainProviders = getCustomProvidersForChain(chainName);
   if (!isDefined(chainProviders)) {
     return true; // undefined?
   }
@@ -174,7 +175,7 @@ export const getCustomProviderEnabledStatus = (
 };
 
 export const getProviderPromptOptions = (chainName: NetworkName) => {
-  const customProviders = getCustomProviersForChain(chainName);
+  const customProviders = getCustomProvidersForChain(chainName);
 
   const { providers } = configDefaults.networkConfig[chainName];
   if (isDefined(customProviders)) {
@@ -196,9 +197,8 @@ export const getProviderPromptOptions = (chainName: NetworkName) => {
       const providerEnabled = customProviders[provider];
       return {
         name: provider,
-        message: `[${
-          providerEnabled ? "Enabled ".green.dim : "Disabled".yellow.dim
-        }] ${provider}`,
+        message: `[${providerEnabled ? "Enabled ".green.dim : "Disabled".yellow.dim
+          }] ${provider}`,
       };
     });
 
@@ -214,7 +214,7 @@ export const getProviderPromptOptions = (chainName: NetworkName) => {
   }
 };
 export const loadProviderList = async (chainName: NetworkName) => {
-  const customProviders = getCustomProviersForChain(chainName);
+  const customProviders = getCustomProvidersForChain(chainName);
   const { providers, chainId } = configDefaults.networkConfig[chainName];
   let combinedProviders = providers;
   if (isDefined(customProviders)) {
