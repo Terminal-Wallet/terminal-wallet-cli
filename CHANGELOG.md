@@ -1,5 +1,7 @@
 
 
+## [1.1.7](https://github.com/Terminal-Wallet/terminal-wallet-cli/compare/v1.1.6...v1.1.7) (2024-03-26)
+
 ## [1.1.6](https://github.com/Terminal-Wallet/terminal-wallet-cli/compare/v1.1.5...v1.1.6) (2023-12-23)
 
 
