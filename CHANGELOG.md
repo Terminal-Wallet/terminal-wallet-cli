@@ -1,5 +1,17 @@
 
 
+## [1.1.8](https://github.com/Terminal-Wallet/terminal-wallet-cli/compare/v1.1.7...v1.1.8) (2024-03-26)
+
+
+### Bug Fixes
+
+* waku-relayer-client version ([a6e6fac](https://github.com/Terminal-Wallet/terminal-wallet-cli/commit/a6e6fac40fbc225b7e8a31e0abb13fa5d29ba12c))
+
+
+### Code Style Updates
+
+* update release-it config ([7663fb5](https://github.com/Terminal-Wallet/terminal-wallet-cli/commit/7663fb5d08a2f3cd27a9e856e7cd4ee7d2ea00ba))
+
 ## [1.1.7](https://github.com/Terminal-Wallet/terminal-wallet-cli/compare/v1.1.6...v1.1.7) (2024-03-26)
 
 ## [1.1.6](https://github.com/Terminal-Wallet/terminal-wallet-cli/compare/v1.1.5...v1.1.6) (2023-12-23)
