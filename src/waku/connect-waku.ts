@@ -13,7 +13,6 @@ let isConnected = false;
 const relayerOptions: RelayerOptions = {
   pubSubTopic: "/waku/2/railgun-relayer",
   additionalDirectPeers: [
-    "/dns4/relayerv4.wecamefromapes.com/tcp/8000/wss/p2p/16Uiu2HAmCMBVq9am26T61B7FyZ6JbEDusH4c7M7AYVMwNnRuP2cg",
   ],
 };
 
@@ -53,7 +52,7 @@ export const initWakuClient = async () => {
   if (isWakuLoaded()) {
     return;
   }
-  const waku = await import("@railgun-community/waku-relayer-client");
+  const waku = await import("@railgun-community/waku-relayer-client-node");
   // eslint-disable-next-line @typescript-eslint/ban-ts-comment
   // @ts-ignore
   wakuClient = waku.WakuRelayerClient as WakuRelayerClient;

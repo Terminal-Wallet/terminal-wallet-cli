@@ -112,7 +112,7 @@ export const initRailgunEngine = async () => {
   const poiNodeURL = "https://poi-node.terminal-wallet.com";
   const customPOIList = undefined;
 
-  startRailgunEngine(
+  await startRailgunEngine(
     "terminalwallet",
     engineDatabase,
     shouldDebug,

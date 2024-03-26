@@ -43,6 +43,7 @@ import {
 import {
   NetworkName,
   TXIDVersion,
+  delay,
   isDefined,
 } from "@railgun-community/shared-models";
 import {
@@ -72,6 +73,7 @@ const stripColors = (input: string): string => {
 };
 
 let lastMenuSelection: string | undefined = undefined;
+
 
 export const runWalletSelectionPrompt = async (): Promise<boolean> => {
   const walletNames = getWalletNames().map((name) => {
@@ -572,6 +574,16 @@ const BufferManager = {
       }
     }
   },
+};
+
+
+export const walletBalancePoller = async () => {
+  const networkName = getCurrentNetwork();
+  const chain = getChainForName(networkName);
+  const railgunWalletID = getCurrentRailgunID();
+  refreshBalances(chain, [railgunWalletID]);
+  await delay(5 * 60 * 1000); // 5 minute polling delay for balance refreshes
+  walletBalancePoller();
 };
 
 export const runMainMenu = async () => {

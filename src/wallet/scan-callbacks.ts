@@ -81,11 +81,9 @@ export const latestBalancePoller = async (pollingInterval: number) => {
 
 export const getPOIStatusString = () => {
   const event = walletManager.poiProgressEvent;
-  const status = `POI Status: ${event.status} | TX: ${event.index}/${
-    event.totalCount
-  } | Progress: ${event.progress.toFixed(2)}\nTxID: ${
-    event.txid
-  }\nPOI List ID: ${event.listKey}`;
+  const status = `POI Status: ${event.status} | TX: ${event.index}/${event.totalCount
+    } | Progress: ${event.progress.toFixed(2)}\nTxID: ${event.txid
+    }\nPOI List ID: ${event.listKey}`;
 
   return status;
 };
