@@ -63,7 +63,7 @@
     "@railgun-community/cookbook": "2.5.3",
     "@railgun-community/curve25519-scalarmult-rsjs": "0.2.3",
     "@railgun-community/shared-models": "6.4.0",
-    "@railgun-community/waku-relayer-client-node": "6.2.0",
+    "@railgun-community/waku-relayer-client-node": "6.1.7",
     "@railgun-community/wallet": "7.3.4",
     "bn": "1.0.5",
     "colors": "^1.4.0",
