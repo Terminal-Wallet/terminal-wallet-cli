@@ -101,6 +101,7 @@ export const getUnshieldERC20TransactionGasEstimate = async (
   const { gasEstimate, relayerFeeCommitment } =
     await gasEstimateForUnprovenUnshield(
       txIDVersion,
+      // @ts-expect-error
       chainName,
       railgunWalletID,
       encryptionKey,
@@ -152,6 +153,7 @@ export const getProvedUnshieldERC20Transaction = async (
   try {
     await generateUnshieldProof(
       txIDVersion,
+      // @ts-expect-error
       chainName,
       railgunWalletID,
       encryptionKey,
@@ -168,6 +170,7 @@ export const getProvedUnshieldERC20Transaction = async (
     const { transaction, nullifiers, preTransactionPOIsPerTxidLeafPerList } =
       await populateProvedUnshield(
         txIDVersion,
+        // @ts-expect-error
         chainName,
         railgunWalletID,
         erc20AmountRecipients,

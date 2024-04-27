@@ -58,6 +58,7 @@ export const getUnshieldBaseTokenGasEstimate = async (
   const { gasEstimate, relayerFeeCommitment } =
     await gasEstimateForUnprovenUnshieldBaseToken(
       txIDVersion,
+      // @ts-expect-error
       chainName,
       _wrappedERC20Amount.recipientAddress,
       railgunWalletID,
@@ -142,6 +143,7 @@ export const getProvedUnshieldBaseTokenTransaction = async (
 
     await generateUnshieldBaseTokenProof(
       txIDVersion,
+      // @ts-expect-error
       chainName,
       erc20AmountRecipient.recipientAddress,
       railgunWalletID,
@@ -158,6 +160,7 @@ export const getProvedUnshieldBaseTokenTransaction = async (
     const { transaction, nullifiers, preTransactionPOIsPerTxidLeafPerList } =
       await populateProvedUnshieldBaseToken(
         txIDVersion,
+        // @ts-expect-error
         chainName,
         erc20AmountRecipient.recipientAddress,
         railgunWalletID,

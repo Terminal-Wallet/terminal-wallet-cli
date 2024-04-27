@@ -185,6 +185,7 @@ export const getPrivateTransactionGasEstimate = async (
 
   const { gasEstimate } = await gasEstimateForUnprovenTransfer(
     txIDVersion,
+    // @ts-expect-error
     chainName,
     railgunWalletID,
     encryptionKey,
@@ -269,6 +270,7 @@ export const getProvedPrivateTransaction = async (
   try {
     await generateTransferProof(
       txIDVersion,
+      // @ts-expect-error
       chainName,
       railgunWalletID,
       encryptionKey,
@@ -293,6 +295,7 @@ export const getProvedPrivateTransaction = async (
     const { transaction, nullifiers, preTransactionPOIsPerTxidLeafPerList } =
       await populateProvedTransfer(
         txIDVersion,
+        // @ts-expect-error
         chainName,
         railgunWalletID,
         showSenderAddressToRecipient,

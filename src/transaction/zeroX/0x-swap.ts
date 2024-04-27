@@ -90,6 +90,7 @@ export const getZer0XSwapInputs = async (
       privateSwapRecipient,
     );
     const recipeInput: RecipeInput = {
+      // @ts-expect-error
       networkName: chainName,
       railgunAddress: privateSwapRecipient,
       erc20Amounts: relayAdaptUnshieldERC20Amounts,
@@ -128,6 +129,7 @@ export const getZer0XSwapInputs = async (
     };
   }
   const quoteParams: SwapQuoteParams = {
+    // @ts-expect-error
     networkName: chainName,
     sellERC20Amount: relayAdaptUnshieldERC20Amounts[0],
     buyERC20Info,
@@ -165,6 +167,7 @@ export const getSwapQuote = async (
   slippagePercentage = 500,
 ): Promise<SwapQuoteData> => {
   const quoteParams: SwapQuoteParams = {
+    // @ts-expect-error
     networkName: chainName,
     sellERC20Amount,
     buyERC20Info,
@@ -211,6 +214,7 @@ export const getZer0XSwapTransactionGasEstimate = async (
 
   const { gasEstimate } = await gasEstimateForUnprovenCrossContractCalls(
     txIDVersion,
+    // @ts-expect-error
     chainName,
     railgunWalletID,
     encryptionKey,
@@ -272,6 +276,7 @@ export const getProvedZer0XSwapTransaction = async (
   try {
     await generateCrossContractCallsProof(
       txIDVersion,
+      // @ts-expect-error
       chainName,
       railgunWalletID,
       encryptionKey,
@@ -296,6 +301,7 @@ export const getProvedZer0XSwapTransaction = async (
     const { transaction, nullifiers, preTransactionPOIsPerTxidLeafPerList } =
       await populateProvedCrossContractCalls(
         txIDVersion,
+        // @ts-expect-error
         chainName,
         railgunWalletID,
         relayAdaptUnshieldERC20Amounts,

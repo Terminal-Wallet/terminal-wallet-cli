@@ -74,7 +74,6 @@ const stripColors = (input: string): string => {
 
 let lastMenuSelection: string | undefined = undefined;
 
-
 export const runWalletSelectionPrompt = async (): Promise<boolean> => {
   const walletNames = getWalletNames().map((name) => {
     return {
@@ -124,14 +123,14 @@ const runNetworkSelectionPrompt = async () => {
       { name: NetworkName.BNBChain, message: `${"Binance".green} Network` },
       { name: NetworkName.Polygon, message: `${"Polygon".green} Network` },
       { name: NetworkName.Arbitrum, message: `${"Arbitrum".green} Network` },
-      {
-        name: NetworkName.EthereumGoerli,
-        message: `${"Ethereum Görli".green} Testnet`,
-      },
-      {
-        name: NetworkName.ArbitrumGoerli,
-        message: `${"Arbitrum Görli".green} Testnet`,
-      },
+      // {
+      //   name: NetworkName.EthereumGoerli_DEPRECATED,
+      //   message: `${"Ethereum Görli".green} Testnet`,
+      // },
+      // {
+      //   name: NetworkName.ArbitrumGoerli_DEPRECATED,
+      //   message: `${"Arbitrum Görli".green} Testnet`,
+      // },
       { name: "exit-menu", message: "Go Back".grey },
     ],
     multiple: false,
@@ -173,12 +172,14 @@ const runPOIToolsPrompt = async (chainName: NetworkName) => {
   if (generateOption) {
     switch (generateOption) {
       case "generate-wallet-poi": {
+        // @ts-expect-error
         await generatePOIsForWallet(chainName, getCurrentRailgunID());
         break;
       }
       case "refresh-poi-spent": {
         await refreshSpentPOIsForWallet(
           TXIDVersion.V2_PoseidonMerkle,
+          // @ts-expect-error
           chainName,
           getCurrentRailgunID(),
         );
@@ -187,6 +188,7 @@ const runPOIToolsPrompt = async (chainName: NetworkName) => {
       case "refresh-poi-recieved": {
         await refreshReceivePOIsForWallet(
           TXIDVersion.V2_PoseidonMerkle,
+          // @ts-expect-error
           chainName,
           getCurrentRailgunID(),
         );
@@ -288,10 +290,11 @@ const getMainPrompt = (networkName: NetworkName, baseSymbol: string) => {
   return new Select({
     logoHeader: RAILGUN_HEADER,
     header: async () => {
-      const relayerStatus = `Relayers: ${isWakuConnected()
-        ? "Available".dim.green.bold
-        : "Disconnected".dim.yellow.bold
-        }`.grey;
+      const relayerStatus = `Relayers: ${
+        isWakuConnected()
+          ? "Available".dim.green.bold
+          : "Disconnected".dim.yellow.bold
+      }`.grey;
 
       const walletName = getCurrentWalletName();
       const currentRailgunAddress = getCurrentRailgunAddress();
@@ -319,9 +322,10 @@ const getMainPrompt = (networkName: NetworkName, baseSymbol: string) => {
         walletInfoString,
         relayerStatus,
         balanceBlock,
-        `${!isMenuResponsive()
-          ? "Auto Refresh Disabled, Refresh on Movement Enabled.\n".yellow.dim
-          : ""
+        `${
+          !isMenuResponsive()
+            ? "Auto Refresh Disabled, Refresh on Movement Enabled.\n".yellow.dim
+            : ""
         }${balanceScanned}`,
       ].join("\n");
     },
@@ -473,8 +477,9 @@ const getMainPrompt = (networkName: NetworkName, baseSymbol: string) => {
       return this.render();
     },
     prefix: process.platform === "win32" ? " [*]" : "🛡️ ",
-    message: `Now arriving at Terminal Wallet ${("v" + version).grey}... ${"(Featuring RAILGUN Privacy)".grey
-      }`,
+    message: `Now arriving at Terminal Wallet ${("v" + version).grey}... ${
+      "(Featuring RAILGUN Privacy)".grey
+    }`,
     separator: " ",
     initial: lastMenuSelection ?? "private-transfer",
     choices: [
@@ -543,8 +548,9 @@ const getMainPrompt = (networkName: NetworkName, baseSymbol: string) => {
       { name: "refresh-balances", message: "Refresh Balances" },
       {
         name: "toggle-balance",
-        message: `Toggle ${shouldDisplayPrivateBalances() ? "Public" : "Private"
-          } Balances`.yellow.dim,
+        message: `Toggle ${
+          shouldDisplayPrivateBalances() ? "Public" : "Private"
+        } Balances`.yellow.dim,
       },
       { name: "reset-relayers", message: "Reset Relayer Connection" },
       { name: "edit-rpc", message: "Edit RPC Providers" },
@@ -575,7 +581,6 @@ const BufferManager = {
     }
   },
 };
-
 
 export const walletBalancePoller = async () => {
   const networkName = getCurrentNetwork();
@@ -791,5 +796,3 @@ export const runMainMenu = async () => {
   clearConsoleBuffer();
   runMainMenu();
 };
-
-

@@ -17,13 +17,13 @@ export enum ChainIDs {
 
 export const ChainIDToNameMap: NumMapType<NetworkName> = {
   [ChainIDs.Ethereum]: NetworkName.Ethereum,
-  [ChainIDs.EthereumGoerli]: NetworkName.EthereumGoerli,
+  [ChainIDs.EthereumGoerli]: NetworkName.EthereumGoerli_DEPRECATED,
   [ChainIDs.BNBChain]: NetworkName.BNBChain,
   [ChainIDs.PolygonPOS]: NetworkName.Polygon,
   [ChainIDs.Arbitrum]: NetworkName.Arbitrum,
   [ChainIDs.Hardhat]: NetworkName.Hardhat,
-  [ChainIDs.PolygonMumbai]: NetworkName.PolygonMumbai,
-  [ChainIDs.ArbitrumGoerli]: NetworkName.ArbitrumGoerli,
+  [ChainIDs.PolygonMumbai]: NetworkName.PolygonMumbai_DEPRECATED,
+  [ChainIDs.ArbitrumGoerli]: NetworkName.ArbitrumGoerli_DEPRECATED,
 };
 
 export type ChainTypeMap<T> = {

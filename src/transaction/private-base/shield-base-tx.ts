@@ -31,6 +31,7 @@ export const getShieldBaseTokenGasDetails = async (
 
   const { gasEstimate } = await gasEstimateForShieldBaseToken(
     txIDVersion,
+    // @ts-expect-error
     chainName,
     wrappedERC20Amount.recipientAddress,
     shieldPrivateKey,
@@ -68,6 +69,7 @@ export const getProvedShieldBaseTokenTransaction = async (
 
   const { transaction } = await populateShieldBaseToken(
     txIDVersion,
+    // @ts-expect-error
     chainName,
     wrappedERC20Amount.recipientAddress,
     shieldPrivateKey,

@@ -28,6 +28,7 @@ export const getShieldERC20TransactionGasDetails = async (
 
   const { gasEstimate } = await gasEstimateForShield(
     txIDVersion,
+    // @ts-expect-error
     chainName,
     shieldPrivateKey,
     erc20AmountRecipients,
@@ -66,6 +67,7 @@ export const getProvedShieldERC20Transaction = async (
 
   const { transaction } = await populateShield(
     txIDVersion,
+    // @ts-expect-error
     chainName,
     shieldPrivateKey,
     erc20AmountRecipients,

@@ -36,7 +36,7 @@ export const isEngineRunning = () => {
 };
 
 const interceptLog = {
-  log: (log: string) => { },
+  log: (log: string) => {},
   error: (err: any) => {
     console.log(err.message);
   },
@@ -197,8 +197,9 @@ export const getProviderPromptOptions = (chainName: NetworkName) => {
       const providerEnabled = customProviders[provider];
       return {
         name: provider,
-        message: `[${providerEnabled ? "Enabled ".green.dim : "Disabled".yellow.dim
-          }] ${provider}`,
+        message: `[${
+          providerEnabled ? "Enabled ".green.dim : "Disabled".yellow.dim
+        }] ${provider}`,
       };
     });
 
@@ -214,6 +215,9 @@ export const getProviderPromptOptions = (chainName: NetworkName) => {
   }
 };
 export const loadProviderList = async (chainName: NetworkName) => {
+  if (!isDefined(chainName)) {
+    throw new Error("No chainName provided.");
+  }
   const customProviders = getCustomProvidersForChain(chainName);
   const { providers, chainId } = configDefaults.networkConfig[chainName];
   let combinedProviders = providers;
@@ -245,9 +249,11 @@ export const loadProviderList = async (chainName: NetworkName) => {
     providers: availableProviders,
   };
   const rpcPollingInterval = 20 * 1000;
+  // @ts-expect-error
   pauseAllPollingProviders(chainName);
   const { feesSerialized } = await loadProvider(
     newRPCJsonConfig,
+    // @ts-expect-error
     chainName,
     rpcPollingInterval,
   );
@@ -258,6 +264,7 @@ export const loadProviderList = async (chainName: NetworkName) => {
     feesSerialized.unshieldFeeV3 ?? feesSerialized.shieldFeeV2,
   );
 
+  // @ts-expect-error
   setRailgunFees(chainName, feesShield, feesUnshield);
   loadedRailgunNetworks[chainName] = true;
   currentLoadedNetwork = chainName;
@@ -271,6 +278,7 @@ export const loadEngineProvidersForNetwork = async (chainName: NetworkName) => {
 
   if (loadedRailgunNetworks[chainName]) {
     currentLoadedNetwork = chainName;
+    // @ts-expect-error
     resumeIsolatedPollingProviderForNetwork(chainName);
     await rescanBalances(chainName);
     return;
@@ -279,12 +287,16 @@ export const loadEngineProvidersForNetwork = async (chainName: NetworkName) => {
   await loadProviderList(chainName);
 };
 
-export const pauseEngineProvidersExcept = async (chainName?: NetworkName) => {
-  await pauseAllPollingProviders(chainName);
+export const pauseEngineProvidersExcept = (
+  chainName: Optional<NetworkName>,
+) => {
+  // @ts-expect-error
+  pauseAllPollingProviders(chainName);
 };
 
-export const resumeEngineProvider = async (chainName: NetworkName) => {
-  await resumeIsolatedPollingProviderForNetwork(chainName);
+export const resumeEngineProvider = (chainName: NetworkName) => {
+  // @ts-expect-error
+  resumeIsolatedPollingProviderForNetwork(chainName);
 };
 
 export const stopEngine = async () => {
@@ -297,5 +309,3 @@ export const stopEngine = async () => {
   });
   return;
 };
-
-

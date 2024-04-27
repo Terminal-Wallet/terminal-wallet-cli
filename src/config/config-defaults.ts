@@ -1,4 +1,8 @@
-import { ChainType, NetworkName } from "@railgun-community/shared-models";
+import {
+  ChainType,
+  NetworkName,
+  type ProviderJson,
+} from "@railgun-community/shared-models";
 import {
   TokenAddressArbitrum,
   TokenAddressBSC,
@@ -6,6 +10,31 @@ import {
   TokenAddressPolygonPOS,
 } from "../models/token-models";
 import { getProviderObjectFromURL } from "../models/network-models";
+
+interface ConfigDefaults {
+  apiKeys: {
+    zeroXApi: string;
+  };
+  engine: {
+    artifactPath: string;
+    databasePath: string;
+    keyChainPath: string;
+    defaultChain: NetworkName;
+    defaultNetworks: NetworkName[];
+  };
+  tokenConfig: {
+    [key in NetworkName]: string[];
+  };
+  networkConfig: {
+    [key in NetworkName]: {
+      name: string;
+      type: ChainType;
+      chainId: number;
+      blockscan: string;
+      providers: ProviderJson[];
+    };
+  };
+}
 
 export default {
   apiKeys: {
@@ -21,8 +50,6 @@ export default {
       NetworkName.BNBChain,
       NetworkName.Polygon,
       NetworkName.Arbitrum,
-      NetworkName.EthereumGoerli,
-      NetworkName.ArbitrumGoerli,
     ],
   },
   tokenConfig: {
@@ -66,12 +93,13 @@ export default {
       TokenAddressArbitrum.WBTC,
       TokenAddressArbitrum.WETH,
     ],
-    [NetworkName.ArbitrumGoerli]: [],
-    [NetworkName.EthereumGoerli]: [],
+    [NetworkName.ArbitrumGoerli_DEPRECATED]: [],
     [NetworkName.EthereumSepolia]: [],
-    [NetworkName.EthereumRopsten_DEPRECATED]: [],
-    [NetworkName.PolygonMumbai]: [],
+    [NetworkName.PolygonMumbai_DEPRECATED]: [],
+    [NetworkName.PolygonAmoy]: [],
     [NetworkName.Hardhat]: [],
+    [NetworkName.EthereumGoerli_DEPRECATED]: [],
+    [NetworkName.EthereumRopsten_DEPRECATED]: [],
   },
   networkConfig: {
     [NetworkName.Ethereum]: {
@@ -123,7 +151,7 @@ export default {
         getProviderObjectFromURL("https://arbitrum-one.public.blastapi.io"),
       ],
     },
-    [NetworkName.EthereumGoerli]: {
+    [NetworkName.EthereumGoerli_DEPRECATED]: {
       chainId: 5,
       type: ChainType.EVM,
       name: "Görli Testnet",
@@ -134,7 +162,7 @@ export default {
         getProviderObjectFromURL("https://eth-goerli.public.blastapi.io"),
       ],
     },
-    [NetworkName.ArbitrumGoerli]: {
+    [NetworkName.ArbitrumGoerli_DEPRECATED]: {
       chainId: 421613,
       type: ChainType.EVM,
       name: "Arbitrum Görli Testnet",
@@ -168,7 +196,14 @@ export default {
       blockscan: "",
       type: ChainType.EVM,
     },
-    [NetworkName.PolygonMumbai]: {
+    [NetworkName.PolygonMumbai_DEPRECATED]: {
+      chainId: 1337,
+      providers: [],
+      name: "PolygonMumbai",
+      blockscan: "",
+      type: ChainType.EVM,
+    },
+    [NetworkName.PolygonAmoy]: {
       chainId: 1337,
       providers: [],
       name: "PolygonMumbai",
@@ -184,4 +219,4 @@ export default {
       type: ChainType.EVM,
     },
   },
-};
+} as ConfigDefaults;

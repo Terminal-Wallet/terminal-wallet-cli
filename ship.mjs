@@ -27,6 +27,14 @@ const SHIPPED = Path.join(BUILD_DIR, BUILD_NAME);
 
 const clean = process.argv.includes("--clean");
 
+const POSIEDON_HASH_WASM = Path.join(
+  BUILD_NODE_MODULES,
+  "@railgun-community",
+  "poseidon-hash-rsjs",
+  "index.node",
+);
+const POSIEDON_HASH_WASM_BUILD = Path.join(BUILD_DIR, "index.node");
+
 const preserveNodeModules = [
   Path.join(
     BUILD_NODE_MODULES,
@@ -34,6 +42,7 @@ const preserveNodeModules = [
     "curve25519-scalarmult-rsjs",
     "index.node",
   ),
+  POSIEDON_HASH_WASM_BUILD,
 ];
 
 (async function ship() {
@@ -52,13 +61,14 @@ const preserveNodeModules = [
   console.log("Copying node_modules...");
   FSE.copySync(SOURCE_NODE_MODULES, BUILD_NODE_MODULES);
   FSE.copySync(SOURCE_PACKAGE_JSON, BUILD_PACKAGE_JSON);
+  FSE.copySync(POSIEDON_HASH_WASM, POSIEDON_HASH_WASM_BUILD);
 
   // Apply patches to dependencies so they work with the bundled version
   console.log("Applying patches...");
   const { stderr } = await p(exec)(
     process.platform === "win32"
       ? `cd ${BUILD_DIR} && ..\\node_modules\\.bin\\patch-package --error-on-fail --patch-dir ../build-patches`
-      : `cd ${BUILD_DIR} && $(npm bin)/patch-package --error-on-fail --patch-dir ../build-patches`,
+      : `cd ${BUILD_DIR} && ../node_modules/.bin/patch-package --error-on-fail --patch-dir ../build-patches`,
   );
   if (stderr) {
     console.error(stderr);
@@ -122,6 +132,8 @@ const preserveNodeModules = [
       "@achingbrain/ssdp": "no-op",
       "@railgun-community/curve25519-scalarmult-wasm":
         "@railgun-community/curve25519-scalarmult-rsjs",
+      "@railgun-community/poseidon-hash-wasm":
+        "@railgun-community/poseidon-hash-rsjs",
     },
   });
 

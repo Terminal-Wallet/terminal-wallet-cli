@@ -12,8 +12,7 @@ let isConnected = false;
 
 const relayerOptions: RelayerOptions = {
   pubSubTopic: "/waku/2/railgun-relayer",
-  additionalDirectPeers: [
-  ],
+  additionalDirectPeers: [],
 };
 
 const wakuStatusCallback = (chain: Chain, status: string) => {
@@ -79,7 +78,10 @@ export const startWakuClient = async (chainName: NetworkName) => {
 };
 
 export const stopWakuClient = async () => {
-  await wakuClient.stop();
+  if (!wakuClient) {
+    return;
+  }
+  await wakuClient?.stop();
 };
 
 export const resetWakuClient = async () => {
