@@ -3,12 +3,12 @@ import {
   RailgunERC20Amount,
   RailgunERC20AmountRecipient,
   RailgunPopulateTransactionResponse,
-  SelectedRelayer,
+  SelectedBroadcaster,
   TXIDVersion,
   isDefined,
 } from "@railgun-community/shared-models";
 import {
-  calculateRelayerFeeERC20Amount,
+  calculateBroadcasterFeeERC20Amount,
   gasEstimateForUnprovenUnshieldBaseToken,
   generateUnshieldBaseTokenProof,
   populateProvedUnshieldBaseToken,
@@ -27,14 +27,14 @@ export const getUnshieldBaseTokenGasEstimate = async (
   chainName: NetworkName,
   _wrappedERC20Amount: RailgunERC20AmountRecipient,
   encryptionKey: string,
-  relayerSelection?: SelectedRelayer,
+  broadcasterSelection?: SelectedBroadcaster,
 ): Promise<PrivateGasEstimate | undefined> => {
   const railgunWalletID = getCurrentRailgunID();
   const txIDVersion = TXIDVersion.V2_PoseidonMerkle;
 
   const gasDetailsResult = await getTransactionGasDetails(
     chainName,
-    relayerSelection,
+    broadcasterSelection,
   );
 
   if (!gasDetailsResult) {
@@ -55,10 +55,9 @@ export const getUnshieldBaseTokenGasEstimate = async (
   console.log(
     "Getting Gas Estimate for Transaction...... this may take some time",
   );
-  const { gasEstimate, relayerFeeCommitment } =
+  const { gasEstimate, broadcasterFeeCommitment } =
     await gasEstimateForUnprovenUnshieldBaseToken(
       txIDVersion,
-      // @ts-expect-error
       chainName,
       _wrappedERC20Amount.recipientAddress,
       railgunWalletID,
@@ -71,24 +70,25 @@ export const getUnshieldBaseTokenGasEstimate = async (
 
   const estimatedGasDetails = { ...originalGasDetails, gasEstimate };
   const { symbol } = feeTokenInfo;
-  let relayerFeeERC20Recipient;
+  let broadcasterFeeERC20Recipient;
   let estimatedCost = 0;
-  if (feeTokenDetails && relayerSelection) {
+  if (feeTokenDetails && broadcasterSelection) {
     console.log("Calculating Gas Fee...... this may take some time");
-    const relayerFeeAmountDetails = await calculateRelayerFeeERC20Amount(
-      feeTokenDetails,
-      estimatedGasDetails,
-    );
+    const broadcasterFeeAmountDetails =
+      await calculateBroadcasterFeeERC20Amount(
+        feeTokenDetails,
+        estimatedGasDetails,
+      );
 
     estimatedCost = parseFloat(
-      formatUnits(relayerFeeAmountDetails.amount, feeTokenInfo.decimals),
+      formatUnits(broadcasterFeeAmountDetails.amount, feeTokenInfo.decimals),
     );
 
     // if self relayed, this will be returned undefined.
-    relayerFeeERC20Recipient = {
-      tokenAddress: relayerFeeAmountDetails.tokenAddress,
-      amount: relayerFeeAmountDetails.amount,
-      recipientAddress: relayerSelection.railgunAddress,
+    broadcasterFeeERC20Recipient = {
+      tokenAddress: broadcasterFeeAmountDetails.tokenAddress,
+      amount: broadcasterFeeAmountDetails.amount,
+      recipientAddress: broadcasterSelection.railgunAddress,
     } as RailgunERC20AmountRecipient;
   } else {
     const selfSignedCost = calculateSelfSignedGasEstimate(estimatedGasDetails);
@@ -101,7 +101,7 @@ export const getUnshieldBaseTokenGasEstimate = async (
     symbol,
     estimatedGasDetails,
     estimatedCost,
-    relayerFeeERC20Recipient,
+    broadcasterFeeERC20Recipient,
     overallBatchMinGasPrice,
   };
 };
@@ -128,13 +128,13 @@ export const getProvedUnshieldBaseTokenTransaction = async (
   };
 
   const {
-    relayerFeeERC20Recipient,
+    broadcasterFeeERC20Recipient,
     overallBatchMinGasPrice,
     estimatedGasDetails,
   } = privateGasEstimate;
 
   const sendWithPublicWallet =
-    typeof relayerFeeERC20Recipient !== "undefined" ? false : true;
+    typeof broadcasterFeeERC20Recipient !== "undefined" ? false : true;
   try {
     const wrappedERC20Amount: RailgunERC20Amount = {
       tokenAddress: erc20AmountRecipient.tokenAddress, // wETH
@@ -143,13 +143,12 @@ export const getProvedUnshieldBaseTokenTransaction = async (
 
     await generateUnshieldBaseTokenProof(
       txIDVersion,
-      // @ts-expect-error
       chainName,
       erc20AmountRecipient.recipientAddress,
       railgunWalletID,
       encryptionKey,
       wrappedERC20Amount,
-      relayerFeeERC20Recipient,
+      broadcasterFeeERC20Recipient,
       sendWithPublicWallet,
       overallBatchMinGasPrice,
       progressCallback,
@@ -160,12 +159,11 @@ export const getProvedUnshieldBaseTokenTransaction = async (
     const { transaction, nullifiers, preTransactionPOIsPerTxidLeafPerList } =
       await populateProvedUnshieldBaseToken(
         txIDVersion,
-        // @ts-expect-error
         chainName,
         erc20AmountRecipient.recipientAddress,
         railgunWalletID,
         erc20AmountRecipient,
-        relayerFeeERC20Recipient,
+        broadcasterFeeERC20Recipient,
         sendWithPublicWallet,
         overallBatchMinGasPrice,
         estimatedGasDetails,

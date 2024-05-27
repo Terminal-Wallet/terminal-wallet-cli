@@ -31,7 +31,6 @@ export const getShieldBaseTokenGasDetails = async (
 
   const { gasEstimate } = await gasEstimateForShieldBaseToken(
     txIDVersion,
-    // @ts-expect-error
     chainName,
     wrappedERC20Amount.recipientAddress,
     shieldPrivateKey,
@@ -54,7 +53,7 @@ export const getShieldBaseTokenGasDetails = async (
     overallBatchMinGasPrice: 0n,
     estimatedGasDetails: gasDetails,
     estimatedCost: formattedCost,
-    relayerFeeERC20Recipient: undefined,
+    broadcasterFeeERC20Recipient: undefined,
   };
 };
 
@@ -69,7 +68,6 @@ export const getProvedShieldBaseTokenTransaction = async (
 
   const { transaction } = await populateShieldBaseToken(
     txIDVersion,
-    // @ts-expect-error
     chainName,
     wrappedERC20Amount.recipientAddress,
     shieldPrivateKey,

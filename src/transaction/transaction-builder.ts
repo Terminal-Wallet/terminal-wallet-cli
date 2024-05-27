@@ -5,7 +5,7 @@ import {
   NETWORK_CONFIG,
   NetworkName,
   RailgunERC20AmountRecipient,
-  SelectedRelayer,
+  SelectedBroadcaster,
   delay,
   isDefined,
 } from "@railgun-community/shared-models";
@@ -41,7 +41,7 @@ import {
 import {
   getPrivateTransactionGasEstimate,
   getProvedPrivateTransaction,
-  getRelayerTranaction,
+  getBroadcasterTranaction,
 } from "./private/private-tx";
 import {
   PrivateGasEstimate,
@@ -158,7 +158,7 @@ type SelectChoice = {
 
 const getDisplayTransactions = async (
   erc20Amounts?: RailgunSelectedAmount[] | Zer0XSwapSelectionInfo,
-  selectedRelayer?: SelectedRelayer,
+  selectedBroadcaster?: SelectedBroadcaster,
   privateGasEstimate?: PrivateGasEstimate,
 ) => {
   const chainName = getCurrentNetwork();
@@ -240,18 +240,18 @@ const getDisplayTransactions = async (
     display.push(``.padEnd(50, "=*=").grey);
   }
   if (isDefined(privateGasEstimate)) {
-    const formattedRelayerAddress = selectedRelayer
-      ? getFormattedAddress(selectedRelayer.railgunAddress)
+    const formattedBroadcasterAddress = selectedBroadcaster
+      ? getFormattedAddress(selectedBroadcaster.railgunAddress)
       : "";
 
-    const selectedRelayerInfo = selectedRelayer
-      ? `Selected Relayer:  ${formattedRelayerAddress.cyan}`
+    const selectedBroadcasterInfo = selectedBroadcaster
+      ? `Selected Broadcaster:  ${formattedBroadcasterAddress.cyan}`
       : "";
 
     display.push(
       `Network Fee: ${
         privateGasEstimate.estimatedCost.toFixed(8).toString().yellow
-      } [${privateGasEstimate.symbol.cyan}] ${selectedRelayerInfo}`.green,
+      } [${privateGasEstimate.symbol.cyan}] ${selectedBroadcasterInfo}`.green,
     );
     display.push(``.padEnd(50, "=*=").grey);
   }
@@ -300,17 +300,17 @@ const txScanReset = () => {
 const sendRelayedTransaction = async (
   transactionType: RailgunTransaction,
   provedTransaction: any,
-  relayerSelection: any,
+  broadcasterSelection: any,
   chainName: NetworkName,
 ) => {
   const useRelayAdapt =
     transactionType === RailgunTransaction.UnshieldBase ||
     transactionType === RailgunTransaction.Private0XSwap;
-  const finalTransaction = await getRelayerTranaction(
+  const finalTransaction = await getBroadcasterTranaction(
     {
       ...provedTransaction,
-      feesID: relayerSelection.tokenFee.feesID,
-      selectedRelayerAddress: relayerSelection.railgunAddress,
+      feesID: broadcasterSelection.tokenFee.feesID,
+      selectedBroadcasterAddress: broadcasterSelection.railgunAddress,
     },
     chainName,
     useRelayAdapt,
@@ -374,7 +374,7 @@ export const runTransactionBuilder = async (
     selectFeesDisabled,
     incomingHeader,
     encryptionKey,
-    relayerSelection,
+    broadcasterSelection,
     privateGasEstimate,
     generateProofDisabled,
     sendTransactionDisabled,
@@ -387,7 +387,7 @@ export const runTransactionBuilder = async (
     swapSelections: undefined,
     incomingHeader: undefined,
     encryptionKey: undefined,
-    relayerSelection: undefined,
+    broadcasterSelection: undefined,
     privateGasEstimate: undefined,
     generateProofDisabled: undefined,
     sendTransactionDisabled: undefined,
@@ -421,15 +421,15 @@ export const runTransactionBuilder = async (
     });
   }
 
-  const hasRelayerInfo =
-    isDefined(relayerSelection) || isDefined(selfSignerInfo);
+  const hasBroadcasterInfo =
+    isDefined(broadcasterSelection) || isDefined(selfSignerInfo);
 
   if (selectFeesDisabled === false) {
     choices.push({
       name: "select-fee",
-      message: hasRelayerInfo
-        ? `Edit Relayer FeeToken / Self Signer | (Refresh Gas Estimate)`
-        : `Select Relayer FeeToken / Self Signer`.yellow,
+      message: hasBroadcasterInfo
+        ? `Edit Broadcaster FeeToken / Self Signer | (Refresh Gas Estimate)`
+        : `Select Broadcaster FeeToken / Self Signer`.yellow,
       disabled: selectFeesDisabled ?? true,
     });
   }
@@ -494,7 +494,7 @@ export const runTransactionBuilder = async (
 
   let header = await getDisplayTransactions(
     selections,
-    relayerSelection,
+    broadcasterSelection,
     privateGasEstimate,
   );
 
@@ -1102,7 +1102,7 @@ export const runTransactionBuilder = async (
             );
             header = await getDisplayTransactions(
               selections,
-              relayerSelection,
+              broadcasterSelection,
               gasEstimate,
             );
             newRefObj = {
@@ -1125,7 +1125,7 @@ export const runTransactionBuilder = async (
             );
             header = await getDisplayTransactions(
               selections,
-              relayerSelection,
+              broadcasterSelection,
               gasEstimate,
             );
             newRefObj = {
@@ -1151,7 +1151,7 @@ export const runTransactionBuilder = async (
 
             header = await getDisplayTransactions(
               selections,
-              relayerSelection,
+              broadcasterSelection,
               gasEstimate,
             );
             newRefObj = {
@@ -1177,7 +1177,7 @@ export const runTransactionBuilder = async (
               );
             header = await getDisplayTransactions(
               selections,
-              relayerSelection,
+              broadcasterSelection,
               gasEstimate,
             );
             newRefObj = {
@@ -1213,7 +1213,7 @@ export const runTransactionBuilder = async (
               );
             header = await getDisplayTransactions(
               swapSelections,
-              relayerSelection,
+              broadcasterSelection,
               gasEstimate,
             );
             newRefObj = {
@@ -1240,8 +1240,8 @@ export const runTransactionBuilder = async (
       }
     }
     case "select-fee": {
-      let _relayerSelection;
-      let _bestRelayer;
+      let _broadcasterSelection;
+      let _bestBroadcaster;
       let _selfSignerInfo;
       let _privateGasEstimate;
       try {
@@ -1262,24 +1262,24 @@ export const runTransactionBuilder = async (
           ];
         }
 
-        _relayerSelection = await runFeeTokenSelector(
+        _broadcasterSelection = await runFeeTokenSelector(
           chainName,
           amountRecipients,
-          relayerSelection,
+          broadcasterSelection,
         ).catch((err) => {
           console.log(err.message);
           if (err.message === "Going back to previous menu.") {
             console.log("going back found");
             return {
-              bestRelayer: relayerSelection,
+              bestBroadcaster: broadcasterSelection,
             };
           } else {
             console.log(err.message);
             throw new Error(err.message);
           }
         });
-        _bestRelayer = _relayerSelection?.bestRelayer;
-        if (!_bestRelayer) {
+        _bestBroadcaster = _broadcasterSelection?.bestBroadcaster;
+        if (!_bestBroadcaster) {
           _selfSignerInfo = await getSelfSignerWalletPrompt();
         }
 
@@ -1291,7 +1291,7 @@ export const runTransactionBuilder = async (
               chainName,
               erc20AmountRecipients,
               encryptionKey,
-              _bestRelayer,
+              _bestBroadcaster,
             );
             break;
           }
@@ -1301,7 +1301,7 @@ export const runTransactionBuilder = async (
               chainName,
               erc20AmountRecipients,
               encryptionKey,
-              _bestRelayer,
+              _bestBroadcaster,
             );
             break;
           }
@@ -1315,7 +1315,7 @@ export const runTransactionBuilder = async (
               chainName,
               wrappedERC20Amount,
               encryptionKey,
-              _bestRelayer,
+              _bestBroadcaster,
             );
             break;
           }
@@ -1324,7 +1324,7 @@ export const runTransactionBuilder = async (
               chainName,
               swapSelections.zer0XInputs,
               encryptionKey,
-              _bestRelayer,
+              _bestBroadcaster,
             );
             break;
           }
@@ -1337,17 +1337,17 @@ export const runTransactionBuilder = async (
           header =
             (await getDisplayTransactions(
               swapSelections,
-              _bestRelayer,
+              _bestBroadcaster,
               _privateGasEstimate,
             )) ?? "";
         } else {
           header = await getDisplayTransactions(
             selections,
-            _bestRelayer,
+            _bestBroadcaster,
             _privateGasEstimate,
           );
         }
-        if (_bestRelayer) {
+        if (_bestBroadcaster) {
           return runTransactionBuilder(chainName, transactionType, {
             selections,
             swapSelections,
@@ -1355,7 +1355,7 @@ export const runTransactionBuilder = async (
             selectFeesDisabled: false,
             encryptionKey,
             incomingHeader: header !== "" ? header : incomingHeader,
-            relayerSelection: _bestRelayer,
+            broadcasterSelection: _bestBroadcaster,
             privateGasEstimate: _privateGasEstimate,
             generateProofDisabled: _privateGasEstimate ? false : true,
           });
@@ -1457,13 +1457,13 @@ export const runTransactionBuilder = async (
           header =
             (await getDisplayTransactions(
               swapSelections,
-              relayerSelection,
+              broadcasterSelection,
               privateGasEstimate,
             )) ?? "";
         } else {
           header = await getDisplayTransactions(
             selections,
-            relayerSelection,
+            broadcasterSelection,
             privateGasEstimate,
           );
         }
@@ -1476,7 +1476,7 @@ export const runTransactionBuilder = async (
           sendTransactionDisabled: _provedTransaction ? false : true,
           encryptionKey,
           incomingHeader: header !== "" ? header : incomingHeader,
-          relayerSelection,
+          broadcasterSelection,
           privateGasEstimate,
           provedTransaction: _provedTransaction,
           selfSignerInfo,
@@ -1488,7 +1488,7 @@ export const runTransactionBuilder = async (
     case "send-transaction": {
       if (provedTransaction) {
         try {
-          if (relayerSelection) {
+          if (broadcasterSelection) {
             // RELAYED TRANSACTIONS
             // RELAY ADAPT USED FOR:
             // unshield-base
@@ -1498,7 +1498,7 @@ export const runTransactionBuilder = async (
             return await sendRelayedTransaction(
               transactionType,
               provedTransaction,
-              relayerSelection,
+              broadcasterSelection,
               chainName,
             );
           } else {
@@ -1523,7 +1523,7 @@ export const runTransactionBuilder = async (
             sendTransactionDisabled: true,
             encryptionKey,
             incomingHeader,
-            relayerSelection,
+            broadcasterSelection,
             privateGasEstimate,
             selfSignerInfo,
             // provedTransaction,
@@ -1538,4 +1538,3 @@ export const runTransactionBuilder = async (
   }
   return undefined;
 };
-

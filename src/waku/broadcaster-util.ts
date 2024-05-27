@@ -3,7 +3,7 @@ import { isWakuLoaded, wakuClient } from "./connect-waku";
 let currentAllowList: Optional<string[]> = [];
 let currentBlockList: Optional<string[]> = [];
 
-export const addRemovedRelayer = (relayerAddress: string) => {
+export const addRemovedBroadcaster = (broadcasterAddress: string) => {
   if (!isWakuLoaded()) {
     throw new Error("Waku Client is not Loaded");
   }
@@ -13,11 +13,11 @@ export const addRemovedRelayer = (relayerAddress: string) => {
   if (!currentBlockList) {
     currentBlockList = [];
   }
-  currentBlockList.push(relayerAddress);
+  currentBlockList.push(broadcasterAddress);
   wakuClient.setAddressFilters(undefined, currentBlockList);
 };
 
-export const addChosenRelayer = (relayerAddress: string) => {
+export const addChosenBroadcaster = (broadcasterAddress: string) => {
   if (!isWakuLoaded()) {
     throw new Error("Waku Client is not Loaded");
   }
@@ -27,11 +27,11 @@ export const addChosenRelayer = (relayerAddress: string) => {
   if (!currentAllowList) {
     currentAllowList = [];
   }
-  currentAllowList.push(relayerAddress);
+  currentAllowList.push(broadcasterAddress);
   wakuClient.setAddressFilters(currentAllowList, currentBlockList);
 };
 
-export const resetRelayerFilters = () => {
+export const resetBroadcasterFilters = () => {
   if (!isWakuLoaded()) {
     throw new Error("Waku Client is not Loaded");
   }

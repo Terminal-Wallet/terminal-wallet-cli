@@ -9,8 +9,7 @@
 
 ### Bug Fixes
 
-* waku-relayer-client version ([a6e6fac](https://github.com/Terminal-Wallet/terminal-wallet-cli/commit/a6e6fac40fbc225b7e8a31e0abb13fa5d29ba12c))
-
+- waku-broadcaster-client version ([a6e6fac](https://github.com/Terminal-Wallet/terminal-wallet-cli/commit/a6e6fac40fbc225b7e8a31e0abb13fa5d29ba12c))
 
 ### Code Style Updates
 
