@@ -13,7 +13,7 @@ import {
   NetworkName,
   RailgunERC20Recipient,
   RailgunPopulateTransactionResponse,
-  SelectedRelayer,
+  SelectedBroadcaster,
   TXIDVersion,
   isDefined,
 } from "@railgun-community/shared-models";
@@ -90,7 +90,6 @@ export const getZer0XSwapInputs = async (
       privateSwapRecipient,
     );
     const recipeInput: RecipeInput = {
-      // @ts-expect-error
       networkName: chainName,
       railgunAddress: privateSwapRecipient,
       erc20Amounts: relayAdaptUnshieldERC20Amounts,
@@ -129,7 +128,6 @@ export const getZer0XSwapInputs = async (
     };
   }
   const quoteParams: SwapQuoteParams = {
-    // @ts-expect-error
     networkName: chainName,
     sellERC20Amount: relayAdaptUnshieldERC20Amounts[0],
     buyERC20Info,
@@ -167,7 +165,6 @@ export const getSwapQuote = async (
   slippagePercentage = 500,
 ): Promise<SwapQuoteData> => {
   const quoteParams: SwapQuoteParams = {
-    // @ts-expect-error
     networkName: chainName,
     sellERC20Amount,
     buyERC20Info,
@@ -182,14 +179,14 @@ export const getZer0XSwapTransactionGasEstimate = async (
   chainName: NetworkName,
   zer0XSwapInputs: Zer0XSwap,
   encryptionKey: string,
-  relayerSelection?: SelectedRelayer,
+  broadcasterSelection?: SelectedBroadcaster,
 ): Promise<PrivateGasEstimate | undefined> => {
   const railgunWalletID = getCurrentRailgunID();
   const txIDVersion = TXIDVersion.V2_PoseidonMerkle;
 
   const gasDetailsResult = await getTransactionGasDetails(
     chainName,
-    relayerSelection,
+    broadcasterSelection,
   );
 
   if (!gasDetailsResult) {
@@ -214,7 +211,6 @@ export const getZer0XSwapTransactionGasEstimate = async (
 
   const { gasEstimate } = await gasEstimateForUnprovenCrossContractCalls(
     txIDVersion,
-    // @ts-expect-error
     chainName,
     railgunWalletID,
     encryptionKey,
@@ -233,7 +229,7 @@ export const getZer0XSwapTransactionGasEstimate = async (
     gasEstimate,
     feeTokenInfo,
     feeTokenDetails,
-    relayerSelection,
+    broadcasterSelection,
     overallBatchMinGasPrice,
   );
 };
@@ -267,16 +263,15 @@ export const getProvedZer0XSwapTransaction = async (
   } = zer0XSwapInputs;
 
   const {
-    relayerFeeERC20Recipient,
+    broadcasterFeeERC20Recipient,
     overallBatchMinGasPrice,
     estimatedGasDetails,
   } = privateGasEstimate as PrivateGasEstimate;
   const sendWithPublicWallet =
-    typeof relayerFeeERC20Recipient !== "undefined" ? false : true;
+    typeof broadcasterFeeERC20Recipient !== "undefined" ? false : true;
   try {
     await generateCrossContractCallsProof(
       txIDVersion,
-      // @ts-expect-error
       chainName,
       railgunWalletID,
       encryptionKey,
@@ -285,7 +280,7 @@ export const getProvedZer0XSwapTransaction = async (
       relayAdaptShieldERC20Addresses,
       [],
       crossContractCalls,
-      relayerFeeERC20Recipient,
+      broadcasterFeeERC20Recipient,
       sendWithPublicWallet,
       overallBatchMinGasPrice,
       minGasLimit,
@@ -301,7 +296,6 @@ export const getProvedZer0XSwapTransaction = async (
     const { transaction, nullifiers, preTransactionPOIsPerTxidLeafPerList } =
       await populateProvedCrossContractCalls(
         txIDVersion,
-        // @ts-expect-error
         chainName,
         railgunWalletID,
         relayAdaptUnshieldERC20Amounts,
@@ -309,7 +303,7 @@ export const getProvedZer0XSwapTransaction = async (
         relayAdaptShieldERC20Addresses,
         [],
         crossContractCalls,
-        relayerFeeERC20Recipient,
+        broadcasterFeeERC20Recipient,
         sendWithPublicWallet,
         overallBatchMinGasPrice,
         estimatedGasDetails,

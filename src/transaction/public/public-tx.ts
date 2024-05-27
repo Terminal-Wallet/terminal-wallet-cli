@@ -59,7 +59,7 @@ export const calculatePublicTransactionGasDetais = async (
       overallBatchMinGasPrice: 0n,
       estimatedGasDetails: gasDetails as TransactionGasDetails,
       estimatedCost: formattedCost,
-      relayerFeeERC20Recipient: undefined,
+      broadcasterFeeERC20Recipient: undefined,
     },
     populatedTransaction: finalTransaction,
   };

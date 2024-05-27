@@ -6,14 +6,14 @@ import {
   NetworkName,
   getEVMGasTypeForTransaction,
   TransactionGasDetailsType1,
-  SelectedRelayer,
+  SelectedBroadcaster,
   TransactionGasDetailsType2,
   isDefined,
   TXIDVersion,
   RailgunPopulateTransactionResponse,
 } from "@railgun-community/shared-models";
 import {
-  calculateRelayerFeeERC20Amount,
+  calculateBroadcasterFeeERC20Amount,
   gasEstimateForUnprovenTransfer,
   generateTransferProof,
   populateProvedTransfer,
@@ -37,7 +37,7 @@ import { getFeeDetailsForChain } from "../../gas/gas-util";
 
 export const getOriginalGasDetailsForPrivateTransaction = async (
   chainName: NetworkName,
-  relayerSelection?: SelectedRelayer,
+  broadcasterSelection?: SelectedBroadcaster,
 ): Promise<PrivateGasDetails | undefined> => {
   try {
     const feeData = await getFeeDetailsForChain(chainName);
@@ -52,7 +52,7 @@ export const getOriginalGasDetailsForPrivateTransaction = async (
     let overallBatchMinGasPrice: Optional<bigint>;
     let originalGasDetails: TransactionGasDetails;
     let feeTokenInfo: ERC20Token;
-    if (relayerSelection) {
+    if (broadcasterSelection) {
       evmGasType = getEVMGasTypeForTransaction(
         chainName,
         false,
@@ -63,7 +63,7 @@ export const getOriginalGasDetailsForPrivateTransaction = async (
     }
 
     switch (evmGasType) {
-      // relayer network transactions
+      // broadcaster network transactions
       case EVMGasType.Type0:
       case EVMGasType.Type1: {
         originalGasDetails = {
@@ -86,12 +86,12 @@ export const getOriginalGasDetailsForPrivateTransaction = async (
       }
     }
 
-    // true for self-signing, false for Relayer.
+    // true for self-signing, false for Broadcaster.
     if (!sendWithPublicWallet) {
-      feeTokenDetails = relayerSelection
+      feeTokenDetails = broadcasterSelection
         ? {
-            tokenAddress: relayerSelection.tokenAddress,
-            feePerUnitGas: BigInt(relayerSelection.tokenFee.feePerUnitGas),
+            tokenAddress: broadcasterSelection.tokenAddress,
+            feePerUnitGas: BigInt(broadcasterSelection.tokenFee.feePerUnitGas),
           }
         : undefined;
 
@@ -126,11 +126,11 @@ export const getOriginalGasDetailsForPrivateTransaction = async (
 
 export const getTransactionGasDetails = async (
   chainName: NetworkName,
-  relayerSelection?: SelectedRelayer,
+  broadcasterSelection?: SelectedBroadcaster,
 ): Promise<PrivateGasDetails | undefined> => {
   const gasDetailsResult = await getOriginalGasDetailsForPrivateTransaction(
     chainName,
-    relayerSelection,
+    broadcasterSelection,
   );
   if (!gasDetailsResult) {
     return undefined;
@@ -161,14 +161,14 @@ export const getPrivateTransactionGasEstimate = async (
   chainName: NetworkName,
   erc20AmountRecipients: RailgunERC20AmountRecipient[],
   encryptionKey: string,
-  relayerSelection?: SelectedRelayer,
+  broadcasterSelection?: SelectedBroadcaster,
   memoText = "",
 ): Promise<PrivateGasEstimate | undefined> => {
   const railgunWalletID = getCurrentRailgunID();
   const txIDVersion = TXIDVersion.V2_PoseidonMerkle;
   const gasDetailsResult = await getTransactionGasDetails(
     chainName,
-    relayerSelection,
+    broadcasterSelection,
   );
   if (!gasDetailsResult) {
     console.log("Failed to get Gas Details for Transaction");
@@ -185,7 +185,6 @@ export const getPrivateTransactionGasEstimate = async (
 
   const { gasEstimate } = await gasEstimateForUnprovenTransfer(
     txIDVersion,
-    // @ts-expect-error
     chainName,
     railgunWalletID,
     encryptionKey,
@@ -199,24 +198,25 @@ export const getPrivateTransactionGasEstimate = async (
 
   const estimatedGasDetails = { ...originalGasDetails, gasEstimate };
   const { symbol } = feeTokenInfo;
-  let relayerFeeERC20Recipient;
+  let broadcasterFeeERC20Recipient;
   let estimatedCost = 0;
-  if (feeTokenDetails && relayerSelection) {
+  if (feeTokenDetails && broadcasterSelection) {
     console.log("Calculating Gas Fee... this may take some time");
-    const relayerFeeAmountDetails = await calculateRelayerFeeERC20Amount(
-      feeTokenDetails,
-      estimatedGasDetails,
-    );
+    const broadcasterFeeAmountDetails =
+      await calculateBroadcasterFeeERC20Amount(
+        feeTokenDetails,
+        estimatedGasDetails,
+      );
 
     estimatedCost = parseFloat(
-      formatUnits(relayerFeeAmountDetails.amount, feeTokenInfo.decimals),
+      formatUnits(broadcasterFeeAmountDetails.amount, feeTokenInfo.decimals),
     );
 
     // if self relayed, this will be returned undefined.
-    relayerFeeERC20Recipient = {
+    broadcasterFeeERC20Recipient = {
       tokenAddress: feeTokenDetails.tokenAddress,
-      amount: relayerFeeAmountDetails.amount,
-      recipientAddress: relayerSelection.railgunAddress,
+      amount: broadcasterFeeAmountDetails.amount,
+      recipientAddress: broadcasterSelection.railgunAddress,
     } as RailgunERC20AmountRecipient;
   } else {
     const selfSignedCost = calculateSelfSignedGasEstimate(estimatedGasDetails);
@@ -229,7 +229,7 @@ export const getPrivateTransactionGasEstimate = async (
     symbol,
     estimatedGasDetails,
     estimatedCost,
-    relayerFeeERC20Recipient,
+    broadcasterFeeERC20Recipient,
     overallBatchMinGasPrice,
   };
 };
@@ -257,12 +257,12 @@ export const getProvedPrivateTransaction = async (
   };
 
   const {
-    relayerFeeERC20Recipient,
+    broadcasterFeeERC20Recipient,
     overallBatchMinGasPrice,
     estimatedGasDetails,
   } = privateGasEstimate;
   const sendWithPublicWallet =
-    typeof relayerFeeERC20Recipient !== "undefined" ? false : true;
+    typeof broadcasterFeeERC20Recipient !== "undefined" ? false : true;
 
   // NEED TODO: need to add toggle for this as well.
   const showSenderAddressToRecipient = false;
@@ -270,7 +270,6 @@ export const getProvedPrivateTransaction = async (
   try {
     await generateTransferProof(
       txIDVersion,
-      // @ts-expect-error
       chainName,
       railgunWalletID,
       encryptionKey,
@@ -278,7 +277,7 @@ export const getProvedPrivateTransaction = async (
       memoText,
       erc20AmountRecipients,
       [], // nftAmountRecipients
-      relayerFeeERC20Recipient,
+      broadcasterFeeERC20Recipient,
       sendWithPublicWallet,
       overallBatchMinGasPrice,
       progressCallback,
@@ -295,14 +294,13 @@ export const getProvedPrivateTransaction = async (
     const { transaction, nullifiers, preTransactionPOIsPerTxidLeafPerList } =
       await populateProvedTransfer(
         txIDVersion,
-        // @ts-expect-error
         chainName,
         railgunWalletID,
         showSenderAddressToRecipient,
         memoText,
         erc20AmountRecipients,
         [], // nftAmountRecipients
-        relayerFeeERC20Recipient,
+        broadcasterFeeERC20Recipient,
         sendWithPublicWallet,
         overallBatchMinGasPrice,
         estimatedGasDetails,
@@ -314,7 +312,7 @@ export const getProvedPrivateTransaction = async (
   }
 };
 
-export const getRelayerTranaction = async (
+export const getBroadcasterTranaction = async (
   tx: any,
   networkName: NetworkName,
   useRelayAdapt: boolean,
@@ -322,7 +320,7 @@ export const getRelayerTranaction = async (
   const txidVersion = TXIDVersion.V2_PoseidonMerkle;
   const { to, data } = tx.transaction;
   const { nullifiers, preTransactionPOIsPerTxidLeafPerList } = tx;
-  const relayerFeesID = tx.feesID;
+  const broadcasterFeesID = tx.feesID;
   const chain = getChainForName(networkName);
   const overallBatchMinGasPrice = tx.transaction.gasPrice;
   const relayTx = getWakuTransaction();
@@ -330,8 +328,8 @@ export const getRelayerTranaction = async (
     txidVersion,
     to,
     data,
-    tx.selectedRelayerAddress,
-    relayerFeesID,
+    tx.selectedBroadcasterAddress,
+    broadcasterFeesID,
     chain,
     nullifiers,
     overallBatchMinGasPrice,

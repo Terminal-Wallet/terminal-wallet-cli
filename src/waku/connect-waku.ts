@@ -1,17 +1,17 @@
 import { Chain, NetworkName } from "@railgun-community/shared-models";
 import { getChainForName } from "../network/network-util";
 import {
-  WakuRelayerClient,
-  WakuRelayerTransaction,
-  RelayerOptions,
+  WakuBroadcasterClient,
+  WakuBroadcasterTransaction,
+  BroadcasterOptions,
 } from "../models/waku-models";
 
-let wakuRelayerTransaction: WakuRelayerTransaction;
+let wakuBroadcasterTransaction: WakuBroadcasterTransaction;
 let wakuLoaded = false;
 let isConnected = false;
 
-const relayerOptions: RelayerOptions = {
-  pubSubTopic: "/waku/2/railgun-relayer",
+const broadcasterOptions: BroadcasterOptions = {
+  pubSubTopic: "/waku/2/railgun-broadcaster",
   additionalDirectPeers: [],
 };
 
@@ -23,7 +23,7 @@ const wakuStatusCallback = (chain: Chain, status: string) => {
   }
 };
 
-export let wakuClient: WakuRelayerClient;
+export let wakuClient: WakuBroadcasterClient;
 
 export const isWakuLoaded = () => {
   return wakuLoaded;
@@ -44,20 +44,20 @@ export const getWakuTransaction = () => {
   if (!isWakuLoaded()) {
     throw new Error("Waku Client is not Loaded.");
   }
-  return wakuRelayerTransaction;
+  return wakuBroadcasterTransaction;
 };
 
 export const initWakuClient = async () => {
   if (isWakuLoaded()) {
     return;
   }
-  const waku = await import("@railgun-community/waku-relayer-client-node");
+  const waku = await import("@railgun-community/waku-broadcaster-client-node");
   // eslint-disable-next-line @typescript-eslint/ban-ts-comment
   // @ts-ignore
-  wakuClient = waku.WakuRelayerClient as WakuRelayerClient;
+  wakuClient = waku.WakuBroadcasterClient; // as WakuBroadcasterClient;
   // eslint-disable-next-line @typescript-eslint/ban-ts-comment
   // @ts-ignore
-  wakuRelayerTransaction = waku.RelayerTransaction as WakuRelayerTransaction;
+  wakuBroadcasterTransaction = waku.BroadcasterTransaction; // as WakuBroadcasterTransaction;
   wakuLoaded = true;
 };
 
@@ -74,7 +74,7 @@ export const startWakuClient = async (chainName: NetworkName) => {
     throw new Error("No Waku Client?...");
   }
   const chain = getChainForName(chainName);
-  await wakuClient.start(chain, relayerOptions, wakuStatusCallback);
+  await wakuClient.start(chain, broadcasterOptions, wakuStatusCallback);
 };
 
 export const stopWakuClient = async () => {

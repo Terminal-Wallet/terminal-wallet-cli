@@ -172,14 +172,12 @@ const runPOIToolsPrompt = async (chainName: NetworkName) => {
   if (generateOption) {
     switch (generateOption) {
       case "generate-wallet-poi": {
-        // @ts-expect-error
         await generatePOIsForWallet(chainName, getCurrentRailgunID());
         break;
       }
       case "refresh-poi-spent": {
         await refreshSpentPOIsForWallet(
           TXIDVersion.V2_PoseidonMerkle,
-          // @ts-expect-error
           chainName,
           getCurrentRailgunID(),
         );
@@ -188,7 +186,6 @@ const runPOIToolsPrompt = async (chainName: NetworkName) => {
       case "refresh-poi-recieved": {
         await refreshReceivePOIsForWallet(
           TXIDVersion.V2_PoseidonMerkle,
-          // @ts-expect-error
           chainName,
           getCurrentRailgunID(),
         );
@@ -290,7 +287,7 @@ const getMainPrompt = (networkName: NetworkName, baseSymbol: string) => {
   return new Select({
     logoHeader: RAILGUN_HEADER,
     header: async () => {
-      const relayerStatus = `Relayers: ${
+      const broadcasterStatus = `Broadcasters: ${
         isWakuConnected()
           ? "Available".dim.green.bold
           : "Disconnected".dim.yellow.bold
@@ -320,7 +317,7 @@ const getMainPrompt = (networkName: NetworkName, baseSymbol: string) => {
       return [
         "",
         walletInfoString,
-        relayerStatus,
+        broadcasterStatus,
         balanceBlock,
         `${
           !isMenuResponsive()
@@ -552,7 +549,7 @@ const getMainPrompt = (networkName: NetworkName, baseSymbol: string) => {
           shouldDisplayPrivateBalances() ? "Public" : "Private"
         } Balances`.yellow.dim,
       },
-      { name: "reset-relayers", message: "Reset Relayer Connection" },
+      { name: "reset-broadcasters", message: "Reset Broadcaster Connection" },
       { name: "edit-rpc", message: "Edit RPC Providers" },
       {
         name: "toggle-responsive",
@@ -633,7 +630,7 @@ export const runMainMenu = async () => {
   if (isDefined(menuSelection)) {
     switch (menuSelection) {
       case "toggle-balance":
-      case "reset-relayers":
+      case "reset-broadcasters":
       case "toggle-responsive":
       case "refresh-balances":
         lastMenuSelection = menuSelection;
@@ -771,7 +768,7 @@ export const runMainMenu = async () => {
       togglePrivateBalances();
       break;
     }
-    case "reset-relayers": {
+    case "reset-broadcasters": {
       resetWakuClient();
       break;
     }

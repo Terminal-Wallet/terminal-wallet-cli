@@ -1,13 +1,16 @@
 import {
   NetworkName,
   RailgunERC20AmountRecipient,
-  SelectedRelayer,
+  SelectedBroadcaster,
   isDefined,
 } from "@railgun-community/shared-models";
 import { delay } from "../util/util";
 import { formatUnits, parseUnits } from "ethers";
 import { getWakuClient } from "../waku/connect-waku";
-import { addRemovedRelayer, resetRelayerFilters } from "../waku/relayer-util";
+import {
+  addRemovedBroadcaster,
+  resetBroadcasterFilters,
+} from "../waku/broadcaster-util";
 import {
   getDisplayStringFromBalance,
   getMaxBalanceLength,
@@ -146,17 +149,17 @@ export const feeTokenSelectionPrompt = async (
 export const runFeeTokenSelector = async (
   chainName: NetworkName,
   amountRecipients: RailgunERC20AmountRecipient[],
-  currentRelayer?: SelectedRelayer,
-): Promise<{ bestRelayer: SelectedRelayer } | undefined> => {
-  const additionalChoices = currentRelayer
+  currentBroadcaster?: SelectedBroadcaster,
+): Promise<{ bestBroadcaster: SelectedBroadcaster } | undefined> => {
+  const additionalChoices = currentBroadcaster
     ? [
         {
-          name: "different-relayer",
-          message: "Select Different Relayer".grey,
+          name: "different-broadcaster",
+          message: "Select Different Broadcaster".grey,
         },
         {
-          name: "clear-relayer-list",
-          message: "Clear Relayer Address Blocklist".grey,
+          name: "clear-broadcaster-list",
+          message: "Clear Broadcaster Address Blocklist".grey,
         },
       ]
     : [];
@@ -164,10 +167,10 @@ export const runFeeTokenSelector = async (
     header: " ",
     message: "Transaction Fee Options",
     choices: [
-      { name: "relayed", message: "Use a Relayer" },
+      { name: "relayed", message: "Use a Broadcaster" },
       {
         name: "self-signed",
-        message: `Self Sign Transaction ${"Self-Relay".yellow}`,
+        message: `Self Sign Transaction ${"Self-Broadcast".yellow}`,
       },
       ...additionalChoices,
       { name: "go-back", message: "Cancel Selection".grey },
@@ -179,16 +182,16 @@ export const runFeeTokenSelector = async (
     let feeTokenAddress;
 
     switch (feeOption) {
-      case "different-relayer": {
-        if (currentRelayer) {
-          feeTokenAddress = currentRelayer.tokenAddress;
-          addRemovedRelayer(currentRelayer.railgunAddress);
+      case "different-broadcaster": {
+        if (currentBroadcaster) {
+          feeTokenAddress = currentBroadcaster.tokenAddress;
+          addRemovedBroadcaster(currentBroadcaster.railgunAddress);
         }
         // WANT THIS FALL THROUGH here
       }
       case "relayed": {
         {
-          if (feeOption !== "different-relayer") {
+          if (feeOption !== "different-broadcaster") {
             const feeToken = await feeTokenSelectionPrompt(
               chainName,
               false,
@@ -199,7 +202,7 @@ export const runFeeTokenSelector = async (
               return runFeeTokenSelector(
                 chainName,
                 amountRecipients,
-                currentRelayer,
+                currentBroadcaster,
               );
             }
             feeTokenAddress = feeToken.tokenAddress;
@@ -208,19 +211,19 @@ export const runFeeTokenSelector = async (
             const waku = getWakuClient();
             const chain = getChainForName(chainName);
 
-            const bestRelayer = await waku.findBestRelayer(
+            const bestBroadcaster = await waku.findBestBroadcaster(
               chain,
               feeTokenAddress.toLowerCase(),
               true,
             );
-            if (bestRelayer) {
-              return { bestRelayer };
+            if (bestBroadcaster) {
+              return { bestBroadcaster };
             }
-            console.log("No Relayers Found for Token".yellow);
+            console.log("No Broadcasters Found for Token".yellow);
             return runFeeTokenSelector(
               chainName,
               amountRecipients,
-              currentRelayer,
+              currentBroadcaster,
             );
           } catch (err) {
             console.log(err);
@@ -231,8 +234,8 @@ export const runFeeTokenSelector = async (
       case "self-signed": {
         return undefined;
       }
-      case "clear-relayer-list": {
-        resetRelayerFilters();
+      case "clear-broadcaster-list": {
+        resetBroadcasterFilters();
         return runFeeTokenSelector(chainName, amountRecipients, undefined);
       }
       case "go-back": {
@@ -392,7 +395,9 @@ export const transferTokenAmountSelectionPrompt = async (
   return { amountSelections };
 };
 
-export const runAddTokenPrompt = async (chainName: NetworkName): Promise<void> => {
+export const runAddTokenPrompt = async (
+  chainName: NetworkName,
+): Promise<void> => {
   const prompt = new Input({
     header: " ",
     message: `Please enter Token Address.`,

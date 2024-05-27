@@ -47,7 +47,6 @@ export const getProviderForURL = (rpcEndpoint: string) => {
 
 // gas estimates should use this
 export const getFallbackProviderForChain = (chainName: NetworkName) => {
-  // @ts-expect-error
   return getFallbackProviderForNetwork(chainName);
 };
 

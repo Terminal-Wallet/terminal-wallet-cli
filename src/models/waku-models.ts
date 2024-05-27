@@ -1,53 +1,53 @@
 import {
   Chain,
   PreTransactionPOIsPerTxidLeafPerList,
-  RelayerConnectionStatus,
-  SelectedRelayer,
+  BroadcasterConnectionStatus,
+  SelectedBroadcaster,
   TXIDVersion,
 } from "@railgun-community/shared-models";
 
-export type RelayerOptions = {
+export type BroadcasterOptions = {
   pubSubTopic?: string;
   additionalDirectPeers?: string[];
   peerDiscoveryTimeout?: number;
 };
-export type RelayerConnectionStatusCallback = (
+export type BroadcasterConnectionStatusCallback = (
   chain: Chain,
-  status: RelayerConnectionStatus,
+  status: BroadcasterConnectionStatus,
 ) => void;
 
-export type RelayerDebugger = {
+export type BroadcasterDebugger = {
   log: (msg: string) => void;
   error: (error: Error) => void;
 };
 
-export type WakuRelayerClient = {
+export type WakuBroadcasterClient = {
   start: (
     chain: Chain,
-    relayerOptions: RelayerOptions,
-    statusCallback: RelayerConnectionStatusCallback,
-    relayerDebugger?: RelayerDebugger,
+    broadcasterOptions: BroadcasterOptions,
+    statusCallback: BroadcasterConnectionStatusCallback,
+    broadcasterDebugger?: BroadcasterDebugger,
   ) => void;
   setChain: (chain: Chain) => void;
   stop: () => void;
-  findBestRelayer: (
+  findBestBroadcaster: (
     chain: Chain,
     tokenAddress: string,
     useRelayAdapt: boolean,
-  ) => SelectedRelayer;
+  ) => SelectedBroadcaster;
   setAddressFilters(
     allowlist: Optional<string[]>,
     blocklist: Optional<string[]>,
   ): void;
   tryReconnect(): Promise<void>;
 };
-export type WakuRelayerTransaction = {
+export type WakuBroadcasterTransaction = {
   create: (
     txidVersionForInputs: TXIDVersion,
     to: string,
     data: string,
-    relayerRailgunAddress: string,
-    relayerFeesID: string,
+    broadcasterRailgunAddress: string,
+    broadcasterFeesID: string,
     chain: Chain,
     nullifiers: string[],
     overallBatchMinGasPrice: bigint,

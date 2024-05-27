@@ -3,13 +3,13 @@ import {
   NetworkName,
   RailgunERC20AmountRecipient,
   RailgunPopulateTransactionResponse,
-  SelectedRelayer,
+  SelectedBroadcaster,
   TXIDVersion,
   TransactionGasDetails,
   isDefined,
 } from "@railgun-community/shared-models";
 import {
-  calculateRelayerFeeERC20Amount,
+  calculateBroadcasterFeeERC20Amount,
   gasEstimateForUnprovenUnshield,
   generateUnshieldProof,
   populateProvedUnshield,
@@ -30,29 +30,30 @@ export const getOutputGasEstimate = async (
   gasEstimate: bigint,
   feeTokenInfo: ERC20Token,
   feeTokenDetails: FeeTokenDetails | undefined,
-  relayerSelection: SelectedRelayer | undefined,
+  broadcasterSelection: SelectedBroadcaster | undefined,
   overallBatchMinGasPrice: Optional<bigint>,
 ) => {
   const estimatedGasDetails = { ...originalGasDetails, gasEstimate };
   const { symbol } = feeTokenInfo;
-  let relayerFeeERC20Recipient;
+  let broadcasterFeeERC20Recipient;
   let estimatedCost = 0;
-  if (feeTokenDetails && relayerSelection) {
-    console.log("Calculating Relayer Fee... This may take a few moments.");
-    const relayerFeeAmountDetails = await calculateRelayerFeeERC20Amount(
-      feeTokenDetails,
-      estimatedGasDetails,
-    );
+  if (feeTokenDetails && broadcasterSelection) {
+    console.log("Calculating Broadcaster Fee... This may take a few moments.");
+    const broadcasterFeeAmountDetails =
+      await calculateBroadcasterFeeERC20Amount(
+        feeTokenDetails,
+        estimatedGasDetails,
+      );
 
     estimatedCost = parseFloat(
-      formatUnits(relayerFeeAmountDetails.amount, feeTokenInfo.decimals),
+      formatUnits(broadcasterFeeAmountDetails.amount, feeTokenInfo.decimals),
     );
 
     // if self relayed, this will be returned undefined.
-    relayerFeeERC20Recipient = {
+    broadcasterFeeERC20Recipient = {
       tokenAddress: feeTokenDetails.tokenAddress,
-      amount: relayerFeeAmountDetails.amount,
-      recipientAddress: relayerSelection.railgunAddress,
+      amount: broadcasterFeeAmountDetails.amount,
+      recipientAddress: broadcasterSelection.railgunAddress,
     } as RailgunERC20AmountRecipient;
   } else {
     const selfSignedCost = calculateSelfSignedGasEstimate(estimatedGasDetails);
@@ -65,7 +66,7 @@ export const getOutputGasEstimate = async (
     symbol,
     estimatedGasDetails,
     estimatedCost,
-    relayerFeeERC20Recipient,
+    broadcasterFeeERC20Recipient,
     overallBatchMinGasPrice,
   };
 };
@@ -74,14 +75,14 @@ export const getUnshieldERC20TransactionGasEstimate = async (
   chainName: NetworkName,
   erc20AmountRecipients: RailgunERC20AmountRecipient[],
   encryptionKey: string,
-  relayerSelection?: SelectedRelayer,
+  broadcasterSelection?: SelectedBroadcaster,
 ): Promise<PrivateGasEstimate | undefined> => {
   const railgunWalletID = getCurrentRailgunID();
   const txIDVersion = TXIDVersion.V2_PoseidonMerkle;
 
   const gasDetailsResult = await getTransactionGasDetails(
     chainName,
-    relayerSelection,
+    broadcasterSelection,
   );
 
   if (!gasDetailsResult) {
@@ -98,10 +99,9 @@ export const getUnshieldERC20TransactionGasEstimate = async (
   console.log(
     "Getting Gas Estimate for UNSHIELD Transaction...... this may take some time",
   );
-  const { gasEstimate, relayerFeeCommitment } =
+  const { gasEstimate, broadcasterFeeCommitment } =
     await gasEstimateForUnprovenUnshield(
       txIDVersion,
-      // @ts-expect-error
       chainName,
       railgunWalletID,
       encryptionKey,
@@ -116,7 +116,7 @@ export const getUnshieldERC20TransactionGasEstimate = async (
     gasEstimate,
     feeTokenInfo,
     feeTokenDetails,
-    relayerSelection,
+    broadcasterSelection,
     overallBatchMinGasPrice,
   );
 };
@@ -143,23 +143,22 @@ export const getProvedUnshieldERC20Transaction = async (
   };
 
   const {
-    relayerFeeERC20Recipient,
+    broadcasterFeeERC20Recipient,
     overallBatchMinGasPrice,
     estimatedGasDetails,
   } = privateGasEstimate;
   const sendWithPublicWallet =
-    typeof relayerFeeERC20Recipient !== "undefined" ? false : true;
+    typeof broadcasterFeeERC20Recipient !== "undefined" ? false : true;
 
   try {
     await generateUnshieldProof(
       txIDVersion,
-      // @ts-expect-error
       chainName,
       railgunWalletID,
       encryptionKey,
       erc20AmountRecipients,
       [], // nftAmountRecipients
-      relayerFeeERC20Recipient,
+      broadcasterFeeERC20Recipient,
       sendWithPublicWallet,
       overallBatchMinGasPrice,
       progressCallback,
@@ -170,12 +169,11 @@ export const getProvedUnshieldERC20Transaction = async (
     const { transaction, nullifiers, preTransactionPOIsPerTxidLeafPerList } =
       await populateProvedUnshield(
         txIDVersion,
-        // @ts-expect-error
         chainName,
         railgunWalletID,
         erc20AmountRecipients,
         [], // nftAmountRecipients
-        relayerFeeERC20Recipient,
+        broadcasterFeeERC20Recipient,
         sendWithPublicWallet,
         overallBatchMinGasPrice,
         estimatedGasDetails,

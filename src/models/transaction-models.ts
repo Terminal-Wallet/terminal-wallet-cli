@@ -9,7 +9,7 @@ export type PrivateGasEstimate = {
   symbol: string;
   estimatedGasDetails: TransactionGasDetails;
   estimatedCost: number;
-  relayerFeeERC20Recipient: Optional<RailgunERC20AmountRecipient>;
+  broadcasterFeeERC20Recipient: Optional<RailgunERC20AmountRecipient>;
   overallBatchMinGasPrice: Optional<bigint>;
 };
 
