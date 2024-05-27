@@ -232,13 +232,6 @@ export const initializeWalletSystems = async () => {
 
   const currentNetwork =
     walletManager.keyChain.currentNetwork ?? NetworkName.Ethereum;
-  initWakuClient()
-    .then(async () => {
-      await startWakuClient(currentNetwork);
-    })
-    .catch(async (err: Error) => {
-      throw new Error(`WAKU Failed to Initialize. ${err.message}`);
-    });
 
   walletManager.saltedPassword = walletManager.keyChain.salt;
   let wallet;
@@ -266,6 +259,15 @@ export const initializeWalletSystems = async () => {
     walletManager.railgunWalletAddress = wallet.railgunWalletAddress;
     const railgunWalletResult = await initRailgunWallet();
   }
+
+  // Wallet has been loded; initalize waku now to avoid console message flooding password input.
+  initWakuClient()
+    .then(async () => {
+      await startWakuClient(currentNetwork);
+    })
+    .catch(async (err: Error) => {
+      throw new Error(`WAKU Failed to Initialize. ${err.message}`);
+    });
   if (walletManager.keyChain.cachedTokenInfo) {
     loadTokenDBCache(walletManager.keyChain.cachedTokenInfo);
   }
