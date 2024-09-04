@@ -41,9 +41,9 @@ export type JsonProviderConfig = {
 export const getProviderObjectFromURL = (rpcURL: string): ProviderJson => {
   return {
     provider: rpcURL,
-    priority: 1,
-    weight: 1,
+    priority: 3,
+    weight: 2,
     stallTimeout: 2500,
-    maxLogsPerBatch: 20,
+    maxLogsPerBatch: 2,
   };
 };
