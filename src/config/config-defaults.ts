@@ -108,9 +108,10 @@ export default {
       chainId: 1,
       blockscan: "https://etherscan.io/",
       providers: [
-        getProviderObjectFromURL("https://rpc.ankr.com/eth"),
+        getProviderObjectFromURL("https://eth.llamarpc.com"),
+        getProviderObjectFromURL("https://eth-mainnet.public.blastapi.io"),
+        getProviderObjectFromURL("https://ethereum-rpc.publicnode.com"),
         getProviderObjectFromURL("https://cloudflare-eth.com/"),
-        getProviderObjectFromURL("https://ethereum.publicnode.com"),
       ],
     },
     [NetworkName.Polygon]: {
@@ -119,6 +120,8 @@ export default {
       chainId: 137,
       blockscan: "https://polygonscan.com/",
       providers: [
+        getProviderObjectFromURL("https://polygon.llamarpc.com"),
+        getProviderObjectFromURL("https://polygon.meowrpc.com"),
         getProviderObjectFromURL("https://rpc-mainnet.matic.quiknode.pro"),
         getProviderObjectFromURL("https://polygon-bor.publicnode.com"),
         getProviderObjectFromURL("https://polygon-rpc.com"),
@@ -131,6 +134,8 @@ export default {
       chainId: 56,
       blockscan: "https://bscscan.com/",
       providers: [
+        getProviderObjectFromURL("https://binance.llamarpc.com"),
+        getProviderObjectFromURL("https://bsc-mainnet.public.blastapi.io"),
         getProviderObjectFromURL("https://bsc.blockpi.network/v1/rpc/public"),
         getProviderObjectFromURL("https://bsc.rpc.blxrbdn.com"),
         getProviderObjectFromURL("https://bsc-dataseed4.defibit.io"),
@@ -143,6 +148,8 @@ export default {
       type: ChainType.EVM,
       chainId: 42161,
       providers: [
+        getProviderObjectFromURL("https://arbitrum.llamarpc.com"),
+        getProviderObjectFromURL("https://arbitrum-one.public.blastapi.io"),
         getProviderObjectFromURL(
           "https://endpoints.omniatech.io/v1/arbitrum/one/public",
         ),
