@@ -60,13 +60,13 @@
     "typescript": "5.1.6"
   },
   "dependencies": {
-    "@libp2p/interface": "^1.3.0",
-    "@railgun-community/cookbook": "2.8.4",
+    "@libp2p/interface": "1.3.0",
+    "@railgun-community/cookbook": "2.8.5",
     "@railgun-community/curve25519-scalarmult-rsjs": "0.2.4",
     "@railgun-community/poseidon-hash-rsjs": "1.0.1",
     "@railgun-community/shared-models": "7.4.3",
-    "@railgun-community/waku-broadcaster-client-node": "7.2.2",
-    "@railgun-community/wallet": "10.2.3",
+    "@railgun-community/waku-broadcaster-client-node": "7.2.4",
+    "@railgun-community/wallet": "10.2.4",
     "bn": "1.0.5",
     "colors": "^1.4.0",
     "enquirer": "2.3.6",
