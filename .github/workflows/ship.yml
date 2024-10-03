@@ -18,7 +18,7 @@ jobs:
     strategy:
       fail-fast: false # prevents GitHub from cancelling all in-progress jobs if any matrix job fails.
       matrix:
-        node-version: [16.x]
+        node-version: [20.x]
         os: [ubuntu-20.04, macos-latest, windows-latest]
         include:
           - os: macos-latest

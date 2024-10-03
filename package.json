@@ -6,7 +6,7 @@
   "main": "./dist/main.js",
   "bin": "./dist/main.js",
   "engines": {
-    "node": ">=16"
+    "node": ">=20"
   },
   "scripts": {
     "postinstall": "patch-package",
@@ -64,9 +64,9 @@
     "@railgun-community/cookbook": "2.8.5",
     "@railgun-community/curve25519-scalarmult-rsjs": "0.2.4",
     "@railgun-community/poseidon-hash-rsjs": "1.0.1",
-    "@railgun-community/shared-models": "7.4.3",
-    "@railgun-community/waku-broadcaster-client-node": "7.2.4",
-    "@railgun-community/wallet": "10.2.4",
+    "@railgun-community/shared-models": "7.4.4",
+    "@railgun-community/waku-broadcaster-client-node": "7.2.5",
+    "@railgun-community/wallet": "10.2.5",
     "bn": "1.0.5",
     "colors": "^1.4.0",
     "enquirer": "2.3.6",
@@ -74,5 +74,6 @@
     "level-js": "6.1.0",
     "leveldown": "6.1.1",
     "snarkjs": "0.7.0"
-  }
+  },
+  "packageManager": "yarn@1.22.22"
 }

@@ -6,11 +6,11 @@ import {
   delay,
   isDefined,
 } from "@railgun-community/shared-models";
+import { type BatchListUpdateEvent} from "@railgun-community/wallet"
 import {
   updatePrivateBalancesForChain,
   updatePublicBalancesForChain,
 } from "../balance/balance-cache";
-import { readableAmounts } from "../util/util";
 import { ChainIDToNameMap } from "../models/network-models";
 import { getCurrentNetwork, rescanBalances } from "../engine/engine";
 import { walletManager } from "./wallet-manager";
@@ -52,10 +52,7 @@ export const formatLatestBalancesEvent = async () => {
       const chainName = ChainIDToNameMap[chain.id];
       await updatePrivateBalancesForChain(chainName, balanceEvent);
       await updatePublicBalancesForChain(chainName);
-      // const dispTokenBalances = await readableAmounts(erc20Amounts, chainName);
-      // walletManager.privateBalanceCache = dispTokenBalances;
       if (!walletManager.menuLoaded) {
-        // NEED TODO: rename menuLoaded to be more clearly defined, idk what to rename yet.
         walletManager.menuLoaded = true;
       }
     }
@@ -96,3 +93,13 @@ export const poiScanCallback = async (poiProgressEvent: POIProofProgressEvent) =
     setStatusText(poiStatus, 15000, true);
   }
 };
+
+export const batchListCallback = async (batchListProgressEvent: BatchListUpdateEvent) =>{
+  const status = `${batchListProgressEvent.status}`
+  if(status.includes('100%')){
+    setStatusText(status, 15000, true);
+  } else {
+    setStatusText(status, undefined, true);
+
+  }
+}

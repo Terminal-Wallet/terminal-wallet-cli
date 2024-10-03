@@ -154,8 +154,7 @@ export default {
           "https://endpoints.omniatech.io/v1/arbitrum/one/public",
         ),
         getProviderObjectFromURL("https://arbitrum-one.publicnode.com"),
-        getProviderObjectFromURL("https://arbitrum.meowrpc.com	"),
-        getProviderObjectFromURL("https://arbitrum-one.public.blastapi.io"),
+        getProviderObjectFromURL("https://arbitrum.blockpi.network/v1/rpc/public"),
       ],
     },
     [NetworkName.EthereumGoerli_DEPRECATED]: {

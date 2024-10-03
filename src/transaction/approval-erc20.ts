@@ -72,7 +72,7 @@ export const populatePublicERC20ApprovalTransactions = async (
   }
 
   const populatedTransactions: PopulatedApproval[] = [];
-  const provider = getProviderForChain(chainName);
+  const provider = getProviderForChain(chainName) as unknown as any;
   for (const amountRecipient of erc20AmountRecipients) {
     try {
       const contract = new Contract(

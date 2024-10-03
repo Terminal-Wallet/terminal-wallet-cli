@@ -37,6 +37,7 @@ import {
   getCurrentWalletPublicAddress,
   getWalletInfoForName,
   getWalletNames,
+  shouldShowSender,
 } from "../wallet/wallet-util";
 import {
   getPrivateTransactionGasEstimate,
@@ -103,6 +104,7 @@ import {
 import { setStatusText } from "../ui/status-ui";
 import { getWrappedTokenBalance } from "../balance/balance-util";
 import { clearConsoleBuffer } from "../util/error-util";
+import { getMemoTextPrompt } from "../ui/memo-ui";
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { Select, Input } = require("enquirer");
 
@@ -154,6 +156,22 @@ type SelectChoice = {
   role?: string;
   disabled?: boolean;
   hint?: string;
+};
+
+type TerminalTransaction = {
+  confirmAmountsDisabled?: any | undefined,
+  selectFeesDisabled?: any | undefined,
+  selections?: any |  undefined,
+  swapSelections?: any |  undefined,
+  incomingHeader?: any |  undefined,
+  encryptionKey?: any | undefined,
+  broadcasterSelection?: any | undefined,
+  privateGasEstimate?: any | undefined,
+  generateProofDisabled?: any | undefined,
+  sendTransactionDisabled?: any | undefined,
+  provedTransaction?: any | undefined,
+  selfSignerInfo?: any | undefined,
+  privateMemo?: any | undefined
 };
 
 const getDisplayTransactions = async (
@@ -297,7 +315,7 @@ const txScanReset = () => {
   // resetPrivateCache();
 };
 
-const sendRelayedTransaction = async (
+const sendBroadcastedTransaction = async (
   transactionType: RailgunTransaction,
   provedTransaction: any,
   broadcasterSelection: any,
@@ -317,10 +335,18 @@ const sendRelayedTransaction = async (
   );
 
   console.log(
-    "Submitting Relayed Transaction... Responses may take up to (1) one minute."
+    "Submitting Broadcasted Transaction... Responses may take up to (1) one minute."
       .yellow,
   );
-  const sendResult = await finalTransaction.send();
+  const sendResult = await finalTransaction.send().catch(err=>{
+    if(isDefined(err.cause)){
+      console.log(err.cause.message);
+    }
+    confirmPrompt(`${err.message}`);
+    txScanReset();
+    // this should properly re-loop the builder.
+    throw new Error(err.message);
+  });
   const blockScanURL = getTransactionURLForChain(chainName, sendResult);
   setStatusText(`Waiting on TX to be Mined : ${blockScanURL} `.yellow);
 
@@ -365,7 +391,7 @@ const sendSelfSignedTransaction = async (
 export const runTransactionBuilder = async (
   chainName: NetworkName,
   transactionType: RailgunTransaction,
-  resultObj?: any,
+  resultObj?: TerminalTransaction,
 ): Promise<any> => {
   const {
     confirmAmountsDisabled,
@@ -380,6 +406,7 @@ export const runTransactionBuilder = async (
     sendTransactionDisabled,
     provedTransaction,
     selfSignerInfo,
+    privateMemo
   } = resultObj ?? {
     confirmAmountsDisabled: undefined,
     selectFeesDisabled: undefined,
@@ -393,6 +420,7 @@ export const runTransactionBuilder = async (
     sendTransactionDisabled: undefined,
     provedTransaction: undefined,
     selfSignerInfo: undefined,
+    privateMemo: undefined
   };
   if (!isDefined(resultObj)) {
     clearConsoleBuffer();
@@ -424,7 +452,19 @@ export const runTransactionBuilder = async (
   const hasBroadcasterInfo =
     isDefined(broadcasterSelection) || isDefined(selfSignerInfo);
 
+  const canHaveMemo = transactionType === RailgunTransaction.Transfer;
+
+  const memoOption = typeof privateMemo !== 'undefined' ? `Edit Memo: ${privateMemo.grey}`.yellow :'Add Memo'.cyan;
+  const memoChoice = {
+    name: 'select-memo',
+    message: memoOption
+  }
+
   if (selectFeesDisabled === false) {
+    if(canHaveMemo){
+      choices.push(memoChoice)
+      // if this is opened, generate proof needs to happen again.
+    }
     choices.push({
       name: "select-fee",
       message: hasBroadcasterInfo
@@ -498,7 +538,30 @@ export const runTransactionBuilder = async (
     privateGasEstimate,
   );
 
+  if (transactionType === RailgunTransaction.Transfer){
+    header = `${shouldShowSender() ? 'Showing'.green: 'Hiding'.yellow} Sender address to recipient.\n${header}`
+  }
+
   switch (result) {
+    case "select-memo": {
+      const newMemo = await getMemoTextPrompt();
+      if(newMemo){
+        return runTransactionBuilder(chainName, transactionType, {
+          ...resultObj,
+          // need to reset proof state too
+          incomingHeader: header,
+          broadcasterSelection: undefined,
+          privateGasEstimate: undefined,
+          provedTransaction: undefined,
+          sendTransactionDisabled: undefined,
+          generateProofDisabled: undefined,
+          privateMemo: newMemo
+        });
+      }
+
+      // just reset back to previous menu
+      return runTransactionBuilder(chainName, transactionType, resultObj);
+    }
     case "select-edit": {
       clearHashedPassword();
 
@@ -760,6 +823,7 @@ export const runTransactionBuilder = async (
               confirmAmountsDisabled: swapSelection ? false : true,
               selectFeesDisabled: true,
               incomingHeader: header,
+              privateMemo
             });
           }
 
@@ -782,6 +846,7 @@ export const runTransactionBuilder = async (
             confirmAmountsDisabled: foundSelections ? false : true,
             selectFeesDisabled: true,
             incomingHeader: header,
+            privateMemo
           });
         }
       } else {
@@ -1036,6 +1101,7 @@ export const runTransactionBuilder = async (
               confirmAmountsDisabled: newSwapSelection ? false : true,
               selectFeesDisabled: true,
               incomingHeader: header !== "" ? header : incomingHeader,
+              privateMemo
             });
           }
           let foundSelections;
@@ -1057,6 +1123,7 @@ export const runTransactionBuilder = async (
             selectFeesDisabled: true,
             encryptionKey,
             incomingHeader: header !== "" ? header : incomingHeader,
+            privateMemo
           });
         }
       }
@@ -1071,6 +1138,7 @@ export const runTransactionBuilder = async (
           confirmAmountsDisabled: false,
           selectFeesDisabled: true,
           incomingHeader: header !== "" ? header : incomingHeader,
+          privateMemo
         };
 
         return runTransactionBuilder(
@@ -1228,6 +1296,7 @@ export const runTransactionBuilder = async (
               encryptionKey: password,
               incomingHeader: header !== "" ? header : incomingHeader,
               selfSignerInfo: getWalletInfoForName(getCurrentWalletName()),
+              privateMemo
             };
             break;
           }
@@ -1292,6 +1361,7 @@ export const runTransactionBuilder = async (
               erc20AmountRecipients,
               encryptionKey,
               _bestBroadcaster,
+              privateMemo
             );
             break;
           }
@@ -1358,6 +1428,7 @@ export const runTransactionBuilder = async (
             broadcasterSelection: _bestBroadcaster,
             privateGasEstimate: _privateGasEstimate,
             generateProofDisabled: _privateGasEstimate ? false : true,
+            privateMemo
           });
         } else {
           const newPrivateGasEstimate =
@@ -1373,6 +1444,7 @@ export const runTransactionBuilder = async (
             privateGasEstimate: newPrivateGasEstimate,
             generateProofDisabled: newPrivateGasEstimate ? false : true,
             selfSignerInfo: newSelfSignerInfo,
+            privateMemo
           });
         }
       }
@@ -1389,6 +1461,7 @@ export const runTransactionBuilder = async (
               encryptionKey,
               erc20AmountRecipients,
               privateGasEstimate,
+              privateMemo
             );
             break;
           }
@@ -1480,6 +1553,7 @@ export const runTransactionBuilder = async (
           privateGasEstimate,
           provedTransaction: _provedTransaction,
           selfSignerInfo,
+          privateMemo
         });
       }
 
@@ -1495,7 +1569,7 @@ export const runTransactionBuilder = async (
             // swaps
             // cookbook stuff
 
-            return await sendRelayedTransaction(
+            return await sendBroadcastedTransaction(
               transactionType,
               provedTransaction,
               broadcasterSelection,
@@ -1510,8 +1584,8 @@ export const runTransactionBuilder = async (
             );
           }
         } catch (error) {
-          console.log((error as Error).message);
-
+          const errResponseMessage = `Error Response: ${(error as Error).message}`
+          console.log(errResponseMessage);
           await confirmPromptCatchRetry("");
 
           return runTransactionBuilder(chainName, transactionType, {
@@ -1527,6 +1601,7 @@ export const runTransactionBuilder = async (
             privateGasEstimate,
             selfSignerInfo,
             // provedTransaction,
+            privateMemo
           });
         }
       }

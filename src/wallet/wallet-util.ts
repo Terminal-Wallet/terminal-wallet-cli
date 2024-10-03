@@ -11,6 +11,17 @@ export const isMenuResponsive = () => {
   return walletManager.responsiveMenu;
 };
 
+export const shouldShowSender = () => {
+  return walletManager.showSenderAddress;
+}
+
+export const toggleShouldShowSender = () =>{
+  const { keyChainPath } = configDefaults.engine;
+  walletManager.showSenderAddress = !walletManager.showSenderAddress;
+  walletManager.keyChain.showSenderAddress = walletManager.showSenderAddress;
+  saveKeychainFile(walletManager.keyChain, keyChainPath);
+}
+
 export const toggleResponsiveMenu = () => {
   walletManager.responsiveMenu = !walletManager.responsiveMenu;
   const { keyChainPath } = configDefaults.engine;

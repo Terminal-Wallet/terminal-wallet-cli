@@ -29,6 +29,7 @@ export type WalletManager = {
   menuCallback: () => Promise<void>;
   displayPrivate: boolean;
   responsiveMenu: boolean;
+  showSenderAddress: boolean;
 };
 export const walletManager: WalletManager = {
   merkelScanComplete: false,
@@ -37,6 +38,7 @@ export const walletManager: WalletManager = {
   menuLoaded: false,
   displayPrivate: true,
   responsiveMenu: true,
+  showSenderAddress: true,
 } as any;
 
 export const getScanProgressString = () => {

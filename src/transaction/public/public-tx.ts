@@ -8,6 +8,7 @@ import {
   ContractTransaction,
   TransactionResponse,
   formatUnits,
+  JsonRpcProvider
 } from "ethers";
 import { ERC20_ABI } from "../../abi";
 import { promiseTimeout, throwError } from "../../util/util";
@@ -109,7 +110,7 @@ export const waitForRelayedTx = async (
   txHash: string,
   txTimeout = 3 * 60 * 1000,
 ) => {
-  const provider = getProviderForChain(chainName);
+  const provider = getProviderForChain(chainName) as unknown as JsonRpcProvider;
   let txResponse: TransactionResponse | null = null;
   try {
     txResponse = await provider.getTransaction(txHash);

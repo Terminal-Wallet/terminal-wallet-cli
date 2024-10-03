@@ -23,6 +23,8 @@ import {
   togglePrivateBalances,
   isMenuResponsive,
   toggleResponsiveMenu,
+  shouldShowSender,
+  toggleShouldShowSender,
 } from "../wallet/wallet-util";
 import { runTransactionBuilder } from "../transaction/transaction-builder";
 
@@ -42,6 +44,7 @@ import {
 } from "./confirm-ui";
 import {
   NetworkName,
+  RailgunWalletBalanceBucket,
   TXIDVersion,
   delay,
   isDefined,
@@ -52,6 +55,7 @@ import {
   refreshReceivePOIsForWallet,
   refreshSpentPOIsForWallet,
   rescanFullUTXOMerkletreesAndWallets,
+  fullResetTXIDMerkletreesV2,
 } from "@railgun-community/wallet";
 import {
   clearHashedPassword,
@@ -199,16 +203,19 @@ const runPOIToolsPrompt = async (chainName: NetworkName) => {
 };
 
 const runWalletToolsPrompt = async (chainName: NetworkName) => {
+  const currentShowStatus = `[${shouldShowSender()? "SHOWING".green : "HIDING".grey}]`
   const generateOptionPrompt = new Select({
     header: " ",
     message: "Wallet Tools",
     choices: [
       { name: "add-wallet", message: "Add Wallet" },
       { name: "poi-tools", message: "POI Tools" },
+      { name: "show-sender-address", message: `${currentShowStatus} ${shouldShowSender()? "Hide" : "Show"} Private TX Sender address.`},
       {
         name: "show-mnemonic",
         message: "Show Current Mnemonic & Index",
       },
+      {name: 'full-txid-rescan', message: "Full TXID Rescan"},
       { name: "full-balance-rescan", message: "Full Balance Rescan" },
       {
         name: "destruct-wallet",
@@ -224,6 +231,11 @@ const runWalletToolsPrompt = async (chainName: NetworkName) => {
     .catch(confirmPromptCatch);
   if (generateOption) {
     switch (generateOption) {
+      case "show-sender-address": {
+        toggleShouldShowSender();
+        await confirmPromptCatchRetry("Updated... please continue.");
+        break;
+      }
       case "add-wallet": {
         const newWalletInfo = await runFreshWalletPrompt(chainName);
         if (newWalletInfo) {
@@ -242,6 +254,10 @@ const runWalletToolsPrompt = async (chainName: NetworkName) => {
           console.log(walletInfo);
           await confirmPromptCatchRetry("");
         }
+        break;
+      }
+      case "full-txid-rescan":{
+        fullResetTXIDMerkletreesV2(chainName)
         break;
       }
       case "full-balance-rescan": {
@@ -308,11 +324,19 @@ const getMainPrompt = (networkName: NetworkName, baseSymbol: string) => {
       const scanString = getScanProgressString();
       const balanceScanned =
         scanString === "" ? statusString : `${scanString}${statusString}`;
-      const balanceBlock = await getPrivateDisplayBalances(networkName).then(
-        (v) => {
-          return v;
-        },
-      );
+      const buckets = Object.keys(RailgunWalletBalanceBucket);
+
+      let balanceBlock = ""
+      for(const bucket of buckets){
+        const output = await getPrivateDisplayBalances(networkName, bucket as RailgunWalletBalanceBucket).then(
+          (v) => {
+            return v;
+          },
+        );
+
+        const outputstring = `${output}`;
+        balanceBlock += `${outputstring}`
+      }
 
       return [
         "",
@@ -570,7 +594,7 @@ const BufferManager = {
   clear() {
     const nowTime = Date.now();
     const timeDifference = nowTime - this.lastClearTime;
-    if (timeDifference > 1 * 250) {
+    if (timeDifference > 1 * 1000) {
       if (process.stdout.rows < 50) {
         this.lastClearTime = nowTime;
         clearConsoleBuffer();
@@ -608,7 +632,7 @@ export const runMainMenu = async () => {
       }, interval);
     };
     mainPrompt.on("run", () => {
-      pulse(250);
+      pulse(1250);
     });
   }
 

@@ -53,6 +53,7 @@ export type KeychainFile = {
   displayPrivate?: boolean;
   responsiveMenu?: boolean;
   customProviders?: CustomProviderMap;
+  showSenderAddress?: boolean;
 };
 
 export type EncryptedCacheFile = {

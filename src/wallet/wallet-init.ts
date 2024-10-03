@@ -7,6 +7,7 @@ import {
   setOnBalanceUpdateCallback,
   setOnUTXOMerkletreeScanCallback,
   setOnWalletPOIProofProgressCallback,
+  setBatchListCallback,
 } from "@railgun-community/wallet";
 import {
   NetworkName,
@@ -32,6 +33,7 @@ import {
   scanBalancesCallback,
   merkelTreeScanCallback,
   poiScanCallback,
+  batchListCallback
 } from "./scan-callbacks";
 import { getSaltedPassword } from "./wallet-password";
 import { confirmGetPasswordPrompt } from "../ui/password-ui";
@@ -226,6 +228,7 @@ export const initializeWalletSystems = async () => {
   }
 
   walletManager.keyChain = await initializeKeychainSystem();
+  setBatchListCallback(batchListCallback)
   setOnBalanceUpdateCallback(scanBalancesCallback);
   setOnUTXOMerkletreeScanCallback(merkelTreeScanCallback);
   setOnWalletPOIProofProgressCallback(poiScanCallback);
@@ -257,6 +260,9 @@ export const initializeWalletSystems = async () => {
     walletManager.currentActiveWallet = wallet;
     walletManager.railgunWalletID = wallet.railgunWalletID;
     walletManager.railgunWalletAddress = wallet.railgunWalletAddress;
+    if(isDefined(walletManager.keyChain.showSenderAddress)){
+      walletManager.showSenderAddress = walletManager.keyChain.showSenderAddress;
+    }
     const railgunWalletResult = await initRailgunWallet();
   }
 

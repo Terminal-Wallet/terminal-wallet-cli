@@ -21,7 +21,7 @@ import {
 import { parseUnits, formatUnits } from "ethers";
 import { ProgressBar } from "../../ui/progressBar-ui";
 import { getTokenInfo } from "../../balance/token-util";
-import { getCurrentRailgunID } from "../../wallet/wallet-util";
+import { getCurrentRailgunID, shouldShowSender } from "../../wallet/wallet-util";
 import { getCurrentNetwork } from "../../engine/engine";
 import { getWakuTransaction } from "../../waku/connect-waku";
 import { ERC20Token } from "../../models/token-models";
@@ -265,7 +265,7 @@ export const getProvedPrivateTransaction = async (
     typeof broadcasterFeeERC20Recipient !== "undefined" ? false : true;
 
   // NEED TODO: need to add toggle for this as well.
-  const showSenderAddressToRecipient = false;
+  const showSenderAddressToRecipient = shouldShowSender();
   const proofStartTime = Date.now();
   try {
     await generateTransferProof(

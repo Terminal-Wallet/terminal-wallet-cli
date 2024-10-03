@@ -59,10 +59,14 @@ process.on("unhandledRejection", async (err: Error | string) => {
   if (error.message.indexOf("could not coalesce") !== -1) {
     return;
   }
-  console.log("unhandledRejection", err);
+  // console.log("unhandledRejection", err);
 });
 process.on("uncaughtException", (err: Error | string) => {
-  console.log("uncaughtException", err);
+  const error = err as Error;
+  if (error.message.indexOf("already held by process") !== -1) {
+    return;
+  }
+  // console.log("uncaughtException", err);
 });
 
 export const setConsoleTitle = (

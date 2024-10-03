@@ -126,7 +126,7 @@ export const getERC20Balance = async (
   tokenAddress: string,
   ownerAddress: string,
 ): Promise<bigint> => {
-  const provider = getProviderForChain(chainName);
+  const provider = getProviderForChain(chainName) as unknown as any;
   const contract = new Contract(tokenAddress, ERC20_ABI, provider);
   const balance = await contract.balanceOf(ownerAddress).catch((err) => {
     return undefined;
