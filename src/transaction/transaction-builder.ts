@@ -297,7 +297,7 @@ const getSelfSignerWalletPrompt = async () => {
 const bgWatchRelayedTx = async (chainName: NetworkName, txHash: string) => {
   await waitForRelayedTx(chainName, txHash);
   const blockScanURL = getTransactionURLForChain(chainName, txHash);
-  setStatusText(`Transaction Mined: ${blockScanURL} `.yellow);
+  setStatusText(`Transaction Mined: ${blockScanURL} `.yellow, 30000, true);
 };
 
 const bgWatchSelfSignedTx = async (
@@ -307,7 +307,7 @@ const bgWatchSelfSignedTx = async (
   const { hash } = txResult;
   await waitForTx(txResult);
   const blockScanURL = getTransactionURLForChain(chainName, hash);
-  setStatusText(`Transaction Mined: ${blockScanURL} `.yellow);
+  setStatusText(`Transaction Mined: ${blockScanURL} `.yellow, 30000, true);
 };
 
 const txScanReset = () => {

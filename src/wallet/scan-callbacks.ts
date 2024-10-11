@@ -97,9 +97,9 @@ export const poiScanCallback = async (poiProgressEvent: POIProofProgressEvent) =
 export const batchListCallback = async (batchListProgressEvent: BatchListUpdateEvent) =>{
   const status = `${batchListProgressEvent.status}`
   if(status.includes('100%')){
-    setStatusText(status, 15000, true);
+    setStatusText(status, 15000, false);
   } else {
-    setStatusText(status, undefined, true);
+    setStatusText(status, 15000, false);
 
   }
 }
