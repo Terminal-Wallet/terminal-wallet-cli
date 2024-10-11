@@ -11,7 +11,7 @@ let wakuLoaded = false;
 let isConnected = false;
 
 const broadcasterOptions: BroadcasterOptions = {
-  pubSubTopic: "/waku/2/railgun-broadcaster",
+  pubSubTopic: "/waku/2/rs/0/1",
   additionalDirectPeers: [],
 };
 
@@ -74,7 +74,7 @@ export const startWakuClient = async (chainName: NetworkName) => {
     throw new Error("No Waku Client?...");
   }
   const chain = getChainForName(chainName);
-  await wakuClient.start(chain, broadcasterOptions, wakuStatusCallback);
+  wakuClient.start(chain, broadcasterOptions, wakuStatusCallback);
 };
 
 export const stopWakuClient = async () => {
