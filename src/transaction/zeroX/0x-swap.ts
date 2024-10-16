@@ -3,11 +3,11 @@ import {
   RecipeERC20Info,
   RecipeInput,
   RecipeOutput,
-  SwapQuoteData,
-  SwapQuoteParams,
   ZeroXConfig,
-  ZeroXQuote,
-  ZeroXSwapRecipe,
+  ZeroXV2SwapRecipe,
+  ZeroXV2Quote,
+  SwapQuoteDataV2,
+  SwapQuoteParamsV2
 } from "@railgun-community/cookbook";
 import {
   NetworkName,
@@ -45,9 +45,32 @@ import {
   Zer0XSwapTokenInput,
 } from "../../models/0x-models";
 import { getTransactionGasDetails } from "../private/private-tx";
+import { getCurrentEthersWallet } from "../../wallet/public-utils";
 
 const zeroXApiKey = configDefaults.apiKeys.zeroXApi;
 ZeroXConfig.API_KEY = zeroXApiKey;
+
+export const getSwapQuote = async (
+  chainName: NetworkName,
+  sellERC20Amount: RecipeERC20Amount,
+  buyERC20Info: RecipeERC20Info,
+  slippagePercentage = 500,
+  isRailgun = false,
+  activeWalletAddress?: string
+  
+): Promise<SwapQuoteDataV2> => {
+  const quoteParams: SwapQuoteParamsV2 = {
+    networkName: chainName,
+    sellERC20Amount,
+    buyERC20Info,
+    slippageBasisPoints: slippagePercentage,
+    isRailgun,
+    activeWalletAddress
+  };
+  const quote = await ZeroXV2Quote.getSwapQuote(quoteParams);
+
+  return quote;
+};
 
 export const getZer0XSwapInputs = async (
   chainName: NetworkName,
@@ -83,10 +106,10 @@ export const getZer0XSwapInputs = async (
     // FORCE US AS RECIPIENT FOR NOW
     const privateSwapRecipient = getCurrentRailgunAddress();
 
-    const swap = new ZeroXSwapRecipe(
+    const swap = new ZeroXV2SwapRecipe(
       sellERC20Info,
       buyERC20Info,
-      BigInt(slippageBasisPoints),
+      slippageBasisPoints,
       privateSwapRecipient,
     );
     const recipeInput: RecipeInput = {
@@ -127,14 +150,17 @@ export const getZer0XSwapInputs = async (
       minGasLimit,
     };
   }
-  const quoteParams: SwapQuoteParams = {
-    networkName: chainName,
-    sellERC20Amount: relayAdaptUnshieldERC20Amounts[0],
+
+  const currentPublicWalletAddress = getCurrentEthersWallet().address;
+  
+  const quote = await getSwapQuote(
+    chainName, 
+    relayAdaptUnshieldERC20Amounts[0],
     buyERC20Info,
-    slippageBasisPoints: BigInt(slippageBasisPoints),
-    isRailgun: false,
-  };
-  const quote = await ZeroXQuote.getSwapQuote(quoteParams);
+    slippageBasisPoints,
+    false,
+    currentPublicWalletAddress
+  )
   const swapAmounts: Zer0XSwapOutput = {
     sellUnshieldFee: 0n,
     buyShieldFee: 0n,
@@ -158,22 +184,6 @@ export const getZer0XSwapInputs = async (
   };
 };
 
-export const getSwapQuote = async (
-  chainName: NetworkName,
-  sellERC20Amount: RecipeERC20Amount,
-  buyERC20Info: RecipeERC20Info,
-  slippagePercentage = 500,
-): Promise<SwapQuoteData> => {
-  const quoteParams: SwapQuoteParams = {
-    networkName: chainName,
-    sellERC20Amount,
-    buyERC20Info,
-    slippageBasisPoints: BigInt(slippagePercentage),
-    isRailgun: true,
-  };
-  const quote = await ZeroXQuote.getSwapQuote(quoteParams);
-  return quote;
-};
 
 export const getZer0XSwapTransactionGasEstimate = async (
   chainName: NetworkName,
@@ -312,7 +322,7 @@ export const getProvedZer0XSwapTransaction = async (
     return { transaction, nullifiers, preTransactionPOIsPerTxidLeafPerList };
   } catch (err) {
     const error = err as Error;
-    console.log(error.message);
+    console.log('ERROR getting proved transaction.', error.message, error.cause);
   }
 };
 

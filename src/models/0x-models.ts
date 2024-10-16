@@ -2,6 +2,7 @@ import {
   RecipeERC20Amount,
   SwapQuoteData,
   ZeroXSwapRecipe,
+  ZeroXV2SwapRecipe,
 } from "@railgun-community/cookbook";
 import { RailgunERC20Recipient } from "@railgun-community/shared-models";
 import { ContractTransaction } from "ethers";
@@ -24,7 +25,7 @@ export type Zer0XReadablePrices = {
 };
 
 export type Zer0XSwap = {
-  recipe: Optional<ZeroXSwapRecipe>;
+  recipe: Optional<ZeroXSwapRecipe | ZeroXV2SwapRecipe>;
   quote: Optional<SwapQuoteData>;
   swapAmounts: Zer0XSwapOutput;
   readableSwapPrices: Zer0XReadablePrices;
