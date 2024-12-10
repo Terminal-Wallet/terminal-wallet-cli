@@ -808,7 +808,7 @@ export const runTransactionBuilder = async (
           }
         } catch (err) {
           const error = err as Error;
-          console.log("ERROR Selecting", error.message);
+          console.log("ERROR Selecting", error.message, error.cause);
         } finally {
           if (
             transactionType === RailgunTransaction.Private0XSwap ||
