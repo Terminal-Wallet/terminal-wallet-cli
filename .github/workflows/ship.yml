@@ -31,10 +31,10 @@ jobs:
       version: ${{ steps.versionStore.outputs.version }}
       
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
 
@@ -50,7 +50,7 @@ jobs:
 
       - name: Retrieve Cached Dependencies
         id: cache-npm
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         env:
           cache-name: dep-cache
         with:
@@ -71,7 +71,7 @@ jobs:
       - name: Ship
         run: npm run ship
 
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4
         with:
           path: build/${{ matrix.output }}
           name: cli-${{ matrix.os }}
@@ -81,7 +81,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Download artifacts
-      uses: actions/download-artifact@v3
+      uses: actions/download-artifact@v4
 
     - name: Prepare artifacts
       run: |
