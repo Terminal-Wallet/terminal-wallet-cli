@@ -11,7 +11,7 @@
   "scripts": {
     "postinstall": "patch-package",
     "start": "node --max-old-space-size=8192 --no-warnings --experimental-specifier-resolution=node dist/main.js",
-    "build": "rimraf dist && npm run lint && tsc",
+    "build": "rm -rf dist && npm run lint && tsc",
     "st2": "node --experimental-specifier-resolution=node dist/main.js",
     "circular": "madge -c src/**/*",
     "preship": "npm run build",
