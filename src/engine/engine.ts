@@ -109,7 +109,11 @@ export const initRailgunEngine = async () => {
   const shouldDebug = true;
   const useNativeArtifacts = false;
   const skipMerkelTreeScans = false;
-  const poiNodeURL = "https://poi-node.terminal-wallet.com";
+  const poiNodeURLs = [
+    // "https://poi-node.terminal-wallet.com", // experiencing issues.
+    "https://ppoi-agg.horsewithsixlegs.xyz"
+  ];
+
   const customPOIList = undefined;
 
   await startRailgunEngine(
@@ -119,7 +123,7 @@ export const initRailgunEngine = async () => {
     artifactStorage,
     useNativeArtifacts,
     skipMerkelTreeScans,
-    [poiNodeURL],
+    poiNodeURLs,
     customPOIList,
   );
 
