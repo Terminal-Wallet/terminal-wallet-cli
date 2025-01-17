@@ -1,5 +1,20 @@
 
 
+## [1.3.6](https://github.com/Terminal-Wallet/terminal-wallet-cli/compare/v1.3.4...v1.3.6) (2025-01-17)
+
+
+### Bug Fixes
+
+* disable windows build process until fixed. ([d07acad](https://github.com/Terminal-Wallet/terminal-wallet-cli/commit/d07acad2c0d8bba674470c070177ef0aaf716b73))
+* update build script ([bd6bd76](https://github.com/Terminal-Wallet/terminal-wallet-cli/commit/bd6bd761cc44d4bc6cd0c44964458f814c46840f))
+
+
+### Code Refactors
+
+* update ci actions ([60aaf80](https://github.com/Terminal-Wallet/terminal-wallet-cli/commit/60aaf801486867493dba2ae1de256bf5032eba0d))
+* update railgun sdk ([e0a6655](https://github.com/Terminal-Wallet/terminal-wallet-cli/commit/e0a6655191c63b46e8c6ba123fb62bdca5ba49cd))
+* use public ppoi-aggregator ([5c5e273](https://github.com/Terminal-Wallet/terminal-wallet-cli/commit/5c5e273f6ec07356820837dcccbe7f2452709285))
+
 ## [1.3.5](https://github.com/Terminal-Wallet/terminal-wallet-cli/compare/v1.3.4...v1.3.5) (2025-01-03)
 
 
