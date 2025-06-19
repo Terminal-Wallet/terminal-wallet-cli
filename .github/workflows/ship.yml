@@ -18,13 +18,15 @@ jobs:
     strategy:
       fail-fast: false # prevents GitHub from cancelling all in-progress jobs if any matrix job fails.
       matrix:
-        node-version: [20.x]
-        os: [ubuntu-20.04, macos-latest]
+        node-version: [20.12.1]
+        os: [ubuntu-22.04, macos-latest, windows-latest]
         include:
           - os: macos-latest
             output: terminal-wallet-cli
-          - os: ubuntu-20.04
+          - os: ubuntu-22.04
             output: terminal-wallet-cli
+          - os: windows-latest
+            output: terminal-wallet-cli.exe
 
     runs-on: ${{ matrix.os }}
     outputs:
@@ -41,7 +43,8 @@ jobs:
       - name: Set up Rust
         uses: actions-rs/toolchain@v1
         with:
-          toolchain: stable
+          toolchain: '1.79.0'
+          override: true
 
       - name: Store Current Version
         id: versionStore
@@ -86,10 +89,12 @@ jobs:
     - name: Prepare artifacts
       run: |
         mv cli-macos-latest/terminal-wallet-cli terminal-wallet-macos
-        mv cli-ubuntu-20.04/terminal-wallet-cli terminal-wallet-linux
+        mv cli-ubuntu-22.04/terminal-wallet-cli terminal-wallet-linux
+        mv cli-windows-latest/terminal-wallet-cli.exe terminal-wallet-win.exe
         chmod a+x terminal-wallet-macos terminal-wallet-linux
         tar -czf release-${{needs.ship.outputs.version}}-macos.tar.gz terminal-wallet-macos
         tar -czf release-${{needs.ship.outputs.version}}-linux.tar.gz terminal-wallet-linux
+        tar -czf release-${{needs.ship.outputs.version}}-win.tar.gz terminal-wallet-win.exe
         sha256sum release-* >> SHA256SUMS.sha
 
     - name: Upload artifacts to GitHub Release
