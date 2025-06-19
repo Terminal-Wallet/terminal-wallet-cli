@@ -13,7 +13,7 @@ import { getProviderObjectFromURL } from "../models/network-models";
 
 interface ConfigDefaults {
   apiKeys: {
-    zeroXApi: string;
+    [key in string]: string;
   };
   engine: {
     artifactPath: string;
@@ -38,7 +38,7 @@ interface ConfigDefaults {
 
 export default {
   apiKeys: {
-    zeroXApi: "50451a60-e839-4f7e-a971-bfef488de1cb",
+    zeroXApi: "",
   },
   engine: {
     artifactPath: ".artifacts",

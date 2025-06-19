@@ -4,6 +4,7 @@ node_modules
 .railgun.db
 .artifacts
 .zKeyChains
+.yarn
 dist
 patched_modules
 build

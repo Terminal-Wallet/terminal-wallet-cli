@@ -47,9 +47,10 @@ import {
 import { getTransactionGasDetails } from "../private/private-tx";
 import { getCurrentEthersWallet } from "../../wallet/public-utils";
 
-const zeroXApiKey = configDefaults.apiKeys.zeroXApi;
-ZeroXConfig.API_KEY = zeroXApiKey;
-
+export const updateApiKey = () => {
+  const zeroXApiKey = configDefaults.apiKeys.zeroXApi;
+  ZeroXConfig.API_KEY = zeroXApiKey;
+}
 export const getSwapQuote = async (
   chainName: NetworkName,
   sellERC20Amount: RecipeERC20Amount,
@@ -57,7 +58,7 @@ export const getSwapQuote = async (
   slippagePercentage = 500,
   isRailgun = false,
   activeWalletAddress?: string
-  
+
 ): Promise<SwapQuoteDataV2> => {
   const quoteParams: SwapQuoteParamsV2 = {
     networkName: chainName,
@@ -152,9 +153,9 @@ export const getZer0XSwapInputs = async (
   }
 
   const currentPublicWalletAddress = getCurrentEthersWallet().address;
-  
+
   const quote = await getSwapQuote(
-    chainName, 
+    chainName,
     relayAdaptUnshieldERC20Amounts[0],
     buyERC20Info,
     slippageBasisPoints,

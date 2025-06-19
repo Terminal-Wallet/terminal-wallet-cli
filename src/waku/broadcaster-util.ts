@@ -1,4 +1,4 @@
-import { isWakuLoaded, wakuClient } from "./connect-waku";
+import { baseAllowList, baseBlockList, isWakuLoaded, wakuClient } from "./connect-waku";
 
 let currentAllowList: Optional<string[]> = [];
 let currentBlockList: Optional<string[]> = [];
@@ -11,9 +11,9 @@ export const addRemovedBroadcaster = (broadcasterAddress: string) => {
     return;
   }
   if (!currentBlockList) {
-    currentBlockList = [];
+    currentBlockList = baseBlockList;
   }
-  currentBlockList.push(broadcasterAddress);
+  currentBlockList?.push(broadcasterAddress);
   wakuClient.setAddressFilters(undefined, currentBlockList);
 };
 
@@ -25,9 +25,9 @@ export const addChosenBroadcaster = (broadcasterAddress: string) => {
     return;
   }
   if (!currentAllowList) {
-    currentAllowList = [];
+    currentAllowList = baseAllowList;
   }
-  currentAllowList.push(broadcasterAddress);
+  currentAllowList?.push(broadcasterAddress);
   wakuClient.setAddressFilters(currentAllowList, currentBlockList);
 };
 
@@ -38,7 +38,7 @@ export const resetBroadcasterFilters = () => {
   if (!wakuClient) {
     return;
   }
-  currentAllowList = [];
-  currentBlockList = [];
-  wakuClient.setAddressFilters(undefined, undefined);
+  currentAllowList = baseAllowList;
+  currentBlockList = baseBlockList;
+  wakuClient.setAddressFilters(currentAllowList, currentBlockList);
 };
