@@ -1,12 +1,14 @@
 import {
   Chain,
+  FallbackProviderJsonConfig,
   NETWORK_CONFIG,
   NetworkName,
 } from "@railgun-community/shared-models";
 import { WrappedTokenInfo } from "../models/token-models";
 import configDefaults from "../config/config-defaults";
-import { HDNodeWallet, JsonRpcProvider, Mnemonic, Wallet } from "ethers";
+import { Contract, HDNodeWallet, JsonRpcProvider, Mnemonic, Wallet } from "ethers";
 import { getFallbackProviderForNetwork } from "@railgun-community/wallet";
+import { RemoteConfig } from "../models/network-models";
 
 export const getChainForName = (chainName: NetworkName): Chain => {
   return NETWORK_CONFIG[chainName].chain;
@@ -77,3 +79,32 @@ export const getEthersWallet = (
   const wallet = new Wallet(walletInfo.privateKey, provider);
   return wallet;
 };
+
+
+export let remoteConfig: RemoteConfig;
+
+
+export const loadConfigForNetwork = async () => {
+
+  // Remote config will be added to a single chain;
+  // optional ENVIRONMENT variable REMOTE_CONFIG_RPC to an rpc on Ethereum.
+  // the OFFICIAL remote-config contract address is 0x5e982525d50046A813DBf55Ae72a3E00e99fbC94
+
+  // mac/linux
+  // export REMOTE_CONFIG_RPC=http...
+
+  // windows cmd
+  // set REMOTE_CONFIG_RPC=http..
+
+  const remoteConfigUrl = process.env.REMOTE_CONFIG_RPC ?? 'https://eth.llamarpc.com';
+  const remoteConfigContract = '0x5e982525d50046A813DBf55Ae72a3E00e99fbC94'
+  const provider = new JsonRpcProvider(remoteConfigUrl);
+  const contract = new Contract(remoteConfigContract, [
+    'function getConfig() public view returns (string memory str)',
+  ], provider);
+
+  const raw = await contract.getConfig();
+  const config = JSON.parse(raw) as RemoteConfig;
+  remoteConfig = config;
+  return config;
+}

@@ -4,6 +4,7 @@ import { getCurrentNetwork } from "../engine/engine";
 import {
   getChainForName,
   getWrappedTokenInfoForChain,
+  remoteConfig,
 } from "../network/network-util";
 import {
   resetMenuForScan,
@@ -203,19 +204,19 @@ const runPOIToolsPrompt = async (chainName: NetworkName) => {
 };
 
 const runWalletToolsPrompt = async (chainName: NetworkName) => {
-  const currentShowStatus = `[${shouldShowSender()? "SHOWING".green : "HIDING".grey}]`
+  const currentShowStatus = `[${shouldShowSender() ? "SHOWING".green : "HIDING".grey}]`
   const generateOptionPrompt = new Select({
     header: " ",
     message: "Wallet Tools",
     choices: [
       { name: "add-wallet", message: "Add Wallet" },
       { name: "poi-tools", message: "POI Tools" },
-      { name: "show-sender-address", message: `${currentShowStatus} ${shouldShowSender()? "Hide" : "Show"} Private TX Sender address.`},
+      { name: "show-sender-address", message: `${currentShowStatus} ${shouldShowSender() ? "Hide" : "Show"} Private TX Sender address.` },
       {
         name: "show-mnemonic",
         message: "Show Current Mnemonic & Index",
       },
-      {name: 'full-txid-rescan', message: "Full TXID Rescan"},
+      { name: 'full-txid-rescan', message: "Full TXID Rescan" },
       { name: "full-balance-rescan", message: "Full Balance Rescan" },
       {
         name: "destruct-wallet",
@@ -256,7 +257,7 @@ const runWalletToolsPrompt = async (chainName: NetworkName) => {
         }
         break;
       }
-      case "full-txid-rescan":{
+      case "full-txid-rescan": {
         fullResetTXIDMerkletreesV2(chainName)
         break;
       }
@@ -300,14 +301,16 @@ const runWalletToolsPrompt = async (chainName: NetworkName) => {
 };
 
 const getMainPrompt = (networkName: NetworkName, baseSymbol: string) => {
+
+  const chain = getChainForName(networkName);
+
   return new Select({
     logoHeader: RAILGUN_HEADER,
     header: async () => {
-      const broadcasterStatus = `Broadcasters: ${
-        isWakuConnected()
-          ? "Available".dim.green.bold
-          : "Disconnected".dim.yellow.bold
-      }`.grey;
+      const broadcasterStatus = `Broadcasters: ${isWakuConnected()
+        ? "Available".dim.green.bold
+        : "Disconnected".dim.yellow.bold
+        }`.grey;
 
       const walletName = getCurrentWalletName();
       const currentRailgunAddress = getCurrentRailgunAddress();
@@ -327,7 +330,7 @@ const getMainPrompt = (networkName: NetworkName, baseSymbol: string) => {
       const buckets = Object.keys(RailgunWalletBalanceBucket);
 
       let balanceBlock = ""
-      for(const bucket of buckets){
+      for (const bucket of buckets) {
         const output = await getPrivateDisplayBalances(networkName, bucket as RailgunWalletBalanceBucket).then(
           (v) => {
             return v;
@@ -343,10 +346,9 @@ const getMainPrompt = (networkName: NetworkName, baseSymbol: string) => {
         walletInfoString,
         broadcasterStatus,
         balanceBlock,
-        `${
-          !isMenuResponsive()
-            ? "Auto Refresh Disabled, Refresh on Movement Enabled.\n".yellow.dim
-            : ""
+        `${!isMenuResponsive()
+          ? "Auto Refresh Disabled, Refresh on Movement Enabled.\n".yellow.dim
+          : ""
         }${balanceScanned}`,
       ].join("\n");
     },
@@ -498,9 +500,8 @@ const getMainPrompt = (networkName: NetworkName, baseSymbol: string) => {
       return this.render();
     },
     prefix: process.platform === "win32" ? " [*]" : "🛡️ ",
-    message: `Now arriving at Terminal Wallet ${("v" + version).grey}... ${
-      "(Featuring RAILGUN Privacy)".grey
-    }`,
+    message: `Now arriving at Terminal Wallet ${("v" + version).grey}... ${"(Featuring RAILGUN Privacy)".grey
+      }`,
     separator: " ",
     initial: lastMenuSelection ?? "private-transfer",
     choices: [
@@ -512,15 +513,18 @@ const getMainPrompt = (networkName: NetworkName, baseSymbol: string) => {
       {
         name: "private-transfer",
         message: `Send ${"ERC20s".cyan.bold} Privately`,
+        disabled: !remoteConfig.network[chain.id].flags?.canSendShielded
       },
       {
         name: "unshield-private-balances",
         message: `Unshield ${"ERC20s".cyan.bold}`,
+        disabled: !remoteConfig.network[chain.id].flags?.canUnshield
       },
 
       {
         name: "base-unshield",
         message: `Unshield [${baseSymbol.cyan.bold}]`,
+        disabled: !remoteConfig.network[chain.id].flags?.canUnshield && !remoteConfig.network[chain.id].flags?.canRelayAdapt
       },
       {
         message: ` >> ${"Public Actions".grey.bold} <<`,
@@ -529,18 +533,22 @@ const getMainPrompt = (networkName: NetworkName, baseSymbol: string) => {
       {
         name: "shield-public-balances",
         message: `Shield ${"ERC20s".cyan.bold}`,
+        disabled: !remoteConfig.network[chain.id].flags?.canShield
       },
       {
         name: "base-shield",
         message: `Shield [${baseSymbol.cyan.bold}]`,
+        disabled: !remoteConfig.network[chain.id].flags?.canShield
       },
       {
         name: "public-transfer",
         message: `Send ${"ERC20s".cyan.bold} Publicly`,
+        disabled: !remoteConfig.network[chain.id].flags?.canSendPublic
       },
       {
         name: "public-base-transfer",
         message: `Send [${baseSymbol.cyan.bold}]`,
+        disabled: !remoteConfig.network[chain.id].flags?.canSendPublic
       },
       {
         message: ` >> ${"0X SWAP Tools".grey.bold} <<`,
@@ -549,10 +557,12 @@ const getMainPrompt = (networkName: NetworkName, baseSymbol: string) => {
       {
         name: "private-swap",
         message: `${"Privately"} ${"SWAP"} ${"ERC20".cyan.bold} ${"Tokens"}`,
+        disabled: !remoteConfig.network[chain.id].flags?.canSwapShielded
       },
       {
         name: "public-swap",
         message: `${"Publicly"} ${"SWAP"} ${"ERC20".cyan.bold} ${"Tokens"}`,
+        disabled: !remoteConfig.network[chain.id].flags?.canSwapPublic
       },
       {
         message: ` >> ${"Utilities".grey.bold} <<`,
@@ -569,9 +579,8 @@ const getMainPrompt = (networkName: NetworkName, baseSymbol: string) => {
       { name: "refresh-balances", message: "Refresh Balances" },
       {
         name: "toggle-balance",
-        message: `Toggle ${
-          shouldDisplayPrivateBalances() ? "Public" : "Private"
-        } Balances`.yellow.dim,
+        message: `Toggle ${shouldDisplayPrivateBalances() ? "Public" : "Private"
+          } Balances`.yellow.dim,
       },
       { name: "reset-broadcasters", message: "Reset Broadcaster Connection" },
       { name: "edit-rpc", message: "Edit RPC Providers" },

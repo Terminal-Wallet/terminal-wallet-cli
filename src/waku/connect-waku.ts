@@ -1,5 +1,5 @@
 import { Chain, NetworkName } from "@railgun-community/shared-models";
-import { getChainForName } from "../network/network-util";
+import { getChainForName, remoteConfig } from "../network/network-util";
 import {
   WakuBroadcasterClient,
   WakuBroadcasterTransaction,
@@ -14,6 +14,12 @@ const broadcasterOptions: BroadcasterOptions = {
   pubSubTopic: "/waku/2/rs/0/1",
   additionalDirectPeers: [],
 };
+
+export const initializeLists = (allowList: string[], blockList: string[]) => {
+  baseAllowList = allowList.length > 0 ? allowList : undefined;
+  baseBlockList = blockList.length > 0 ? blockList : undefined;
+  wakuClient.setAddressFilters(baseAllowList, baseBlockList);
+}
 
 const wakuStatusCallback = (chain: Chain, status: string) => {
   if (status === "Connected") {
@@ -59,6 +65,7 @@ export const initWakuClient = async () => {
   // @ts-ignore
   wakuBroadcasterTransaction = waku.BroadcasterTransaction; // as WakuBroadcasterTransaction;
   wakuLoaded = true;
+  initializeLists(remoteConfig.bootstrap, remoteConfig.blacklist)
 };
 
 export const switchWakuNetwork = async (chainName: NetworkName) => {
@@ -74,7 +81,10 @@ export const startWakuClient = async (chainName: NetworkName) => {
     throw new Error("No Waku Client?...");
   }
   const chain = getChainForName(chainName);
-  wakuClient.start(chain, broadcasterOptions, wakuStatusCallback);
+  const peerOverrides = remoteConfig.additionalDirectPeers ?? [];
+  broadcasterOptions.additionalDirectPeers = peerOverrides;
+  broadcasterOptions.pubSubTopic = remoteConfig.wakuPubSubTopic;
+  wakuClient.start(chain, broadcasterOptions, wakuStatusCallback, undefined);
 };
 
 export const stopWakuClient = async () => {
@@ -87,3 +97,7 @@ export const stopWakuClient = async () => {
 export const resetWakuClient = async () => {
   await wakuClient.tryReconnect();
 };
+
+export let baseAllowList: string[] | undefined = undefined;
+export let baseBlockList: string[] | undefined = undefined;
+

@@ -22,7 +22,7 @@ import configDefaults from "../config/config-defaults";
 import LevelDOWN from "leveldown";
 import { createArtifactStore } from "../db/artifact-store";
 import { setRailgunFees } from "@railgun-community/cookbook";
-import { getChainForName } from "../network/network-util";
+import { getChainForName, remoteConfig } from "../network/network-util";
 import { getProviderObjectFromURL } from "../models/network-models";
 import { walletManager } from "../wallet/wallet-manager";
 import { saveKeychainFile } from "../wallet/wallet-cache";
@@ -36,7 +36,7 @@ export const isEngineRunning = () => {
 };
 
 const interceptLog = {
-  log: (log: string) => {},
+  log: (log: string) => { },
   error: (err: any) => {
     console.log(err.message);
   },
@@ -109,11 +109,7 @@ export const initRailgunEngine = async () => {
   const shouldDebug = true;
   const useNativeArtifacts = false;
   const skipMerkelTreeScans = false;
-  const poiNodeURLs = [
-    // "https://poi-node.terminal-wallet.com", // experiencing issues.
-    "https://ppoi-agg.horsewithsixlegs.xyz"
-  ];
-
+  const poiNodeURLs = remoteConfig.publicPoiAggregatorUrls ?? [];
   const customPOIList = undefined;
 
   await startRailgunEngine(
@@ -201,9 +197,8 @@ export const getProviderPromptOptions = (chainName: NetworkName) => {
       const providerEnabled = customProviders[provider];
       return {
         name: provider,
-        message: `[${
-          providerEnabled ? "Enabled ".green.dim : "Disabled".yellow.dim
-        }] ${provider}`,
+        message: `[${providerEnabled ? "Enabled ".green.dim : "Disabled".yellow.dim
+          }] ${provider}`,
       };
     });
 

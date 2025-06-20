@@ -47,3 +47,39 @@ export const getProviderObjectFromURL = (rpcURL: string): ProviderJson => {
     maxLogsPerBatch: 2,
   };
 };
+
+type APIKey = "zeroXApi" | string
+
+type APIKeys = Record<APIKey, string>;
+
+type FeatureFlags = {
+  canSendPublic: boolean;
+  canSendShielded: boolean;
+  canShield: boolean;
+  canUnshield: boolean;
+  canSwapPublic: boolean;
+  canSwapShielded: boolean;
+  canRelayAdapt: boolean;
+}
+
+type ChainConfig = {
+  name: NetworkName;
+  providers: (string | ProviderJson)[]; // looks for 'provider' in or typeof == 'string'
+  flags?: FeatureFlags;
+}
+
+
+type RPCConfig = Record<number, ChainConfig>;
+
+
+export type RemoteConfig = {
+  currentVersionNumber: string;
+  minVersionNumber: string;
+  bootstrap: string[];
+  wakuPubSubTopic: string;
+  additionalDirectPeers: string[];
+  publicPoiAggregatorUrls: string[];
+  blacklist: string[];
+  apiKeys?: APIKeys;
+  network: RPCConfig;
+}
