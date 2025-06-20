@@ -1,5 +1,12 @@
 
 
+## [1.3.8](https://github.com/Terminal-Wallet/terminal-wallet-cli/compare/v1.3.7...v1.3.8) (2025-06-20)
+
+
+### Features
+
+* remote-config ([#17](https://github.com/Terminal-Wallet/terminal-wallet-cli/issues/17)) ([876cf0e](https://github.com/Terminal-Wallet/terminal-wallet-cli/commit/876cf0e199f71b0831b7f30c14922688d9750212))
+
 ## [1.3.7](https://github.com/Terminal-Wallet/terminal-wallet-cli/compare/v1.3.6...v1.3.7) (2025-06-19)
 
 ## [1.3.6](https://github.com/Terminal-Wallet/terminal-wallet-cli/compare/v1.3.4...v1.3.6) (2025-01-17)
