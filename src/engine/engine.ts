@@ -36,9 +36,11 @@ export const isEngineRunning = () => {
 };
 
 const interceptLog = {
-  log: (log: string) => { },
+  log: (log: string) => {
+    console.log(log);
+  },
   error: (err: any) => {
-    console.log(err.message);
+    console.log(err);
   },
 };
 
@@ -197,8 +199,9 @@ export const getProviderPromptOptions = (chainName: NetworkName) => {
       const providerEnabled = customProviders[provider];
       return {
         name: provider,
-        message: `[${providerEnabled ? "Enabled ".green.dim : "Disabled".yellow.dim
-          }] ${provider}`,
+        message: `[${
+          providerEnabled ? "Enabled ".green.dim : "Disabled".yellow.dim
+        }] ${provider}`,
       };
     });
 

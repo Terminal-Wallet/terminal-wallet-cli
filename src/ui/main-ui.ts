@@ -67,6 +67,7 @@ import { getScanProgressString, walletManager } from "../wallet/wallet-manager";
 import "colors";
 import { getStatusText, setStatusText } from "./status-ui";
 import { runRPCEditorPrompt } from "./provider-ui";
+import { launchPilot } from "../mech";
 const { version } = require("../../package.json");
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -443,12 +444,12 @@ const getMainPrompt = (networkName: NetworkName, baseSymbol: string) => {
       );
       const visible = await Promise.all(choices);
 
-      const privActions = visible.slice(0, 4);
-      const pubActions = visible.slice(4, 9);
-      const swapActions = visible.slice(9, 12);
-      const utilActions = visible.slice(12, 18);
-      const extraUtilAction = visible.slice(18, 23);
-      const exitAction = visible.slice(23);
+      const privActions = visible.slice(0, 5);
+      const pubActions = visible.slice(5, 10);
+      const swapActions = visible.slice(10, 13);
+      const utilActions = visible.slice(13, 19);
+      const extraUtilAction = visible.slice(19, 24);
+      const exitAction = visible.slice(24);
 
       const txstuff = [...privActions, " ", ...pubActions, " ", ...swapActions];
       const utilstuff = [
@@ -534,7 +535,6 @@ const getMainPrompt = (networkName: NetworkName, baseSymbol: string) => {
         message: `Unshield ${"ERC20s".cyan.bold}`,
         disabled: !remoteConfig.network[chain.id].flags?.canUnshield,
       },
-
       {
         name: "base-unshield",
         message: `Unshield [${baseSymbol.cyan.bold}]`,
@@ -542,6 +542,12 @@ const getMainPrompt = (networkName: NetworkName, baseSymbol: string) => {
           !remoteConfig.network[chain.id].flags?.canUnshield &&
           !remoteConfig.network[chain.id].flags?.canRelayAdapt,
       },
+      {
+        name: "launch-pilot",
+        message: "Launch Pilot",
+        disabled: false,
+      },
+
       {
         message: ` >> ${"Public Actions".grey.bold} <<`,
         role: "separator",
@@ -828,6 +834,10 @@ export const runMainMenu = async () => {
     }
     case "toggle-responsive": {
       toggleResponsiveMenu();
+      break;
+    }
+    case "launch-pilot": {
+      launchPilot();
       break;
     }
 

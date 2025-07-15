@@ -16,7 +16,7 @@ export const RAILGUN_HEADER = `
 `;
 
 export const clearConsoleBuffer = async () => {
-  process.stdout.write("\u{033}[2J\u001b[H\u001b[2J\u001b[3J");
+  // process.stdout.write("\u{033}[2J\u001b[H\u001b[2J\u001b[3J");
 };
 
 const killEngineAndWaku = async () => {
@@ -46,12 +46,12 @@ export const processSafeExit = async () => {
   console.log("Shutting Down Modules");
   clearConsoleBuffer();
   await killEngineAndWaku();
-  console.clear();
+  // console.clear();
   process.exit(0);
 };
 
 process.on("SIGINT", async () => {
-  console.clear();
+  // console.clear();
   await processSafeExit();
 });
 process.on("unhandledRejection", async (err: Error | string) => {
