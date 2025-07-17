@@ -1,5 +1,6 @@
 import { createServer, Server } from "http";
-import { AddressInfo } from "net";
+
+let httpServerPort: number | undefined;
 
 function listenAsync(server: Server, port: number): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -11,7 +12,7 @@ function listenAsync(server: Server, port: number): Promise<void> {
   });
 }
 
-export const startHttpServer = async () => {
+const startHttpServer = async (): Promise<number> => {
   const server: Server = createServer((req, res) => {
     if (req.method === "POST") {
       let body = "";
@@ -23,7 +24,7 @@ export const startHttpServer = async () => {
       req.on("end", () => {
         try {
           const jsonBody = JSON.parse(body);
-          console.log("HTTP Server received POST request:");
+          console.log("Pilot Connect server received POST request:");
           console.log(JSON.stringify(jsonBody, null, 2));
 
           res.writeHead(200, { "Content-Type": "application/json" });
@@ -31,7 +32,7 @@ export const startHttpServer = async () => {
             JSON.stringify({ status: "success", message: "Request logged" }),
           );
         } catch (error) {
-          console.log("HTTP Server received invalid JSON:", body);
+          console.log("Pilot Connect server received invalid JSON:", body);
           res.writeHead(400, { "Content-Type": "application/json" });
           res.end(JSON.stringify({ status: "error", message: "Invalid JSON" }));
         }
@@ -42,6 +43,17 @@ export const startHttpServer = async () => {
         JSON.stringify({ status: "error", message: "Method not allowed" }),
       );
     }
+  });
+
+  // Handle server crashes and disconnections
+  server.on("error", (error) => {
+    console.error("Pilot Connect server crashed:", error);
+    httpServerPort = undefined;
+  });
+
+  server.on("close", () => {
+    console.log("Pilot Connect server closed");
+    httpServerPort = undefined;
   });
 
   // Find an open port using a for loop, up to a maximum
@@ -70,9 +82,20 @@ export const startHttpServer = async () => {
     const port = await findOpenPort(startPort, maxPort);
     await listenAsync(server, port);
     console.log(`Pilot Connect server running on port ${port}`);
+
+    httpServerPort = port;
     return port;
   } catch (error) {
-    console.error("Failed to start HTTP server:", error);
+    console.error("Failed to start Pilot Connect server:", error);
     throw error;
   }
+};
+
+export { startHttpServer };
+
+export const ensureHttpServer = async (): Promise<number> => {
+  if (httpServerPort) {
+    return httpServerPort;
+  }
+  return await startHttpServer();
 };

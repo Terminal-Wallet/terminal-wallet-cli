@@ -1,5 +1,8 @@
 import { RailgunTransaction } from "../models/transaction-models";
-import { getPrivateDisplayBalances } from "../balance/balance-util";
+import {
+  getPrivateDisplayBalances,
+  getPrivateERC20BalancesForChain,
+} from "../balance/balance-util";
 import { getCurrentNetwork } from "../engine/engine";
 import {
   getChainForName,
@@ -36,7 +39,10 @@ import {
   processDestroyExit,
   processSafeExit,
 } from "../util/error-util";
-import { runAddTokenPrompt } from "./token-ui";
+import {
+  runAddTokenPrompt,
+  transferTokenAmountSelectionPrompt,
+} from "./token-ui";
 import {
   confirmPrompt,
   confirmPromptCatch,
@@ -67,7 +73,7 @@ import { getScanProgressString, walletManager } from "../wallet/wallet-manager";
 import "colors";
 import { getStatusText, setStatusText } from "./status-ui";
 import { runRPCEditorPrompt } from "./provider-ui";
-import { launchPilot } from "../mech";
+import { launchPilot, promptTokenBalances } from "../mech";
 const { version } = require("../../package.json");
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -837,7 +843,8 @@ export const runMainMenu = async () => {
       break;
     }
     case "launch-pilot": {
-      launchPilot();
+      const balances = await promptTokenBalances(networkName);
+      launchPilot(balances);
       break;
     }
 
