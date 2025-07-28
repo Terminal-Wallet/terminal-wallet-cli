@@ -41,7 +41,7 @@ export default {
     zeroXApi: "",
   },
   engine: {
-    artifactPath: ".artifacts",
+    artifactPath: ".artifacts-2.5",
     databasePath: ".railgun.db",
     keyChainPath: ".zKeyChains",
     defaultChain: NetworkName.Ethereum,
