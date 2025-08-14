@@ -1,4 +1,3 @@
-import { toBeHex } from "ethers";
 import { startHttpServer } from "./http";
 
 const PILOT_BASE_URL = "http://localhost:3040"; // "https://app.pilot.gnosisguild.org";
@@ -9,6 +8,12 @@ export type Balances = {
   [address: `0x${string}`]: bigint;
 };
 
+// ethers toBeHex pads so that an even number of hex digits are returned
+// We need a hex string with absolutely no padding!
+const toHex = (value: bigint) => {
+  return "0x" + value.toString(16);
+};
+
 const encodeBalanceSpoofRequests = (
   address: `0x${string}`,
   balances: Balances,
@@ -16,12 +21,14 @@ const encodeBalanceSpoofRequests = (
   return Object.entries(balances).map(([token, balance]) =>
     token === "native"
       ? {
+          jsonrpc: "2.0",
           method: "pilot_addBalance",
-          params: [[address], toBeHex(balance)],
+          params: [[address], toHex(balance)],
         }
       : {
+          jsonrpc: "2.0",
           method: "pilot_addErc20Balance",
-          params: [token, [address], toBeHex(balance)],
+          params: [token, [address], toHex(balance)],
         },
   );
 };
