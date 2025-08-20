@@ -1,6 +1,8 @@
 import { createServer, Server } from "http";
+import * as crypto from "crypto";
 
 let httpServerPort: number | undefined;
+let secret: string | undefined;
 
 function listenAsync(server: Server, port: number): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -12,9 +14,36 @@ function listenAsync(server: Server, port: number): Promise<void> {
   });
 }
 
-const startHttpServer = async (): Promise<number> => {
+const startHttpServer = async () => {
+  console.log("Starting Pilot callback server...");
+
+  // Generate a random, URL-safe secret
+  secret = crypto
+    .createHash("sha256")
+    .update(crypto.randomBytes(32).toString("hex"))
+    .digest("base64")
+    .replace(/[^a-zA-Z0-9]/g, "")
+    .substring(0, 16);
+
   const server: Server = createServer((req, res) => {
     if (req.method === "POST") {
+      console.warn(
+        "Pilot Connect server received request:",
+        req.url,
+        req.method,
+      );
+      // authenticate using the secret query parameter
+      const secretParam = new URL(
+        req.url || "",
+        "http://localhost",
+      ).searchParams.get("secret");
+
+      if (secretParam !== secret) {
+        res.writeHead(401, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ status: "error", message: "Wrong secret" }));
+        return;
+      }
+
       let body = "";
 
       req.on("data", (chunk) => {
@@ -32,7 +61,7 @@ const startHttpServer = async (): Promise<number> => {
             JSON.stringify({ status: "success", message: "Request logged" }),
           );
         } catch (error) {
-          console.log("Pilot Connect server received invalid JSON:", body);
+          console.error("Pilot Connect server received invalid JSON:", body);
           res.writeHead(400, { "Content-Type": "application/json" });
           res.end(JSON.stringify({ status: "error", message: "Invalid JSON" }));
         }
@@ -43,17 +72,6 @@ const startHttpServer = async (): Promise<number> => {
         JSON.stringify({ status: "error", message: "Method not allowed" }),
       );
     }
-  });
-
-  // Handle server crashes and disconnections
-  server.on("error", (error) => {
-    console.error("Pilot Connect server crashed:", error);
-    httpServerPort = undefined;
-  });
-
-  server.on("close", () => {
-    console.log("Pilot Connect server closed");
-    httpServerPort = undefined;
   });
 
   // Find an open port using a for loop, up to a maximum
@@ -76,26 +94,28 @@ const startHttpServer = async (): Promise<number> => {
     throw new Error(`No open port found between ${startPort} and ${maxPort}`);
   };
 
+  httpServerPort = await findOpenPort(6100, 6200);
   try {
-    const startPort = 6100;
-    const maxPort = 6200;
-    const port = await findOpenPort(startPort, maxPort);
-    await listenAsync(server, port);
-    console.log(`Pilot Connect server running on port ${port}`);
+    await listenAsync(server, httpServerPort);
 
-    httpServerPort = port;
-    return port;
+    // Close server on Terminal shutdown
+    process.on("SIGINT", () => {
+      server.close(() => {
+        process.exit(0);
+      });
+    });
+
+    console.log(`Pilot Connect server running on port ${httpServerPort}`);
+    return { port: httpServerPort, secret };
   } catch (error) {
     console.error("Failed to start Pilot Connect server:", error);
     throw error;
   }
 };
 
-export { startHttpServer };
-
-export const ensureHttpServer = async (): Promise<number> => {
-  if (httpServerPort) {
-    return httpServerPort;
+export const ensureHttpServer = async () => {
+  if (httpServerPort && secret) {
+    return { port: httpServerPort, secret };
   }
   return await startHttpServer();
 };

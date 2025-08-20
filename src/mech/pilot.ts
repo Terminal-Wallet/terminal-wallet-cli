@@ -1,4 +1,4 @@
-import { startHttpServer } from "./http";
+import { ensureHttpServer } from "./http";
 
 const PILOT_BASE_URL = "http://localhost:3040"; // "https://app.pilot.gnosisguild.org";
 
@@ -36,9 +36,8 @@ const encodeBalanceSpoofRequests = (
 export const launchPilot = async (balances: Balances) => {
   const open = (await import("open")).default;
 
-  console.log("Starting Pilot callback server...");
-  const port = await startHttpServer();
-  const callbackAddress = `http://localhost:${port}`;
+  const { port, secret } = await ensureHttpServer();
+  const callbackAddress = `http://localhost:${port}?secret=${secret}`;
 
   const address = "0x1234567890123456789012345678901234567890";
   const chainShortName = "matic";
