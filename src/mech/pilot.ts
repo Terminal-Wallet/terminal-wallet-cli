@@ -1,4 +1,8 @@
-import { ensureHttpServer } from "./http";
+import {
+  ensureHttpServer,
+  MetaTransaction,
+  onTransactionRequest,
+} from "./http";
 
 const PILOT_BASE_URL = "http://localhost:3040"; // "https://app.pilot.gnosisguild.org";
 
@@ -33,9 +37,13 @@ const encodeBalanceSpoofRequests = (
   );
 };
 
-export const launchPilot = async (balances: Balances) => {
+export const launchPilot = async (
+  balances: Balances,
+  processTransactionRequest: (request: MetaTransaction[]) => void,
+) => {
   const open = (await import("open")).default;
 
+  onTransactionRequest(processTransactionRequest);
   const { port, secret } = await ensureHttpServer();
   const callbackAddress = `http://localhost:${port}?secret=${secret}`;
 

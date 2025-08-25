@@ -1,5 +1,21 @@
 import { createServer, Server } from "http";
 import * as crypto from "crypto";
+import { confirmPrompt } from "../ui/confirm-ui";
+
+export interface MetaTransaction {
+  to: string;
+  value: string;
+  data: string;
+  operation: 0 | 1;
+}
+
+type TransactionRequestListener = (request: MetaTransaction[]) => void;
+
+let transactionRequestListener: TransactionRequestListener | null = null;
+
+export const onTransactionRequest = (listener: TransactionRequestListener) => {
+  transactionRequestListener = listener;
+};
 
 let httpServerPort: number | undefined;
 let secret: string | undefined;
@@ -53,12 +69,14 @@ const startHttpServer = async () => {
       req.on("end", () => {
         try {
           const jsonBody = JSON.parse(body);
-          console.log("Pilot Connect server received POST request:");
-          console.log(JSON.stringify(jsonBody, null, 2));
+          if (transactionRequestListener == null) {
+            throw new Error("No transaction request listener");
+          }
+          transactionRequestListener(jsonBody);
 
           res.writeHead(200, { "Content-Type": "application/json" });
           res.end(
-            JSON.stringify({ status: "success", message: "Request logged" }),
+            JSON.stringify({ status: "success", message: "Request processed" }),
           );
         } catch (error) {
           console.error("Pilot Connect server received invalid JSON:", body);
