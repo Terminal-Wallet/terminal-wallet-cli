@@ -16,7 +16,7 @@ export const RAILGUN_HEADER = `
 `;
 
 export const clearConsoleBuffer = async () => {
-  // process.stdout.write("\u{033}[2J\u001b[H\u001b[2J\u001b[3J");
+  process.stdout.write("\u{033}[2J\u001b[H\u001b[2J\u001b[3J");
 };
 
 const killEngineAndWaku = async () => {

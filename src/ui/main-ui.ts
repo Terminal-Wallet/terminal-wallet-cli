@@ -74,10 +74,11 @@ import "colors";
 import { getStatusText, setStatusText } from "./status-ui";
 import { runRPCEditorPrompt } from "./provider-ui";
 import { launchPilot, promptTokenBalances } from "../mech";
+import { Prompt } from "enquirer";
 const { version } = require("../../package.json");
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-const { Select } = require("enquirer");
+const { Select, Confirm } = require("enquirer");
 
 const stripColors = (input: string): string => {
   // eslint-disable-next-line no-control-regex
@@ -550,7 +551,7 @@ const getMainPrompt = (networkName: NetworkName, baseSymbol: string) => {
       },
       {
         name: "launch-pilot",
-        message: "Launch Pilot",
+        message: "Launch Mech 🦾",
         disabled: false,
       },
 
@@ -650,6 +651,23 @@ export const walletBalancePoller = async () => {
   walletBalancePoller();
 };
 
+let activeMainPrompt: Prompt | null = null;
+
+const runInterrupt = async (callback: () => Promise<void>) => {
+  if (!activeMainPrompt) {
+    throw new Error(
+      "Can only accept interrupt prompt when main menu is active",
+    );
+  }
+
+  await (activeMainPrompt as any).close();
+  clearConsoleBuffer();
+  await callback();
+
+  // eslint-disable-next-line no-use-before-define
+  runMainMenu();
+};
+
 export const runMainMenu = async () => {
   clearHashedPassword();
   const networkName = getCurrentNetwork();
@@ -677,6 +695,7 @@ export const runMainMenu = async () => {
   mainPrompt.on("submit", () => {
     clearConsoleBuffer();
   });
+  activeMainPrompt = mainPrompt;
 
   const menuSelection = await mainPrompt.run().catch(async (err: any) => {
     const confirm = await confirmPromptExit(`Do you wish to EXIT?`, {
@@ -844,7 +863,26 @@ export const runMainMenu = async () => {
     }
     case "launch-pilot": {
       const balances = await promptTokenBalances(networkName);
-      launchPilot(balances);
+      launchPilot(balances, (metaTransactions) => {
+        runInterrupt(async () => {
+          const title =
+            metaTransactions.length === 1
+              ? `Executing the following call through Mech:\n\n`
+              : `Executing the following ${metaTransactions.length} calls through Mech:\n\n`;
+          const json = JSON.stringify(
+            metaTransactions.length === 1
+              ? metaTransactions[0]
+              : metaTransactions,
+            null,
+            2,
+          );
+          const proceed = await confirmPrompt(`Proceed with execution?`, {
+            header: title + json + "\n",
+            initial: true,
+          });
+        });
+      });
+
       break;
     }
 
@@ -857,6 +895,7 @@ export const runMainMenu = async () => {
       break;
     }
   }
+
   clearConsoleBuffer();
   runMainMenu();
 };
