@@ -4,7 +4,7 @@ import {
   onTransactionRequest,
 } from "./http";
 
-const PILOT_BASE_URL = "http://localhost:3040"; // "https://app.pilot.gnosisguild.org";
+const PILOT_BASE_URL = "https://app.pilot.gnosisguild.org";
 
 export type Balances = {
   native?: bigint;
@@ -47,12 +47,14 @@ export const launchPilot = async (
   const { port, secret } = await ensureHttpServer();
   const callbackAddress = `http://localhost:${port}?secret=${secret}`;
 
-  const address = "0x1234567890123456789012345678901234567890";
+  const address = "0x123B1D6F8ed9B5c136a6E5284b7193ecA58bC2b7";
   const chainShortName = "matic";
   const label = "Terminal Mech";
 
   const launchUrl = new URL(
-    `/offline/launch/${chainShortName}:${address}/${encodeURIComponent(label)}`,
+    `/offline/launch/${chainShortName}:${address.toLowerCase()}/${encodeURIComponent(
+      label,
+    )}`,
     PILOT_BASE_URL,
   );
   launchUrl.searchParams.set("callback", callbackAddress);
