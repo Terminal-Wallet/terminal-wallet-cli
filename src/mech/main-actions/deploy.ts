@@ -26,7 +26,7 @@ export async function deployMech() {
     await sendSelfSignedTransaction(
       selfSignerInfo(),
       getCurrentNetwork(),
-      await mechDeploymentTx(),
+      mechDeploymentTx(),
     );
   } else {
     console.log(`Mech already deployed`);
