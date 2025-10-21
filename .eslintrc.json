@@ -29,8 +29,7 @@
         ],
         "arrow-body-style": 0,
         "import/extensions": 0,
-        "no-unused-vars": 0, // disable for now lots of these too
-        "no-use-before-define": 1,
+        "no-unused-vars": 0, // disable for now lots of these too        
         "import/prefer-default-export": 0,
         "import/no-unresolved": 0,
         "no-restricted-syntax": 0,

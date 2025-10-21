@@ -75,6 +75,8 @@ import { getStatusText, setStatusText } from "./status-ui";
 import { runRPCEditorPrompt } from "./provider-ui";
 import { launchPilot, promptTokenBalances } from "../mech";
 import { Prompt } from "enquirer";
+import { mechStatus } from "../mech/main-actions/status";
+import { deployMech } from "../mech/main-actions/deploy";
 const { version } = require("../../package.json");
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -862,27 +864,75 @@ export const runMainMenu = async () => {
       break;
     }
     case "launch-pilot": {
-      const balances = await promptTokenBalances(networkName);
-      launchPilot(balances, (metaTransactions) => {
-        runInterrupt(async () => {
-          const title =
-            metaTransactions.length === 1
-              ? `Executing the following call through Mech:\n\n`
-              : `Executing the following ${metaTransactions.length} calls through Mech:\n\n`;
-          const json = JSON.stringify(
-            metaTransactions.length === 1
-              ? metaTransactions[0]
-              : metaTransactions,
-            null,
-            2,
-          );
-          const proceed = await confirmPrompt(`Proceed with execution?`, {
-            header: title + json + "\n",
-            initial: true,
-          });
-        });
+      // const balances = await promptTokenBalances(networkName);
+      // launchPilot(balances, (metaTransactions) => {
+      //   runInterrupt(async () => {
+      //     const title =
+      //       metaTransactions.length === 1
+      //         ? `Executing the following call through Mech:\n\n`
+      //         : `Executing the following ${metaTransactions.length} calls through Mech:\n\n`;
+      //     const json = JSON.stringify(
+      //       metaTransactions.length === 1
+      //         ? metaTransactions[0]
+      //         : metaTransactions,
+      //       null,
+      //       2,
+      //     );
+      //     const proceed = await confirmPrompt(`Proceed with execution?`, {
+      //       header: title + json + "\n",
+      //       initial: true,
+      //     });
+      //   });
+      // });
+      const mechMenuPrompt = new Select({
+        header: " ",
+        message: "Mech Options",
+        choices: [
+          { name: "status", message: "Show Status" },
+          { name: "deploy", message: "Deploy Mech" },
+          { name: "back", message: "Go back".grey },
+        ],
+        multiple: false,
       });
 
+      const mechChoice = await mechMenuPrompt.run().catch(confirmPromptCatch);
+      const {
+        address,
+        tokenAddress,
+        isMechDeployed,
+        isNFTShielded,
+        isNFTSpendable,
+      } = await mechStatus();
+
+      if (mechChoice === "status") {
+        // Just show status and return to main menu
+        console.log(`Mech address:  ${address}`);
+        console.log(`NFT address:   ${tokenAddress}`);
+        console.log(`isDeployed:    ${isMechDeployed}`);
+        console.log(`isNFTShielded: ${isNFTShielded}`);
+        console.log(`isNFTSpendabe: ${isNFTSpendable}`);
+        await confirmPromptCatchRetry("");
+
+        break;
+      } else if (mechChoice === "deploy") {
+        const confirmPrompt = new Select({
+          header: " ",
+          message: "Confirm Mech deployment?",
+          choices: [
+            { name: "confirm", message: "Yes" },
+            { name: "cancel", message: "Cancel".grey },
+          ],
+          multiple: false,
+        });
+
+        const confirmChoice = await confirmPrompt
+          .run()
+          .catch(confirmPromptCatch);
+
+        if (confirmChoice === "confirm") {
+          await deployMech();
+        }
+      }
       break;
     }
 
