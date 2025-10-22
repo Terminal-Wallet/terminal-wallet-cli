@@ -3,7 +3,12 @@ import { zeroPadValue } from "ethers";
 import { NFTTokenType } from "@railgun-community/wallet";
 
 import { mechStatus } from "./status";
-import { mechAddress, mechDeploymentTx, nftAddress } from "../deployments";
+import {
+  mechAddress,
+  nftAddress,
+  populateMechDeployment,
+  populateMint,
+} from "../deployments";
 import {
   getCurrentRailgunAddress,
   getCurrentRailgunID,
@@ -12,28 +17,46 @@ import { sendSelfSignedTransaction } from "../../transaction/transaction-builder
 import { getCurrentNetwork } from "../../engine/engine";
 import { populateShieldTransaction } from "../populate/populateShieldTransaction";
 
-export async function deployMech() {
-  const { isMechDeployed, isNFTShielded } = await mechStatus();
-  if (!isNFTShielded) {
-    console.log(`Minting and shielding into RailgunSW`);
-    await shield();
-  } else {
-    console.log("NFT already shielded in RailgunSW");
-  }
+export async function deploy() {
+  const { isMechDeployed, isNFTMinted, isNFTShielded, isNFTSpendable } =
+    await mechStatus();
 
-  if (!isMechDeployed) {
-    console.log(`Deploying Mech`);
+  // for now we can comment this
+  // if (!isNFTMinted) {
+  //   console.log("Minting NFT");
+  //   await sendSelfSignedTransaction(
+  //     selfSignerInfo(),
+  //     getCurrentNetwork(),
+  //     await populateMint(),
+  //   );
+  // } else {
+  //   console.log("NFT already minted");
+  // }
+
+  if (!isNFTShielded) {
+    console.log("Shielding NFT");
     await sendSelfSignedTransaction(
       selfSignerInfo(),
       getCurrentNetwork(),
-      mechDeploymentTx(),
+      await populateShieldNFT(),
     );
   } else {
-    console.log(`Mech already deployed`);
+    console.log("NFT already shielded");
+  }
+
+  if (!isMechDeployed) {
+    console.log("Deploying Mech");
+    await sendSelfSignedTransaction(
+      selfSignerInfo(),
+      getCurrentNetwork(),
+      await populateMechDeployment(),
+    );
+  } else {
+    console.log("Mech already deployed");
   }
 }
 
-async function shield() {
+async function populateShieldNFT() {
   const nftIn = [
     {
       nftAddress: nftAddress(),
@@ -44,11 +67,7 @@ async function shield() {
     },
   ];
 
-  await sendSelfSignedTransaction(
-    selfSignerInfo(),
-    getCurrentNetwork(),
-    await populateShieldTransaction({ nftIn, erc20In: [] }),
-  );
+  return populateShieldTransaction({ nftIn, erc20In: [] });
 }
 
 function selfSignerInfo() {

@@ -4,7 +4,7 @@ import { confirmPrompt } from "../ui/confirm-ui";
 
 export interface MetaTransaction {
   to: string;
-  value: string;
+  value: string | bigint | number;
   data: string;
   operation: 0 | 1;
 }

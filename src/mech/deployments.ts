@@ -1,24 +1,46 @@
-import { keccak256 } from "ethers";
-import { NetworkName } from "@railgun-community/shared-models";
+import { Interface, keccak256, TransactionRequest, ZeroHash } from "ethers";
+import {
+  RailgunProxyContract,
+  RelayAdaptContract,
+} from "@railgun-community/shared-models";
 
 import { getCurrentNetwork } from "../engine/engine";
 import { getCurrentEthersWallet } from "../wallet/public-utils";
-
 import {
-  populateDeployRailgunMech,
-  predictRailgunMechAddress,
-  predictRailgunNeuralLinkAddress,
-} from "./encoding";
+  encodeDeploySingleton,
+  predictSingletonAddress,
+} from "@gnosis-guild/zodiac-core";
+
+// for reference: https://polygonscan.com/address/0xb11ac32f9658141b1cd49e15f89879cf3dd93781#code
+const railgunMechBytecode =
+  "0x60c060405234801561000f575f80fd5b5060405161056238038061056283398101604081905261002e9161007c565b6001600160a01b03811660808190523060a08190526040519081527f395a37f76d5952499ce671a72044003fb77190777dbfc8c1b9521e270240f3459060200160405180910390a2506100a9565b5f6020828403121561008c575f80fd5b81516001600160a01b03811681146100a2575f80fd5b9392505050565b60805160a05161048c6100d65f395f818160c2015261010101525f818160770152610134015261048c5ff3fe608060405260043610610034575f3560e01c8063519454471461003d578063a8f4f65c14610066578063af640d0f146100b157005b3661003b57005b005b61005061004b366004610339565b6100f2565b60405161005d91906103da565b60405180910390f35b348015610071575f80fd5b506100997f000000000000000000000000000000000000000000000000000000000000000081565b6040516001600160a01b03909116815260200161005d565b3480156100bc575f80fd5b506100e47f000000000000000000000000000000000000000000000000000000000000000081565b60405190815260200161005d565b6040516331a9108f60e11b81527f0000000000000000000000000000000000000000000000000000000000000000600482015260609033906001600160a01b037f00000000000000000000000000000000000000000000000000000000000000001690636352211e90602401602060405180830381865afa158015610179573d5f803e3d5ffd5b505050506040513d601f19601f8201168201806040525081019061019d9190610425565b6001600160a01b0316146102035760405162461bcd60e51b815260206004820152602260248201527f4f6e6c792063616c6c61626c6520627920746865204d656368206f706572617460448201526137b960f11b60648201526084015b60405180910390fd5b5f8260ff165f0361027257866001600160a01b0316868686604051610229929190610447565b5f6040518083038185875af1925050503d805f8114610263576040519150601f19603f3d011682016040523d82523d5f602084013e610268565b606091505b509250905061030b565b8260ff166001036102cf57866001600160a01b03168585604051610297929190610447565b5f60405180830381855af49150503d805f8114610263576040519150601f19603f3d011682016040523d82523d5f602084013e610268565b60405162461bcd60e51b815260206004820152601160248201527024b73b30b634b21037b832b930ba34b7b760791b60448201526064016101fa565b8061031857815160208301fd5b5095945050505050565b6001600160a01b0381168114610336575f80fd5b50565b5f805f805f6080868803121561034d575f80fd5b853561035881610322565b945060208601359350604086013567ffffffffffffffff8082111561037b575f80fd5b818801915088601f83011261038e575f80fd5b81358181111561039c575f80fd5b8960208285010111156103ad575f80fd5b602083019550809450505050606086013560ff811681146103cc575f80fd5b809150509295509295909350565b5f6020808352835180828501525f5b81811015610405578581018301518582016040015282016103e9565b505f604082860101526040601f19601f8301168501019250505092915050565b5f60208284031215610435575f80fd5b815161044081610322565b9392505050565b818382375f910190815291905056fea264697066735822122084cafe68a3cff6adfbbe2153139dbdbd4659efb308b8495f5ee481e0c36b78ca64736f6c63430008150033";
+
+// for reference: https://polygonscan.com/address/0x5c0fc3fc2eb438ada4dea189aa95874d449d8a8e#code
+const railgunNeuralLinkBytecode =
+  "0x608060405234801561000f575f80fd5b506102058061001d5f395ff3fe608060405234801561000f575f80fd5b506004361061004a575f3560e01c8063025e7c271461004e578063095ea7b31461009257806323b872dd146100a65780636352211e146100b9575b5f80fd5b61007661005c36600461013c565b5f602081905290815260409020546001600160a01b031681565b6040516001600160a01b03909116815260200160405180910390f35b6100a46100a036600461016e565b5050565b005b6100a46100b4366004610196565b6100e1565b6100766100c736600461013c565b5f908152602081905260409020546001600160a01b031690565b5f8181526020819052604080822080546001600160a01b0319166001600160a01b0386811691821790925591518493918716917fddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef91a4505050565b5f6020828403121561014c575f80fd5b5035919050565b80356001600160a01b0381168114610169575f80fd5b919050565b5f806040838503121561017f575f80fd5b61018883610153565b946020939093013593505050565b5f805f606084860312156101a8575f80fd5b6101b184610153565b92506101bf60208501610153565b915060408401359050925092509256fea2646970667358221220656898a013aa1d7db2fe4be11229b74f0161a5ba43512bc0be1b37d34462972464736f6c63430008150033";
+
+export function ralgunSmartWalletAddress() {
+  return RailgunProxyContract[getCurrentNetwork()];
+}
+
+export function relayAdaptAddress() {
+  return RelayAdaptContract[getCurrentNetwork()];
+}
 
 export function mechAddress() {
-  return predictRailgunMechAddress({
-    railgunNeuralLink: neuralLinkAddress(),
-    salt: deploymentSalt(),
+  return predictSingletonAddress({
+    bytecode: railgunMechBytecode,
+    constructorArgs: { types: ["address"], values: [nftAddress()] },
+    salt: mechDeploymentSalt(),
   });
 }
 
 export function nftAddress() {
-  return neuralLinkAddress();
+  return predictSingletonAddress({
+    bytecode: railgunNeuralLinkBytecode,
+    constructorArgs: { types: [], values: [] },
+    salt: ZeroHash,
+  });
 }
 
 export function nftTokenId() {
@@ -26,73 +48,37 @@ export function nftTokenId() {
   return BigInt(address);
 }
 
-export function mechDeploymentTx() {
-  return populateDeployRailgunMech({
-    railgunNeuralLink: neuralLinkAddress(),
-    salt: deploymentSalt(),
-  });
+export function populateMechDeployment(): TransactionRequest {
+  return encodeDeploySingleton({
+    bytecode: railgunMechBytecode,
+    constructorArgs: {
+      types: ["address"],
+      values: [nftAddress()],
+    },
+    salt: mechDeploymentSalt(),
+  }) as TransactionRequest;
 }
 
-function neuralLinkAddress() {
-  const { railgunSmartWallet, relayAdapt } = config();
-  return predictRailgunNeuralLinkAddress({
-    railgunSmartWallet,
-    relayAdapt,
-  });
-}
-
-function deploymentSalt() {
-  const wallet = getCurrentEthersWallet();
-  return keccak256(wallet.signMessageSync("RailgunMech Deployment"));
-}
-
-function config() {
-  const network = getCurrentNetwork();
-
-  const RelayAdaptContract: Record<NetworkName, string> = {
-    // Main nets
-    [NetworkName.Ethereum]: "0xAc9f360Ae85469B27aEDdEaFC579Ef2d052aD405",
-    [NetworkName.BNBChain]: "0xF82d00fC51F730F42A00F85E74895a2849ffF2Dd",
-    [NetworkName.Polygon]: "0xF82d00fC51F730F42A00F85E74895a2849ffF2Dd",
-    [NetworkName.Arbitrum]: "0xB4F2d77bD12c6b548Ae398244d7FAD4ABCE4D89b",
-
-    // Test nets
-    [NetworkName.EthereumSepolia]: "0x7e3d929EbD5bDC84d02Bd3205c777578f33A214D",
-    [NetworkName.PolygonAmoy]: "0xc340f7E17A42154674d6B50190386C9a2982D12E",
-
-    // Dev only
-    [NetworkName.Hardhat]: "0x0355B7B8cb128fA5692729Ab3AAa199C1753f726",
-
-    // Deprecated
-    [NetworkName.EthereumRopsten_DEPRECATED]: "",
-    [NetworkName.EthereumGoerli_DEPRECATED]: "",
-    [NetworkName.ArbitrumGoerli_DEPRECATED]: "",
-    [NetworkName.PolygonMumbai_DEPRECATED]: "",
-  };
-
-  const RailgunProxyContract: Record<NetworkName, string> = {
-    // Main nets
-    [NetworkName.Ethereum]: "0xfa7093cdd9ee6932b4eb2c9e1cde7ce00b1fa4b9",
-    [NetworkName.BNBChain]: "0x590162bf4b50f6576a459b75309ee21d92178a10",
-    [NetworkName.Polygon]: "0x19b620929f97b7b990801496c3b361ca5def8c71",
-    [NetworkName.Arbitrum]: "0xFA7093CDD9EE6932B4eb2c9e1cde7CE00B1FA4b9",
-
-    // Test nets
-    [NetworkName.EthereumSepolia]: "0xeCFCf3b4eC647c4Ca6D49108b311b7a7C9543fea",
-    [NetworkName.PolygonAmoy]: "0xD1aC80208735C7f963Da560C42d6BD82A8b175B5",
-
-    // Dev only
-    [NetworkName.Hardhat]: "0x610178dA211FEF7D417bC0e6FeD39F05609AD788",
-
-    // Deprecated
-    [NetworkName.EthereumRopsten_DEPRECATED]: "",
-    [NetworkName.EthereumGoerli_DEPRECATED]: "",
-    [NetworkName.ArbitrumGoerli_DEPRECATED]: "",
-    [NetworkName.PolygonMumbai_DEPRECATED]: "",
-  };
+export function populateMint(): TransactionRequest {
+  /*
+   * For now this is just a transfer, but the real contract will really require a mint
+   */
+  const iface = new Interface([
+    "function transferFrom(address from, address to, uint256 tokenId)",
+  ]);
 
   return {
-    railgunSmartWallet: RailgunProxyContract[network],
-    relayAdapt: RelayAdaptContract[network],
+    to: nftAddress(),
+    data: iface.encodeFunctionData("transferFrom", [
+      relayAdaptAddress(),
+      relayAdaptAddress(),
+      nftTokenId(),
+    ]),
+    value: 0,
   };
+}
+
+function mechDeploymentSalt() {
+  const wallet = getCurrentEthersWallet();
+  return keccak256(wallet.signMessageSync("RailgunMech Deployment"));
 }

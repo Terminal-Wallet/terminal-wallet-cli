@@ -12,8 +12,10 @@ import { getCurrentRailgunID } from "../../wallet/wallet-util";
 
 import { getCurrentNetwork } from "../../engine/engine";
 
-import { mechAddress, nftAddress } from "../deployments";
+import { mechAddress, nftAddress, nftTokenId } from "../deployments";
 import { getCurrentEthersWallet } from "../../wallet/public-utils";
+import { WalletBalanceBucket } from "@railgun-community/engine";
+import { Interface } from "ethers";
 
 /*
  *
@@ -27,63 +29,26 @@ export async function mechStatus(): Promise<{
   address: string;
   tokenAddress: string;
   isMechDeployed: boolean;
+  isNFTMinted: boolean;
   isNFTShielded: boolean;
   isNFTSpendable: boolean;
+  isNFTBlocked: boolean;
 }> {
   const wallet = getCurrentEthersWallet();
   const address = mechAddress();
   const code = await wallet.provider?.getCode(address);
 
-  const { isNFTShielded, isNFTSpendable } = await nftStatus();
+  const { pending, spendable, blocked, minted } = await nftStatus();
 
   return {
     address,
     tokenAddress: nftAddress(),
     isMechDeployed: !!code && code != "0x",
-    isNFTShielded,
-    isNFTSpendable,
+    isNFTMinted: minted,
+    isNFTSpendable: spendable,
+    isNFTShielded: spendable || pending,
+    isNFTBlocked: blocked,
   };
-}
-
-async function nftStatus(): Promise<{
-  isNFTShielded: boolean;
-  isNFTSpendable: boolean;
-}> {
-  const wallet = walletForID(getCurrentRailgunID());
-
-  const tokenAddress = nftAddress().toLowerCase();
-  const tokenId = BigInt(mechAddress());
-
-  const isFound = async (spendable: boolean) => {
-    const balances = await wallet.getTokenBalances(
-      TXIDVersion.V2_PoseidonMerkle,
-      getCurrentChain(),
-      spendable,
-    );
-    const myNFTs = getSerializedNFTBalances(balances);
-    return myNFTs.some(
-      (e) =>
-        e.nftAddress.toLowerCase() == tokenAddress &&
-        BigInt(e.tokenSubID) == tokenId,
-    );
-  };
-
-  if (await isFound(true)) {
-    return {
-      isNFTShielded: true,
-      isNFTSpendable: true,
-    };
-  } else if (await isFound(false)) {
-    return {
-      isNFTShielded: true,
-      isNFTSpendable: false,
-    };
-  } else {
-    return {
-      isNFTShielded: false,
-      isNFTSpendable: false,
-    };
-  }
 }
 
 function getCurrentChain(): Chain {
@@ -104,4 +69,50 @@ function getCurrentChain(): Chain {
   }
 
   return { id, type: ChainType.EVM };
+}
+
+async function nftStatus() {
+  const wallet = walletForID(getCurrentRailgunID());
+  const balancesByBucket = await wallet.getTokenBalancesByBucket(
+    TXIDVersion.V2_PoseidonMerkle,
+    getCurrentChain(),
+  );
+  const _address = nftAddress();
+
+  const collect = (bucket: WalletBalanceBucket) =>
+    balancesByBucket[bucket][_address].balance == BigInt(1);
+
+  return {
+    // this check will change when we have the final contract:
+    minted: await isMinted(),
+    spendable: collect(WalletBalanceBucket.Spendable),
+    pending:
+      collect(WalletBalanceBucket.MissingExternalPOI) ||
+      collect(WalletBalanceBucket.MissingInternalPOI) ||
+      collect(WalletBalanceBucket.ShieldPending),
+    blocked: collect(WalletBalanceBucket.ShieldBlocked),
+  };
+}
+
+async function isMinted() {
+  // so far we do onwerOf, final contracgt will feature different call
+
+  // Create an Interface for ownerOf(uint256) — exact signature matters
+  const iface = new Interface([
+    "function ownerOf(uint256 tokenId) view returns (address)",
+  ]);
+
+  // Encode calldata
+  const data = iface.encodeFunctionData("ownerOf", [nftTokenId()]);
+
+  // eth_call (read-only)
+  const result = await getCurrentEthersWallet().provider?.call({
+    to: nftAddress(),
+    data: data,
+  });
+  if (!result) throw new Error("Could not load Owner");
+
+  // Decode result
+  const [owner] = iface.decodeFunctionResult("ownerOf", result);
+  return owner;
 }
