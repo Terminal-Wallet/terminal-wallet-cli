@@ -51,20 +51,13 @@ export function populateMechDeployment(): TransactionRequest {
 }
 
 export function populateMint(): TransactionRequest {
-  /*
-   * For now this is just a transfer, but the real contract will really require a mint
-   */
   const iface = new Interface([
-    "function transferFrom(address from, address to, uint256 tokenId)",
+    "function mint(address to, uint256 tokenId) external",
   ]);
 
   return {
     to: nftAddress(),
-    data: iface.encodeFunctionData("transferFrom", [
-      relayAdaptAddress(),
-      relayAdaptAddress(),
-      nftTokenId(),
-    ]),
+    data: iface.encodeFunctionData("mint", [relayAdaptAddress(), nftTokenId()]),
     value: 0,
   };
 }

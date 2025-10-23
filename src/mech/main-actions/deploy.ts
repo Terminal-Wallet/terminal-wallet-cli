@@ -7,6 +7,7 @@ import {
   mechAddress,
   nftAddress,
   populateMechDeployment,
+  populateMint,
 } from "../deployments";
 import {
   getCurrentRailgunAddress,
@@ -23,23 +24,34 @@ export async function deployMech() {
     await mechStatus();
 
   // for now we can comment this
-  // if (!isNFTMinted) {
-  //   console.log("Minting NFT");
-  //   await sendSelfSignedTransaction(
-  //     selfSignerInfo(),
-  //     getCurrentNetwork(),
-  //     await populateMint(),
-  //   );
-  // } else {
-  //   console.log("NFT already minted");
-  // }
+  if (!isNFTMinted) {
+    console.log("Minting NFT");
+    await sendSelfSignedTransaction(
+      selfSignerInfo(),
+      getCurrentNetwork(),
+      await populateMint(),
+    );
+  } else {
+    console.log("NFT already minted");
+  }
 
   if (!isNFTShielded) {
     console.log("Shielding NFT");
     await sendSelfSignedTransaction(
       selfSignerInfo(),
       getCurrentNetwork(),
-      await populateShieldNFT(),
+      await populateShieldTransaction({
+        nftIn: [
+          {
+            nftAddress: nftAddress(),
+            nftTokenType: NFTTokenType.ERC721,
+            tokenSubID: zeroPadValue(mechAddress(), 32),
+            amount: BigInt(1),
+            recipientAddress: getCurrentRailgunAddress(),
+          },
+        ],
+        erc20In: [],
+      }),
     );
   } else {
     console.log("NFT already shielded");
@@ -55,20 +67,6 @@ export async function deployMech() {
   } else {
     console.log("Mech already deployed");
   }
-}
-
-async function populateShieldNFT() {
-  const nftIn = [
-    {
-      nftAddress: nftAddress(),
-      nftTokenType: NFTTokenType.ERC721,
-      tokenSubID: zeroPadValue(mechAddress(), 32),
-      amount: BigInt(1),
-      recipientAddress: getCurrentRailgunAddress(),
-    },
-  ];
-
-  return populateShieldTransaction({ nftIn, erc20In: [] });
 }
 
 function selfSignerInfo() {
