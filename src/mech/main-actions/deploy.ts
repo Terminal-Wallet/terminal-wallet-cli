@@ -25,68 +25,62 @@ export async function deployMech() {
   const { isMechDeployed, isNFTMinted, isNFTShielded, isNFTSpendable } =
     await mechStatus();
 
-  try {
-    // for now we can comment this
-    if (!isNFTMinted) {
-      console.log("Minting NFT");
-      await sendSelfSignedTransaction(
-        selfSignerInfo(),
-        getCurrentNetwork(),
-        await populateMint(getCurrentEthersWallet().address),
-      );
+  if (!isNFTMinted) {
+    console.log("Minting NFT");
+    await sendSelfSignedTransaction(
+      selfSignerInfo(),
+      getCurrentNetwork(),
+      await populateMint(getCurrentEthersWallet().address),
+    );
 
-      console.log("Waiting 5 secs for mint");
-      await sleep(5000);
+    console.log("Waiting 5 secs for mint");
+    await sleep(5000);
 
-      console.log("Approving NFT");
-      await sendSelfSignedTransaction(
-        selfSignerInfo(),
-        getCurrentNetwork(),
-        await populateApprove(railgunSmartWalletAddress()),
-      );
+    console.log("Approving NFT");
+    await sendSelfSignedTransaction(
+      selfSignerInfo(),
+      getCurrentNetwork(),
+      await populateApprove(railgunSmartWalletAddress()),
+    );
 
-      console.log("Waiting 5 secs for approve");
-      await sleep(5000);
-    } else {
-      console.log("NFT already minted");
-    }
+    console.log("Waiting 5 secs for approve");
+    await sleep(5000);
+  } else {
+    console.log("NFT already minted");
+  }
 
-    if (!isNFTShielded) {
-      console.log("Shielding NFT");
+  if (!isNFTShielded) {
+    console.log("Shielding NFT");
 
-      await sendSelfSignedTransaction(
-        selfSignerInfo(),
-        getCurrentNetwork(),
-        await populateShieldTransaction({
-          nftIn: [
-            {
-              nftAddress: nftAddress(),
-              nftTokenType: NFTTokenType.ERC721,
-              tokenSubID: zeroPadValue(mechAddress(), 32),
-              amount: BigInt(1),
-              recipientAddress: getCurrentRailgunAddress(),
-            },
-          ],
-          erc20In: [],
-        }),
-      );
-    } else {
-      console.log("NFT already shielded");
-    }
+    await sendSelfSignedTransaction(
+      selfSignerInfo(),
+      getCurrentNetwork(),
+      await populateShieldTransaction({
+        nftIn: [
+          {
+            nftAddress: nftAddress(),
+            nftTokenType: NFTTokenType.ERC721,
+            tokenSubID: zeroPadValue(mechAddress(), 32),
+            amount: BigInt(1),
+            recipientAddress: getCurrentRailgunAddress(),
+          },
+        ],
+        erc20In: [],
+      }),
+    );
+  } else {
+    console.log("NFT already shielded");
+  }
 
-    if (!isMechDeployed) {
-      console.log("Deploying Mech");
-      await sendSelfSignedTransaction(
-        selfSignerInfo(),
-        getCurrentNetwork(),
-        await populateMechDeployment(),
-      );
-    } else {
-      console.log("Mech already deployed");
-    }
-  } catch (e) {
-    console.log(e);
-    throw e;
+  if (!isMechDeployed) {
+    console.log("Deploying Mech");
+    await sendSelfSignedTransaction(
+      selfSignerInfo(),
+      getCurrentNetwork(),
+      await populateMechDeployment(),
+    );
+  } else {
+    console.log("Mech already deployed");
   }
 }
 

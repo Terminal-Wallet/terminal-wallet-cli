@@ -1,4 +1,11 @@
-import { Interface, keccak256, TransactionRequest, ZeroHash } from "ethers";
+import {
+  AbiCoder,
+  concat,
+  getCreate2Address,
+  Interface,
+  keccak256,
+  TransactionRequest,
+} from "ethers";
 import {
   RailgunProxyContract,
   RelayAdaptContract,
@@ -6,13 +13,17 @@ import {
 
 import { getCurrentNetwork } from "../engine/engine";
 import { getCurrentEthersWallet } from "../wallet/public-utils";
-import {
-  encodeDeploySingleton,
-  predictSingletonAddress,
-} from "@gnosis-guild/zodiac-core";
+import { encodeCreateAccount } from "./encode";
+import configDefaults from "../config/config-defaults";
 
-const railgunMechBytecode =
-  "0x60c060405234801561000f575f80fd5b5060405161056338038061056383398101604081905261002e9161007c565b6001600160a01b03811660808190523060a08190526040519081527f395a37f76d5952499ce671a72044003fb77190777dbfc8c1b9521e270240f3459060200160405180910390a2506100a9565b5f6020828403121561008c575f80fd5b81516001600160a01b03811681146100a2575f80fd5b9392505050565b60805160a05161048d6100d65f395f818160c2015261010101525f818160770152610134015261048d5ff3fe608060405260043610610034575f3560e01c8063519454471461003d578063a8f4f65c14610066578063af640d0f146100b157005b3661003b57005b005b61005061004b36600461033a565b6100f2565b60405161005d91906103db565b60405180910390f35b348015610071575f80fd5b506100997f000000000000000000000000000000000000000000000000000000000000000081565b6040516001600160a01b03909116815260200161005d565b3480156100bc575f80fd5b506100e47f000000000000000000000000000000000000000000000000000000000000000081565b60405190815260200161005d565b6040516331a9108f60e11b81527f0000000000000000000000000000000000000000000000000000000000000000600482015260609033906001600160a01b037f00000000000000000000000000000000000000000000000000000000000000001690636352211e90602401602060405180830381865afa158015610179573d5f803e3d5ffd5b505050506040513d601f19601f8201168201806040525081019061019d9190610426565b6001600160a01b0316146102045760405162461bcd60e51b8152602060048201526024808201527f4f6e6c792063616c6c61626c6520627920746865204d656368206f70657261746044820152636f72202d60e01b60648201526084015b60405180910390fd5b5f8260ff165f0361027357866001600160a01b031686868660405161022a929190610448565b5f6040518083038185875af1925050503d805f8114610264576040519150601f19603f3d011682016040523d82523d5f602084013e610269565b606091505b509250905061030c565b8260ff166001036102d057866001600160a01b03168585604051610298929190610448565b5f60405180830381855af49150503d805f8114610264576040519150601f19603f3d011682016040523d82523d5f602084013e610269565b60405162461bcd60e51b815260206004820152601160248201527024b73b30b634b21037b832b930ba34b7b760791b60448201526064016101fb565b8061031957815160208301fd5b5095945050505050565b6001600160a01b0381168114610337575f80fd5b50565b5f805f805f6080868803121561034e575f80fd5b853561035981610323565b945060208601359350604086013567ffffffffffffffff8082111561037c575f80fd5b818801915088601f83011261038f575f80fd5b81358181111561039d575f80fd5b8960208285010111156103ae575f80fd5b602083019550809450505050606086013560ff811681146103cd575f80fd5b809150509295509295909350565b5f6020808352835180828501525f5b81811015610406578581018301518582016040015282016103ea565b505f604082860101526040601f19601f8301168501019250505092915050565b5f60208284031215610436575f80fd5b815161044181610323565b9392505050565b818382375f910190815291905056fea26469706673582212205a073499caa1e825ca819d871cc9307d373b835b7fda0adb063fd10819a99c2b64736f6c63430008150033";
+const config = {
+  erc6551Registry: {
+    address: "0x000000006551c19487814612e58FE06813775758",
+  },
+  mechMastercopy: {
+    address: "0xC62046fBbcF02725949Afeab16dcf75f5066E2bB",
+  },
+};
 
 export function railgunSmartWalletAddress() {
   return RailgunProxyContract[getCurrentNetwork()];
@@ -23,9 +34,12 @@ export function relayAdaptAddress() {
 }
 
 export function mechAddress() {
-  return predictSingletonAddress({
-    bytecode: railgunMechBytecode,
-    constructorArgs: { types: ["address"], values: [nftAddress()] },
+  const { chainId } = configDefaults.networkConfig[getCurrentNetwork()];
+  return calculateMechAddress({
+    chainId,
+    tokenAddress: nftAddress(),
+    tokenId: nftTokenId(),
+    from: config.erc6551Registry.address,
     salt: mechDeploymentSalt(),
   });
 }
@@ -35,19 +49,69 @@ export function nftAddress() {
 }
 
 export function nftTokenId() {
-  const address = mechAddress();
-  return BigInt(address);
+  const wallet = getCurrentEthersWallet();
+  return BigInt(keccak256(wallet.signMessageSync("RailgunNeuralLink tokenId")));
+}
+
+function calculateMechAddress(context: {
+  /** Address of the ERC721 token contract */
+  chainId: number;
+  /** Address of the ERC721 token contract */
+  tokenAddress: string;
+  /** ID of the ERC721 token */
+  tokenId: bigint;
+  salt: string;
+  from: string;
+}) {
+  try {
+    return getCreate2Address(
+      config.erc6551Registry.address,
+      context.salt,
+      keccak256(erc6551ProxyBytecode(config.mechMastercopy.address, context)),
+    );
+  } catch (e) {
+    console.log(e);
+    throw e;
+  }
 }
 
 export function populateMechDeployment(): TransactionRequest {
-  return encodeDeploySingleton({
-    bytecode: railgunMechBytecode,
-    constructorArgs: {
-      types: ["address"],
-      values: [nftAddress()],
-    },
-    salt: mechDeploymentSalt(),
-  }) as TransactionRequest;
+  const { chainId } = configDefaults.networkConfig[getCurrentNetwork()];
+
+  return {
+    to: config.erc6551Registry.address,
+    data: encodeCreateAccount({
+      salt: mechDeploymentSalt(),
+      chainId,
+      tokenAddress: nftAddress(),
+      tokenId: nftTokenId(),
+    }).data,
+  } as TransactionRequest;
+}
+
+function erc6551ProxyBytecode(
+  implementation: string,
+  {
+    chainId,
+    tokenAddress,
+    tokenId,
+    salt,
+  }: {
+    chainId: number;
+    tokenAddress: string;
+    tokenId: bigint;
+    salt?: string;
+  },
+) {
+  return concat([
+    "0x3d60ad80600a3d3981f3363d3d373d3d3d363d73",
+    implementation,
+    "0x5af43d82803e903d91602b57fd5bf3",
+    AbiCoder.defaultAbiCoder().encode(
+      ["uint256", "uint256", "address", "uint256"],
+      [salt, chainId, tokenAddress, tokenId],
+    ),
+  ]);
 }
 
 export function populateMint(to: string): TransactionRequest {
@@ -75,5 +139,5 @@ export function populateApprove(to: string) {
 
 export function mechDeploymentSalt() {
   const wallet = getCurrentEthersWallet();
-  return keccak256(wallet.signMessageSync("RailgunMech Deployment3"));
+  return keccak256(wallet.signMessageSync("RailgunMech Deployment"));
 }

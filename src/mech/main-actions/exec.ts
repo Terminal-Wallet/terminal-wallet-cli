@@ -33,8 +33,9 @@ function selfSignerInfo() {
 export async function execFromMech(calls: MetaTransaction[]) {
   const { isMechDeployed, isNFTMinted, isNFTSpendable } = await mechStatus();
 
-  if (!isNFTSpendable) {
-    throw new Error("NFT is not spendable");
+  if (isNFTMinted && !isNFTSpendable) {
+    console.log("Gotta wait");
+    return;
   }
 
   const myNFTOut = {
@@ -65,15 +66,15 @@ export async function execFromMech(calls: MetaTransaction[]) {
    * Lazy mech deployment and Lazy nft minting
    */
   const finalCalls = [
-    //isMechDeployed ? null : deployMetaTx,
-    // isNFTMinted ? null : mintMetaTx,
+    isMechDeployed ? null : deployMetaTx,
+    isNFTMinted ? null : mintMetaTx,
     ...calls,
   ]
     .filter((t) => !!t)
     .map((t) => encodeThroughMech(t as MetaTransaction));
 
   const transaction = await populateCrossTransaction({
-    unshieldNFTs: [myNFTOut],
+    unshieldNFTs: isNFTMinted ? [myNFTOut] : [],
     unshieldERC20s: [],
     crossContractCalls: finalCalls,
     shieldNFTs: [myNFTIn],
