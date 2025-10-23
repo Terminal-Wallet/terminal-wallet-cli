@@ -9,6 +9,7 @@ import {
   nftTokenId,
   populateMechDeployment,
   populateMint,
+  relayAdaptAddress,
 } from "../deployments";
 import {
   getCurrentRailgunAddress,
@@ -56,7 +57,7 @@ export async function execFromMech(calls: MetaTransaction[]) {
 
   const mintMetaTx: MetaTransaction = {
     value: 0,
-    ...(populateMint() as { to: string; data: string }),
+    ...(populateMint(relayAdaptAddress()) as { to: string; data: string }),
     operation: 0,
   };
 

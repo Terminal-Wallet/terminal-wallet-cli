@@ -34,11 +34,7 @@ export async function populateShieldTransaction({
     await getCurrentShieldPrivateKey();
   const txIDVersion = TXIDVersion.V2_PoseidonMerkle;
 
-  const { estimatedGasDetails } = await gasEstimationStupidModeOn(
-    chainName,
-    erc20In,
-    nftIn,
-  );
+  const { estimatedGasDetails } = await _gasEstimate(chainName, erc20In, nftIn);
 
   const { transaction } = await populateShield(
     txIDVersion,
@@ -54,7 +50,7 @@ export async function populateShieldTransaction({
   return transaction;
 }
 
-async function gasEstimationStupidModeOn(
+async function _gasEstimate(
   chainName: NetworkName,
   erc20: RailgunERC20AmountRecipient[],
   nft: RailgunNFTAmountRecipient[],
