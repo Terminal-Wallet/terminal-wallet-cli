@@ -7,30 +7,16 @@ import {
 } from "@railgun-community/shared-models";
 
 import {
-  mechAddress,
-  nftAddress,
-  nftTokenId,
-  relayAdaptAddress,
-} from "../deployments";
-import {
   getCurrentRailgunAddress,
   getCurrentRailgunID,
 } from "../../wallet/wallet-util";
-
 import { sendSelfSignedTransaction } from "../../transaction/transaction-builder";
 import { getCurrentNetwork } from "../../engine/engine";
-
 import { populateCrossTransaction } from "../populate/populateCrossTransaction";
 
-import { encodeThroughMech, encodeTranfer, encodeTranferFrom } from "../encode";
+import deployments from "../deployments";
 
-function selfSignerInfo() {
-  return {
-    railgunWalletID: getCurrentRailgunID(),
-    railgunWalletAddress: getCurrentRailgunAddress(),
-    derivationIndex: 0,
-  };
-}
+import { encodeMechExecute, encodeTranfer, encodeTranferFrom } from "../encode";
 
 export async function withdrawFromMech({
   withdrawNFTs,
@@ -39,10 +25,13 @@ export async function withdrawFromMech({
   withdrawNFTs: RailgunNFTAmount[];
   withdrawERC20s: RailgunERC20Amount[];
 }) {
+  const mech = deployments.mech();
+  const relayAdapt = deployments.relayAdapt();
+
   const neuralLinkOut = {
-    nftAddress: nftAddress(),
+    nftAddress: mech.tokenAddress,
     nftTokenType: NFTTokenType.ERC721,
-    tokenSubID: zeroPadValue(toBeHex(nftTokenId()), 32),
+    tokenSubID: zeroPadValue(toBeHex(mech.tokenId), 32),
     amount: BigInt(1),
   };
 
@@ -56,17 +45,17 @@ export async function withdrawFromMech({
     ...withdrawNFTs.map((e) => ({
       to: e.nftAddress,
       data: encodeTranferFrom(
-        mechAddress(),
-        relayAdaptAddress(),
+        mech.address,
+        relayAdapt.address,
         BigInt(e.tokenSubID),
       ),
     })),
     // from mech -> adapt
     ...withdrawERC20s.map((e) => ({
       to: e.tokenAddress,
-      data: encodeTranfer(relayAdaptAddress(), e.amount),
+      data: encodeTranfer(relayAdapt.address, e.amount),
     })),
-  ].map((tx) => ({ to: mechAddress(), data: encodeThroughMech(tx) }));
+  ].map((tx) => ({ to: mech.address, data: encodeMechExecute(tx) }));
 
   const transaction = await populateCrossTransaction({
     unshieldNFTs: [neuralLinkOut],
@@ -92,16 +81,10 @@ export async function withdrawFromMech({
   );
 }
 
-// function encodeDoSomething() {
-//   const abi = [
-//     "function transfer(address to, uint256 amount)",
-//     "function doSomething(uint256 v)",
-//   ];
-
-//   // Create an Interface
-//   const iface = new Interface(abi);
-
-//   // Encode the function data
-//   const data = iface.encodeFunctionData("doSomething", [919289128918298]);
-//   return { to: "0x47C2a8aA719877d26a09B79419cBF65ddE833A58", data };
-// }
+function selfSignerInfo() {
+  return {
+    railgunWalletID: getCurrentRailgunID(),
+    railgunWalletAddress: getCurrentRailgunAddress(),
+    derivationIndex: 0,
+  };
+}

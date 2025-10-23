@@ -78,7 +78,6 @@ import { Prompt } from "enquirer";
 import { mechStatus } from "../mech/main-actions/status";
 import { execFromMech } from "../mech/main-actions/exec";
 import { Interface, toBeHex } from "ethers";
-import { deployMech } from "../mech/main-actions/deploy";
 import { depositIntoMech } from "../mech/main-actions/deposit";
 import { withdrawFromMech } from "../mech/main-actions/withdraw";
 const { version } = require("../../package.json");
@@ -939,7 +938,8 @@ export const runMainMenu = async () => {
           .catch(confirmPromptCatch);
 
         if (confirmChoice === "confirm") {
-          await deployMech();
+          // deleteme
+          //await deployMech();
         }
       } else if (mechChoice === "test-exec") {
         //const iface = new ethers.Interface(["function deposit() payable"]);

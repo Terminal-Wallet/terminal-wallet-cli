@@ -1,27 +1,14 @@
-import {
-  getSerializedNFTBalances,
-  walletForID,
-} from "@railgun-community/wallet";
-import {
-  Chain,
-  ChainType,
-  TXIDVersion,
-} from "@railgun-community/shared-models";
+import { Interface, ZeroAddress } from "ethers";
+import { WalletBalanceBucket } from "@railgun-community/engine";
+
+import { walletForID } from "@railgun-community/wallet";
+import { ChainType, TXIDVersion } from "@railgun-community/shared-models";
 
 import { getCurrentRailgunID } from "../../wallet/wallet-util";
-
 import { getCurrentNetwork } from "../../engine/engine";
-
-import {
-  mechAddress,
-  mechDeploymentSalt,
-  nftAddress,
-  nftTokenId,
-  relayAdaptAddress,
-} from "../deployments";
 import { getCurrentEthersWallet } from "../../wallet/public-utils";
-import { WalletBalanceBucket } from "@railgun-community/engine";
-import { Interface, ZeroAddress } from "ethers";
+import deployments from "../deployments";
+import configDefaults from "../../config/config-defaults";
 
 /*
  *
@@ -40,41 +27,26 @@ export async function mechStatus(): Promise<{
   isNFTSpendable: boolean;
   isNFTBlocked: boolean;
 }> {
-  const wallet = getCurrentEthersWallet();
-  const address = mechAddress();
-  const code = await wallet.provider?.getCode(address);
+  const mech = deployments.mech();
+  try {
+    const wallet = getCurrentEthersWallet();
+    const code = await wallet.provider?.getCode(mech.address);
 
-  const { pending, spendable, blocked, minted } = await nftStatus();
+    const { pending, spendable, blocked, minted } = await nftStatus();
 
-  return {
-    address,
-    tokenAddress: nftAddress(),
-    isMechDeployed: !!code && code != "0x",
-    isNFTMinted: minted,
-    isNFTSpendable: spendable,
-    isNFTShielded: spendable || pending,
-    isNFTBlocked: blocked,
-  };
-}
-
-function getCurrentChain(): Chain {
-  const network = getCurrentNetwork();
-
-  const ids = {
-    Ethereum: 1,
-    BNB_Chain: 56,
-    Polygon: 137,
-    Arbitrum: 42161,
-    Ethereum_Sepolia: 11155111,
-    Polygon_Amoy: 80002,
-  };
-
-  const id = (ids as any)[network];
-  if (!id) {
-    throw new Error(`Network not found ${name}`);
+    return {
+      address: mech.address,
+      tokenAddress: mech.tokenAddress,
+      isMechDeployed: !!code && code != "0x",
+      isNFTMinted: minted,
+      isNFTSpendable: spendable,
+      isNFTShielded: spendable || pending,
+      isNFTBlocked: blocked,
+    };
+  } catch (e) {
+    console.log(e);
+    throw e;
   }
-
-  return { id, type: ChainType.EVM };
 }
 
 async function nftStatus() {
@@ -82,21 +54,22 @@ async function nftStatus() {
 
   const balancesByBucket = await wallet.getTokenBalancesByBucket(
     TXIDVersion.V2_PoseidonMerkle,
-    getCurrentChain(),
+    { id: chainId(), type: ChainType.EVM },
   );
+
+  const mech = deployments.mech();
 
   const _isMinted = await isMinted();
 
-  const tokenAddress = nftAddress().toLowerCase();
-  const tokenId = nftTokenId();
+  const { tokenAddress, tokenId } = mech;
 
   const collect = (bucket: WalletBalanceBucket) =>
     !!balancesByBucket[bucket] &&
     Object.values(balancesByBucket[bucket]).some(
       (bucket) =>
-        BigInt(bucket.balance) === BigInt(1) &&
-        bucket.tokenData.tokenAddress.toLowerCase() === tokenAddress &&
-        BigInt(bucket.tokenData.tokenSubID) === tokenId,
+        BigInt(1) === BigInt(bucket.balance) &&
+        tokenAddress === bucket.tokenData.tokenAddress.toLowerCase() &&
+        tokenId === BigInt(bucket.tokenData.tokenSubID),
     );
 
   return {
@@ -111,6 +84,7 @@ async function nftStatus() {
 }
 
 async function isMinted() {
+  const mech = deployments.mech();
   // so far we do onwerOf, final contracgt will feature different call
 
   // Create an Interface for ownerOf(uint256) — exact signature matters
@@ -119,11 +93,11 @@ async function isMinted() {
   ]);
 
   // Encode calldata
-  const data = iface.encodeFunctionData("ownerOf", [nftTokenId()]);
+  const data = iface.encodeFunctionData("ownerOf", [mech.tokenId]);
 
   // eth_call (read-only)
   const result = await getCurrentEthersWallet().provider?.call({
-    to: nftAddress(),
+    to: mech.tokenAddress,
     data: data,
   });
   if (!result) throw new Error("Could not load Owner");
@@ -131,4 +105,9 @@ async function isMinted() {
   // Decode result
   const [owner] = iface.decodeFunctionResult("ownerOf", result);
   return owner.toLowerCase() !== ZeroAddress;
+}
+
+function chainId() {
+  const { chainId } = configDefaults.networkConfig[getCurrentNetwork()];
+  return chainId;
 }

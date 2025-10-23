@@ -1,14 +1,78 @@
-import { Interface } from "ethers";
+import {
+  AbiCoder,
+  concat,
+  getCreate2Address,
+  Interface,
+  keccak256,
+  ZeroHash,
+} from "ethers";
+import { MetaTransaction } from "./http";
 
-export function encodeThroughMech({
+export function encodeMechCreate({
+  salt,
+  mastercopy,
+  chainId,
+  tokenAddress,
+  tokenId,
+}: {
+  salt: string;
+  mastercopy: string;
+  chainId: number | bigint;
+  tokenAddress: string;
+  tokenId: bigint;
+}) {
+  const iface = new Interface([
+    "function createAccount(address implementation, bytes32 salt, uint256 chainId, address tokenContract, uint256 tokenId) returns (address)",
+  ]);
+
+  return iface.encodeFunctionData("createAccount", [
+    mastercopy,
+    salt,
+    chainId,
+    tokenAddress,
+    tokenId,
+  ]);
+}
+
+export function predictMechAddress({
+  factory,
+  chainId,
+  mastercopy,
+  tokenAddress,
+  tokenId,
+}: {
+  factory: string;
+  chainId: number;
+  mastercopy: string;
+  tokenAddress: string;
+  tokenId: bigint;
+}): string {
+  const salt = ZeroHash;
+  const eip6551ProxyCreationBytecode = concat([
+    "0x3d60ad80600a3d3981f3363d3d373d3d3d363d73",
+    mastercopy,
+    "0x5af43d82803e903d91602b57fd5bf3",
+    AbiCoder.defaultAbiCoder().encode(
+      ["bytes32", "uint256", "address", "uint256"],
+      [salt, chainId, tokenAddress, tokenId],
+    ),
+  ]);
+  return getCreate2Address(
+    factory,
+    ZeroHash,
+    keccak256(eip6551ProxyCreationBytecode),
+  );
+}
+
+export function encodeMechExecute({
   to,
   value,
   data,
   operation,
 }: {
   to: string;
+  value?: string | bigint | number | undefined | null;
   data: string;
-  value?: bigint | number;
   operation?: number;
 }) {
   const iface = new Interface([
@@ -20,6 +84,14 @@ export function encodeThroughMech({
     data,
     operation || 0,
   ]);
+}
+
+export function encodeMint(to: string, tokenId: bigint) {
+  const iface = new Interface([
+    "function mint(address to, uint256 tokenId) external",
+  ]);
+
+  return iface.encodeFunctionData("mint", [to, tokenId]);
 }
 
 export function encodeTranfer(to: string, amount: bigint | number) {
@@ -35,41 +107,15 @@ export function encodeTranferFrom(from: string, to: string, tokenId: bigint) {
     "function transferFrom(address from, address to, uint256 tokenId)",
   ]);
 
-  // Encode calldata
   return iface.encodeFunctionData("transferFrom", [from, to, tokenId]);
 }
 
-export function encodeCreateAccount({
-  salt,
-  chainId,
-  tokenAddress,
-  tokenId,
-}: {
-  salt: string;
-  chainId: number | bigint;
-  tokenAddress: string;
-  tokenId: bigint;
-}) {
-  const erc6551Registry = "0x000000006551c19487814612e58FE06813775758";
-  const tokenBoundMechMastercopy = "0xC62046fBbcF02725949Afeab16dcf75f5066E2bB";
-
+export function encodeApprove(to: string, tokenId: bigint) {
   const iface = new Interface([
-    "error AccountCreationFailed()",
-    "event ERC6551AccountCreated(address account, address indexed implementation, bytes32 salt, uint256 chainId, address indexed tokenContract, uint256 indexed tokenId)",
-    "function account(address implementation, bytes32 salt, uint256 chainId, address tokenContract, uint256 tokenId) view returns (address)",
-    "function createAccount(address implementation, bytes32 salt, uint256 chainId, address tokenContract, uint256 tokenId) returns (address)",
+    "function approve(address to, uint256 tokenId)",
   ]);
 
-  return {
-    to: erc6551Registry,
-    data: iface.encodeFunctionData("createAccount", [
-      tokenBoundMechMastercopy,
-      salt,
-      chainId,
-      tokenAddress,
-      tokenId,
-    ]),
-  };
+  return iface.encodeFunctionData("approve", [to, tokenId]);
 }
 
 // export function encodeDoSomething() {
