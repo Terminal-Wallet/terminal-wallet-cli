@@ -80,6 +80,7 @@ import { execFromMech } from "../mech/main-actions/exec";
 import { Interface, toBeHex } from "ethers";
 import { deployMech } from "../mech/main-actions/deploy";
 import { depositIntoMech } from "../mech/main-actions/deposit";
+import { withdrawFromMech } from "../mech/main-actions/withdraw";
 const { version } = require("../../package.json");
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -950,12 +951,21 @@ export const runMainMenu = async () => {
         };
 
         //await execFromMech([tx]);
-        await depositIntoMech({
-          depositNFTs: [],
-          depositERC20s: [
+        // await depositIntoMech({
+        //   depositNFTs: [],
+        //   depositERC20s: [
+        //     {
+        //       tokenAddress: "0x0d500b1d8e8ef31e21c99d1db9a6444d3adf1270",
+        //       amount: BigInt(10 ** 16),
+        //     },
+        //   ],
+        // });
+        await withdrawFromMech({
+          withdrawNFTs: [],
+          withdrawERC20s: [
             {
               tokenAddress: "0x0d500b1d8e8ef31e21c99d1db9a6444d3adf1270",
-              amount: BigInt(10 ** 16),
+              amount: BigInt(5 * 10 ** 13),
             },
           ],
         });
