@@ -17,7 +17,7 @@ import { sendSelfSignedTransaction } from "../../transaction/transaction-builder
 import { getCurrentNetwork } from "../../engine/engine";
 import { populateShieldTransaction } from "../populate/populateShieldTransaction";
 
-export async function deploy() {
+export async function deployMech() {
   const { isMechDeployed, isNFTMinted, isNFTShielded, isNFTSpendable } =
     await mechStatus();
 

@@ -37,12 +37,6 @@ export async function execFromMech(calls: MetaTransaction[]) {
     throw new Error("NFT is not spendable");
   }
 
-  /*
-   *
-   * This logic takes care of lazy mech deployment and nft minting
-   *
-   */
-
   const myNFTOut = {
     nftAddress: nftAddress(),
     nftTokenType: NFTTokenType.ERC721,
@@ -67,13 +61,16 @@ export async function execFromMech(calls: MetaTransaction[]) {
     operation: 0,
   };
 
+  /*
+   * Lazy mech deployment and Lazy nft minting
+   */
   const finalCalls = [
     isMechDeployed ? null : deployMetaTx,
     isNFTMinted ? null : mintMetaTx,
     ...calls,
   ]
     .filter((t) => !!t)
-    .map((t) => encodeThroughMech(t));
+    .map((t) => encodeThroughMech(t as MetaTransaction));
 
   const transaction = await populateUnshieldTransaction({
     unshieldNFTs: isNFTMinted ? [myNFTOut] : [],

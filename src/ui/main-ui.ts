@@ -76,6 +76,8 @@ import { runRPCEditorPrompt } from "./provider-ui";
 import { launchPilot, promptTokenBalances } from "../mech";
 import { Prompt } from "enquirer";
 import { mechStatus } from "../mech/main-actions/status";
+import { execFromMech } from "../mech/main-actions/exec";
+import { Interface, toBeHex } from "ethers";
 import { deployMech } from "../mech/main-actions/deploy";
 const { version } = require("../../package.json");
 
@@ -890,6 +892,7 @@ export const runMainMenu = async () => {
         choices: [
           { name: "status", message: "Show Status" },
           { name: "deploy", message: "Deploy Mech" },
+          { name: "test", message: "Some Test Tx" },
           { name: "back", message: "Go back".grey },
         ],
         multiple: false,
@@ -902,15 +905,17 @@ export const runMainMenu = async () => {
         isMechDeployed,
         isNFTShielded,
         isNFTSpendable,
+        isNFTBlocked,
       } = await mechStatus();
 
       if (mechChoice === "status") {
         // Just show status and return to main menu
-        console.log(`Mech address:  ${address}`);
-        console.log(`NFT address:   ${tokenAddress}`);
-        console.log(`isDeployed:    ${isMechDeployed}`);
-        console.log(`isNFTShielded: ${isNFTShielded}`);
-        console.log(`isNFTSpendabe: ${isNFTSpendable}`);
+        console.log(`Mech address:   ${address}`);
+        console.log(`NFT address:    ${tokenAddress}`);
+        console.log(`isDeployed:     ${isMechDeployed}`);
+        console.log(`isNFTShielded:  ${isNFTShielded}`);
+        console.log(`isNFTSpendable: ${isNFTSpendable}`);
+        console.log(`isNFTBlock:     ${isNFTBlocked}`);
         await confirmPromptCatchRetry("");
 
         break;
@@ -932,6 +937,18 @@ export const runMainMenu = async () => {
         if (confirmChoice === "confirm") {
           await deployMech();
         }
+      } else if (mechChoice === "test-exec") {
+        //const iface = new ethers.Interface(["function deposit() payable"]);
+        //const data = iface.encodeFunctionData("deposit");
+        // WRAP ONE POL
+        const tx = {
+          to: "0x0d500b1d8e8ef31e21c99d1db9a6444d3adf1270", // wPOL contract
+          data: "0xd0e30db0", // deposit()
+          value: toBeHex(BigInt(10 ** 18), 32),
+          operation: 0 as any,
+        };
+
+        await execFromMech([tx]);
       }
       break;
     }

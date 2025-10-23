@@ -12,7 +12,12 @@ import { getCurrentRailgunID } from "../../wallet/wallet-util";
 
 import { getCurrentNetwork } from "../../engine/engine";
 
-import { mechAddress, nftAddress, nftTokenId } from "../deployments";
+import {
+  mechAddress,
+  nftAddress,
+  nftTokenId,
+  relayAdaptAddress,
+} from "../deployments";
 import { getCurrentEthersWallet } from "../../wallet/public-utils";
 import { WalletBalanceBucket } from "@railgun-community/engine";
 import { Interface } from "ethers";
@@ -73,18 +78,28 @@ function getCurrentChain(): Chain {
 
 async function nftStatus() {
   const wallet = walletForID(getCurrentRailgunID());
+
   const balancesByBucket = await wallet.getTokenBalancesByBucket(
     TXIDVersion.V2_PoseidonMerkle,
     getCurrentChain(),
   );
-  const _address = nftAddress();
+
+  const _isMinted = await isMinted();
+
+  const tokenAddress = nftAddress().toLowerCase();
+  const tokenId = nftTokenId();
 
   const collect = (bucket: WalletBalanceBucket) =>
-    balancesByBucket[bucket][_address].balance == BigInt(1);
+    !!balancesByBucket[bucket] &&
+    Object.values(balancesByBucket[bucket]).some(
+      (bucket) =>
+        BigInt(bucket.balance) === BigInt(1) &&
+        bucket.tokenData.tokenAddress.toLowerCase() === tokenAddress &&
+        BigInt(bucket.tokenData.tokenSubID) === tokenId,
+    );
 
   return {
-    // this check will change when we have the final contract:
-    minted: await isMinted(),
+    minted: _isMinted,
     spendable: collect(WalletBalanceBucket.Spendable),
     pending:
       collect(WalletBalanceBucket.MissingExternalPOI) ||
@@ -114,5 +129,5 @@ async function isMinted() {
 
   // Decode result
   const [owner] = iface.decodeFunctionResult("ownerOf", result);
-  return owner;
+  return (owner || "").toLowerCase() === relayAdaptAddress().toLowerCase();
 }
