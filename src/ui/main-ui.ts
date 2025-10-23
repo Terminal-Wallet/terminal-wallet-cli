@@ -905,6 +905,7 @@ export const runMainMenu = async () => {
         address,
         tokenAddress,
         isMechDeployed,
+        isNFTMinted,
         isNFTShielded,
         isNFTSpendable,
         isNFTBlocked,
@@ -915,6 +916,7 @@ export const runMainMenu = async () => {
         console.log(`Mech address:   ${address}`);
         console.log(`NFT address:    ${tokenAddress}`);
         console.log(`isDeployed:     ${isMechDeployed}`);
+        console.log(`isNFTMinted:    ${isNFTMinted}`);
         console.log(`isNFTShielded:  ${isNFTShielded}`);
         console.log(`isNFTSpendable: ${isNFTSpendable}`);
         console.log(`isNFTBlock:     ${isNFTBlocked}`);

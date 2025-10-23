@@ -31,7 +31,7 @@ export function mechAddress() {
 }
 
 export function nftAddress() {
-  return "0xA13f95F509e08ED10029037Aa057EE70DA9B28a3";
+  return "0x4529bd704852B3E4b7d043Ea1F866dd2443844Ce";
 }
 
 export function nftTokenId() {

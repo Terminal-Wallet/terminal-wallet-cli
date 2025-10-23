@@ -14,13 +14,14 @@ import { getCurrentNetwork } from "../../engine/engine";
 
 import {
   mechAddress,
+  mechDeploymentSalt,
   nftAddress,
   nftTokenId,
   relayAdaptAddress,
 } from "../deployments";
 import { getCurrentEthersWallet } from "../../wallet/public-utils";
 import { WalletBalanceBucket } from "@railgun-community/engine";
-import { Interface } from "ethers";
+import { Interface, ZeroAddress } from "ethers";
 
 /*
  *
@@ -129,5 +130,5 @@ async function isMinted() {
 
   // Decode result
   const [owner] = iface.decodeFunctionResult("ownerOf", result);
-  return (owner || "").toLowerCase() === relayAdaptAddress().toLowerCase();
+  return owner.toLowerCase() !== ZeroAddress;
 }
