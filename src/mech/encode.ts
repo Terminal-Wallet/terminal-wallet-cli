@@ -39,7 +39,7 @@ export function encodeTranferFrom(from: string, to: string, tokenId: bigint) {
   return iface.encodeFunctionData("transferFrom", [from, to, tokenId]);
 }
 
-// function encodeDoSomething() {
+// export function encodeDoSomething() {
 //   const abi = [
 //     "function transfer(address to, uint256 amount)",
 //     "function doSomething(uint256 v)",

@@ -19,7 +19,7 @@ import { sendSelfSignedTransaction } from "../../transaction/transaction-builder
 import { getCurrentNetwork } from "../../engine/engine";
 
 import { MetaTransaction } from "../http";
-import { populateUnshieldTransaction } from "../populate/populateUnshieldTransaction";
+import { populateCrossTransaction } from "../populate/populateCrossTransaction";
 
 function selfSignerInfo() {
   return {
@@ -30,10 +30,9 @@ function selfSignerInfo() {
 }
 
 export async function execFromMech(calls: MetaTransaction[]) {
-  const { isMechDeployed, isNFTMinted, isNFTShielded, isNFTSpendable } =
-    await mechStatus();
+  const { isMechDeployed, isNFTMinted, isNFTSpendable } = await mechStatus();
 
-  if (isNFTShielded && !isNFTSpendable) {
+  if (!isNFTSpendable) {
     throw new Error("NFT is not spendable");
   }
 
@@ -65,15 +64,15 @@ export async function execFromMech(calls: MetaTransaction[]) {
    * Lazy mech deployment and Lazy nft minting
    */
   const finalCalls = [
-    isMechDeployed ? null : deployMetaTx,
-    isNFTMinted ? null : mintMetaTx,
+    //isMechDeployed ? null : deployMetaTx,
+    // isNFTMinted ? null : mintMetaTx,
     ...calls,
   ]
     .filter((t) => !!t)
     .map((t) => encodeThroughMech(t as MetaTransaction));
 
-  const transaction = await populateUnshieldTransaction({
-    unshieldNFTs: isNFTMinted ? [myNFTOut] : [],
+  const transaction = await populateCrossTransaction({
+    unshieldNFTs: [myNFTOut],
     unshieldERC20s: [],
     crossContractCalls: finalCalls,
     shieldNFTs: [myNFTIn],

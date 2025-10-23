@@ -7,12 +7,12 @@ import {
 import { sendSelfSignedTransaction } from "../../transaction/transaction-builder";
 import { getCurrentNetwork } from "../../engine/engine";
 
-import { populateUnshieldTransaction } from "../populate/populateUnshieldTransaction";
 import {
   RailgunERC20Amount,
   RailgunNFTAmount,
 } from "@railgun-community/shared-models";
-import { encodeTranfer, encodeTranferFrom } from "../encode";
+
+import { populateUnshieldTransaction } from "../populate/populateUnshieldTransaction";
 
 function selfSignerInfo() {
   return {
@@ -30,29 +30,15 @@ export async function depositIntoMech({
   depositNFTs: RailgunNFTAmount[];
   depositERC20s: RailgunERC20Amount[];
 }) {
-  // TODO: I think we can here just call RailgunDirectly and just transfer it to Mech. We don't need the RelayAdapt?
-
-  const calls = [
-    ...depositNFTs.map((e) => ({
-      to: e.nftAddress,
-      data: encodeTranferFrom(
-        relayAdaptAddress(),
-        mechAddress(),
-        BigInt(e.tokenSubID),
-      ),
-    })),
-    ...depositERC20s.map((e) => ({
-      to: e.tokenAddress,
-      data: encodeTranfer(mechAddress(), e.amount),
-    })),
-  ];
-
   const transaction = await populateUnshieldTransaction({
-    unshieldNFTs: [...depositNFTs],
-    unshieldERC20s: depositERC20s,
-    crossContractCalls: calls,
-    shieldNFTs: [],
-    shieldERC20s: [],
+    unshieldNFTs: depositNFTs.map((entry) => ({
+      ...entry,
+      recipientAddress: mechAddress(),
+    })),
+    unshieldERC20s: depositERC20s.map((entry) => ({
+      ...entry,
+      recipientAddress: mechAddress(),
+    })),
   });
 
   await sendSelfSignedTransaction(

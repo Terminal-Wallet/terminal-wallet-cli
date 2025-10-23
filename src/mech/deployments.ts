@@ -78,7 +78,7 @@ export function populateMint(): TransactionRequest {
   };
 }
 
-function mechDeploymentSalt() {
+export function mechDeploymentSalt() {
   const wallet = getCurrentEthersWallet();
   return keccak256(wallet.signMessageSync("RailgunMech Deployment"));
 }

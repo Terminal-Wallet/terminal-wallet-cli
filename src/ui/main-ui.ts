@@ -79,6 +79,7 @@ import { mechStatus } from "../mech/main-actions/status";
 import { execFromMech } from "../mech/main-actions/exec";
 import { Interface, toBeHex } from "ethers";
 import { deployMech } from "../mech/main-actions/deploy";
+import { depositIntoMech } from "../mech/main-actions/deposit";
 const { version } = require("../../package.json");
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -892,7 +893,7 @@ export const runMainMenu = async () => {
         choices: [
           { name: "status", message: "Show Status" },
           { name: "deploy", message: "Deploy Mech" },
-          { name: "test", message: "Some Test Tx" },
+          { name: "test-exec", message: "Test Tx" },
           { name: "back", message: "Go back".grey },
         ],
         multiple: false,
@@ -944,11 +945,20 @@ export const runMainMenu = async () => {
         const tx = {
           to: "0x0d500b1d8e8ef31e21c99d1db9a6444d3adf1270", // wPOL contract
           data: "0xd0e30db0", // deposit()
-          value: toBeHex(BigInt(10 ** 18), 32),
+          value: toBeHex(BigInt(10 ** 17), 32),
           operation: 0 as any,
         };
 
-        await execFromMech([tx]);
+        //await execFromMech([tx]);
+        await depositIntoMech({
+          depositNFTs: [],
+          depositERC20s: [
+            {
+              tokenAddress: "0x0d500b1d8e8ef31e21c99d1db9a6444d3adf1270",
+              amount: BigInt(10 ** 16),
+            },
+          ],
+        });
       }
       break;
     }

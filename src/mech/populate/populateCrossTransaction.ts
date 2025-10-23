@@ -1,11 +1,13 @@
-import { TransactionRequest } from "ethers";
+import { ContractTransaction, TransactionRequest } from "ethers";
 import {
-  gasEstimateForUnprovenUnshield,
-  generateUnshieldProof,
-  populateProvedUnshield,
+  gasEstimateForUnprovenCrossContractCalls,
+  generateCrossContractCallsProof,
+  populateProvedCrossContractCalls,
 } from "@railgun-community/wallet";
 import {
+  RailgunERC20Amount,
   RailgunERC20AmountRecipient,
+  RailgunNFTAmount,
   RailgunNFTAmountRecipient,
   TXIDVersion,
 } from "@railgun-community/shared-models";
@@ -18,13 +20,23 @@ import { getOutputGasEstimate } from "../../transaction/private/unshield-tx";
 
 import { getCurrentNetwork } from "../../engine/engine";
 
-export async function populateUnshieldTransaction({
+export async function populateCrossTransaction({
   // Assets to unshield FROM Railgun (these will be available in contract calls)
   unshieldNFTs,
   unshieldERC20s,
+
+  // Custom transactions
+  crossContractCalls,
+
+  // Assets to shield back INTO Railgun (optional, can be empty)
+  shieldNFTs,
+  shieldERC20s,
 }: {
-  unshieldNFTs: RailgunNFTAmountRecipient[];
-  unshieldERC20s: RailgunERC20AmountRecipient[];
+  unshieldNFTs: RailgunNFTAmount[];
+  unshieldERC20s?: RailgunERC20Amount[];
+  crossContractCalls: ContractTransaction[];
+  shieldNFTs?: RailgunNFTAmountRecipient[];
+  shieldERC20s?: RailgunERC20AmountRecipient[];
 }): Promise<TransactionRequest> {
   const txIDVersion = TXIDVersion.V2_PoseidonMerkle;
   const networkName = getCurrentNetwork();
@@ -36,53 +48,67 @@ export async function populateUnshieldTransaction({
   const encryptionKey = await getSaltedPassword();
   if (!encryptionKey) throw new Error("Failed to get encryption key");
 
-  const sendWithPublicWallet = true;
+  const sendWithPublicWallet = true; // You'll pay gas yourself in ETH
 
-  const { gasEstimate } = await gasEstimateForUnprovenUnshield(
+  const gasEstimateResponse = await gasEstimateForUnprovenCrossContractCalls(
     txIDVersion,
     networkName,
     railgunWalletID,
     encryptionKey,
-    unshieldERC20s,
+    unshieldERC20s || [],
     unshieldNFTs,
+    shieldERC20s || [],
+    shieldNFTs || [],
+    crossContractCalls,
     gasDetailsResult.originalGasDetails,
     gasDetailsResult.feeTokenDetails,
     sendWithPublicWallet,
+    undefined,
   );
 
-  const { estimatedGasDetails } = await getOutputGasEstimate(
+  console.log(`Estimated gas: ${gasEstimateResponse.gasEstimate}`);
+
+  const finalGasDetails = await getOutputGasEstimate(
     gasDetailsResult.originalGasDetails,
-    gasEstimate,
+    gasEstimateResponse.gasEstimate,
     gasDetailsResult.feeTokenInfo,
     gasDetailsResult.feeTokenDetails,
     undefined,
     gasDetailsResult.overallBatchMinGasPrice,
   );
 
-  await generateUnshieldProof(
+  console.log("Generating proof...");
+
+  await generateCrossContractCallsProof(
     txIDVersion,
     networkName,
     railgunWalletID,
     encryptionKey,
-    unshieldERC20s,
+    unshieldERC20s || [],
     unshieldNFTs,
-    undefined,
+    shieldERC20s || [], // ✅ RailgunERC20Recipient[]
+    shieldNFTs || [], // ✅ RailgunNFTAmountRecipient[]
+    crossContractCalls,
+    finalGasDetails.broadcasterFeeERC20Recipient,
     sendWithPublicWallet,
     gasDetailsResult.overallBatchMinGasPrice,
+    undefined,
     () => console.log(`Proof generation in progress...`),
   );
 
-  const { transaction, nullifiers } = await populateProvedUnshield(
+  const response = await populateProvedCrossContractCalls(
     txIDVersion,
     networkName,
     railgunWalletID,
-    unshieldERC20s,
+    unshieldERC20s || [],
     unshieldNFTs,
-    undefined, // No broadcaster fee
+    shieldERC20s || [],
+    shieldNFTs || [],
+    crossContractCalls,
+    finalGasDetails.broadcasterFeeERC20Recipient,
     sendWithPublicWallet,
     gasDetailsResult.overallBatchMinGasPrice,
-    estimatedGasDetails,
+    finalGasDetails.estimatedGasDetails,
   );
-
-  return transaction;
+  return response.transaction;
 }

@@ -7,7 +7,6 @@ import {
   mechAddress,
   nftAddress,
   populateMechDeployment,
-  populateMint,
 } from "../deployments";
 import {
   getCurrentRailgunAddress,
@@ -16,6 +15,8 @@ import {
 import { sendSelfSignedTransaction } from "../../transaction/transaction-builder";
 import { getCurrentNetwork } from "../../engine/engine";
 import { populateShieldTransaction } from "../populate/populateShieldTransaction";
+import { deployMastercopy } from "@gnosis-guild/zodiac-core";
+import { getEthersWalletForSigner } from "../../wallet/public-utils";
 
 export async function deployMech() {
   const { isMechDeployed, isNFTMinted, isNFTShielded, isNFTSpendable } =

@@ -1,6 +1,10 @@
 import { toBeHex, zeroPadValue } from "ethers";
 
 import { NFTTokenType } from "@railgun-community/wallet";
+import {
+  RailgunERC20Amount,
+  RailgunNFTAmount,
+} from "@railgun-community/shared-models";
 
 import {
   mechAddress,
@@ -16,11 +20,8 @@ import {
 import { sendSelfSignedTransaction } from "../../transaction/transaction-builder";
 import { getCurrentNetwork } from "../../engine/engine";
 
-import { populateUnshieldTransaction } from "../populate/populateUnshieldTransaction";
-import {
-  RailgunERC20Amount,
-  RailgunNFTAmount,
-} from "@railgun-community/shared-models";
+import { populateCrossTransaction } from "../populate/populateCrossTransaction";
+
 import { encodeThroughMech, encodeTranfer, encodeTranferFrom } from "../encode";
 
 function selfSignerInfo() {
@@ -67,7 +68,7 @@ export async function withdrawFromMech({
     })),
   ].map((tx) => ({ to: mechAddress(), data: encodeThroughMech(tx) }));
 
-  const transaction = await populateUnshieldTransaction({
+  const transaction = await populateCrossTransaction({
     unshieldNFTs: [neuralLinkOut],
     unshieldERC20s: [],
     crossContractCalls: calls,
