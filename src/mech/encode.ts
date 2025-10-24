@@ -6,7 +6,6 @@ import {
   keccak256,
   ZeroHash,
 } from "ethers";
-import { MetaTransaction } from "./http";
 
 export function encodeMechCreate({
   salt,
@@ -86,12 +85,10 @@ export function encodeMechExecute({
   ]);
 }
 
-export function encodeMint(to: string, tokenId: bigint) {
-  const iface = new Interface([
-    "function mint(address to, uint256 tokenId) external",
-  ]);
+export function encodeMint() {
+  const iface = new Interface(["function mint() external"]);
 
-  return iface.encodeFunctionData("mint", [to, tokenId]);
+  return iface.encodeFunctionData("mint");
 }
 
 export function encodeTranfer(to: string, amount: bigint | number) {

@@ -12,6 +12,7 @@ import { getCurrentNetwork } from "../../engine/engine";
 import deployments from "../deployments";
 
 import { populateUnshieldTransaction } from "../railgun-primitives";
+import { findAvailableMech } from "../status";
 
 export async function depositIntoMech({
   /*
@@ -23,16 +24,21 @@ export async function depositIntoMech({
   depositNFTs: RailgunNFTAmount[];
   depositERC20s: RailgunERC20Amount[];
 }) {
-  const mech = deployments.mech();
+  const entry = await findAvailableMech();
+  if (!entry) {
+    throw new Error("No available Mech found");
+  }
+
+  const { mechAddress } = entry;
 
   const transaction = await populateUnshieldTransaction({
     unshieldNFTs: depositNFTs.map((entry) => ({
       ...entry,
-      recipientAddress: mech.address,
+      recipientAddress: mechAddress,
     })),
     unshieldERC20s: depositERC20s.map((entry) => ({
       ...entry,
-      recipientAddress: mech.address,
+      recipientAddress: mechAddress,
     })),
   });
 

@@ -1,8 +1,3 @@
-import { toBeHex, zeroPadValue } from "ethers";
-
-import { NFTTokenType } from "@railgun-community/wallet";
-
-import { mechStatus } from "./status";
 import {
   getCurrentRailgunAddress,
   getCurrentRailgunID,
@@ -10,83 +5,31 @@ import {
 import { sendSelfSignedTransaction } from "../../transaction/transaction-builder";
 import { getCurrentNetwork } from "../../engine/engine";
 
-import { getCurrentEthersWallet } from "../../wallet/public-utils";
-import { populateShieldTransaction } from "../railgun-primitives";
-import deployments, { mechDeploymentTx } from "../deployments";
-import { encodeApprove, encodeMint } from "../encode";
+import { status } from "../status";
+
+import { mechDeploymentTx } from "../deployments";
 
 export async function deployMech() {
-  const { isMechDeployed, isNFTMinted, isNFTShielded, isNFTSpendable } =
-    await mechStatus();
+  const entries = await status();
 
-  const mech = deployments.mech();
-  const railgunSmartWallet = deployments.railgunSmartWallet();
-
-  if (!isNFTMinted) {
-    console.log("Minting NFT");
-    const mintTx = {
-      to: mech.tokenAddress,
-      data: encodeMint(getCurrentEthersWallet().address, mech.tokenId),
-    };
-    await sendSelfSignedTransaction(
-      selfSignerInfo(),
-      getCurrentNetwork(),
-      mintTx,
-    );
-
-    console.log("Waiting 5 secs for mint");
-    await sleep(5000);
-
-    console.log("Approving NFT");
-    const approveTx = {
-      to: mech.tokenAddress,
-      data: encodeApprove(railgunSmartWallet.address, mech.tokenId),
-    };
-    await sendSelfSignedTransaction(
-      selfSignerInfo(),
-      getCurrentNetwork(),
-      approveTx,
-    );
-
-    console.log("Waiting 5 secs for approve");
-    await sleep(5000);
-  } else {
-    console.log("NFT already minted");
+  const hit = entries.find(
+    (e) => e.isNFTShielded && !e.isNFTBlocked && !e.isMechDeployed,
+  );
+  if (!hit) {
+    console.log(`No suitable NFT to use for Mech Deploy`);
+    return;
   }
 
-  if (!isNFTShielded) {
-    console.log("Shielding NFT");
+  const { tokenId } = hit;
 
-    await sendSelfSignedTransaction(
-      selfSignerInfo(),
-      getCurrentNetwork(),
-      await populateShieldTransaction({
-        nftIn: [
-          {
-            nftAddress: mech.tokenAddress,
-            nftTokenType: NFTTokenType.ERC721,
-            tokenSubID: zeroPadValue(toBeHex(mech.tokenId), 32),
-            amount: BigInt(1),
-            recipientAddress: getCurrentRailgunAddress(),
-          },
-        ],
-        erc20In: [],
-      }),
-    );
-  } else {
-    console.log("NFT already shielded");
-  }
-
-  if (!isMechDeployed) {
-    console.log("Deploying Mech");
-    await sendSelfSignedTransaction(
-      selfSignerInfo(),
-      getCurrentNetwork(),
-      mechDeploymentTx(),
-    );
-  } else {
-    console.log("Mech already deployed");
-  }
+  console.log("Deploying Mech");
+  const result = await sendSelfSignedTransaction(
+    selfSignerInfo(),
+    getCurrentNetwork(),
+    mechDeploymentTx(tokenId),
+  );
+  console.log("Waiting for Mech deployment...");
+  await result?.wait();
 }
 
 function selfSignerInfo() {
@@ -95,8 +38,4 @@ function selfSignerInfo() {
     railgunWalletAddress: getCurrentRailgunAddress(),
     derivationIndex: 0,
   };
-}
-
-function sleep(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }

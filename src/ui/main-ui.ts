@@ -79,13 +79,13 @@ import { Prompt } from "enquirer";
 
 import { launchPilot, promptTokenBalances } from "../mech";
 import {
-  // executeInMech,
   withdrawFromMech,
   depositIntoMech,
-  mechStatus,
   executeViaMech,
+  deployMech,
 } from "../mech/ui-actions";
-import { deployMech } from "../mech/ui-actions/deploy";
+import { mint } from "../mech/ui-actions/mint";
+import { status } from "../mech/status";
 
 const { version } = require("../../package.json");
 
@@ -896,59 +896,47 @@ export const runMainMenu = async () => {
       // });
       const mechMenuPrompt = new Select({
         header: " ",
-        message: "Mech Options",
+        message: "select",
         choices: [
           { name: "status", message: "Show Status" },
+          { name: "mint", message: "Mint NFT" },
           { name: "deploy", message: "Deploy Mech" },
-          { name: "test-exec", message: "Test Tx" },
-          { name: "back", message: "Go back".grey },
+          { name: "deposit", message: "Deposit" },
+          { name: "exec", message: "Execute" },
+          { name: "withdraw", message: "Withdraw" },
+          { name: "back", message: "Back".grey },
         ],
         multiple: false,
       });
 
       const mechChoice = await mechMenuPrompt.run().catch(confirmPromptCatch);
-      const {
-        address,
-        tokenAddress,
-        isMechDeployed,
-        isNFTMinted,
-        isNFTShielded,
-        isNFTSpendable,
-        isNFTBlocked,
-      } = await mechStatus();
 
       if (mechChoice === "status") {
+        const entries = await status();
+        for (const entry of entries) {
+          console.log("-----");
+          console.log(` Mech address:   ${entry.mechAddress}`);
+          console.log(` NFT address:    ${entry.tokenAddress}`);
+          console.log(` TokenId:        ${entry.tokenId}`);
+          console.log(` isDeployed:     ${entry.isMechDeployed}`);
+          console.log(` isNFTShielded:  ${entry.isNFTShielded}`);
+          console.log(` isNFTSpendable: ${entry.isNFTSpendable}`);
+          console.log(` isNFTBlocked:   ${entry.isNFTBlocked}`);
+        }
+        if (entries.length === 0) {
+          console.log("No NFT minted or Shielded");
+        }
+
         // Just show status and return to main menu
-        console.log(`Mech address:   ${address}`);
-        console.log(`NFT address:    ${tokenAddress}`);
-        console.log(`isDeployed:     ${isMechDeployed}`);
-        console.log(`isNFTMinted:    ${isNFTMinted}`);
-        console.log(`isNFTShielded:  ${isNFTShielded}`);
-        console.log(`isNFTSpendable: ${isNFTSpendable}`);
-        console.log(`isNFTBlock:     ${isNFTBlocked}`);
+
         await confirmPromptCatchRetry("");
 
         break;
+      } else if (mechChoice === "mint") {
+        await mint();
       } else if (mechChoice === "deploy") {
-        const confirmPrompt = new Select({
-          header: " ",
-          message: "Confirm Mech deployment?",
-          choices: [
-            { name: "confirm", message: "Yes" },
-            { name: "cancel", message: "Cancel".grey },
-          ],
-          multiple: false,
-        });
-
-        const confirmChoice = await confirmPrompt
-          .run()
-          .catch(confirmPromptCatch);
-
-        if (confirmChoice === "confirm") {
-          // deleteme
-          await deployMech();
-        }
-      } else if (mechChoice === "test-exec") {
+        await deployMech();
+      } else if (mechChoice === "exec") {
         //const iface = new ethers.Interface(["function deposit() payable"]);
         //const data = iface.encodeFunctionData("deposit");
         // WRAP ONE POL
@@ -960,6 +948,7 @@ export const runMainMenu = async () => {
         };
 
         await executeViaMech([tx]);
+      } else if (mechChoice === "deposit") {
         // await depositIntoMech({
         //   depositNFTs: [],
         //   depositERC20s: [
@@ -969,6 +958,8 @@ export const runMainMenu = async () => {
         //     },
         //   ],
         // });
+        await confirmPromptCatchRetry("");
+      } else if (mechChoice === "withdraw") {
         // await withdrawFromMech({
         //   withdrawNFTs: [],
         //   withdrawERC20s: [
@@ -978,6 +969,7 @@ export const runMainMenu = async () => {
         //     },
         //   ],
         // });
+        await confirmPromptCatchRetry("");
       }
       break;
     }

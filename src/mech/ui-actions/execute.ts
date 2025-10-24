@@ -11,28 +11,24 @@ import { sendSelfSignedTransaction } from "../../transaction/transaction-builder
 import { getCurrentNetwork } from "../../engine/engine";
 
 import { MetaTransaction } from "../http";
-import { encodeMechExecute, encodeMint } from "../encode";
+import { encodeMechExecute } from "../encode";
 import { populateCrossTransaction } from "../railgun-primitives";
 
-import { mechStatus } from "./status";
-
-import deployments, { mechDeploymentTx } from "../deployments";
+import { findAvailableMech } from "../status";
 
 export async function executeViaMech(calls: MetaTransaction[]) {
-  const mech = deployments.mech();
-  const relayAdapt = deployments.relayAdapt();
-
-  const { isMechDeployed, isNFTMinted, isNFTSpendable } = await mechStatus();
-
-  if (isNFTMinted && !isNFTSpendable) {
-    console.log("Gotta wait");
+  const entry = await findAvailableMech();
+  if (!entry) {
+    console.log("No available Mech for found");
     return;
   }
 
+  const { mechAddress, tokenAddress, tokenId } = entry;
+
   const myNFTOut = {
-    nftAddress: mech.tokenAddress,
+    nftAddress: tokenAddress,
     nftTokenType: NFTTokenType.ERC721,
-    tokenSubID: zeroPadValue(toBeHex(mech.tokenId), 32),
+    tokenSubID: zeroPadValue(toBeHex(tokenId), 32),
     amount: BigInt(1),
   };
 
@@ -41,44 +37,26 @@ export async function executeViaMech(calls: MetaTransaction[]) {
     recipientAddress: getCurrentRailgunAddress(),
   };
 
-  const deployMetaTx: MetaTransaction = {
-    value: 0,
-    ...mechDeploymentTx(),
-    operation: 0,
-  };
-
-  const mintMetaTx: MetaTransaction = {
-    to: mech.tokenAddress,
-    value: 0,
-    data: encodeMint(relayAdapt.address, mech.tokenId),
-    operation: 0,
-  };
-
-  /*
-   * Lazy mech deployment and Lazy nft minting
-   */
-  const finalCalls = [
-    isMechDeployed ? null : deployMetaTx,
-    isNFTMinted ? null : mintMetaTx,
-    ...calls.map((t) => ({
-      to: mech.address,
-      data: encodeMechExecute(t),
-    })),
-  ].filter((t) => !!t) as ContractTransaction[];
+  const finalCalls = calls.map((t) => ({
+    to: mechAddress,
+    data: encodeMechExecute(t),
+  }));
 
   const transaction = await populateCrossTransaction({
-    unshieldNFTs: isNFTMinted ? [myNFTOut] : [],
+    unshieldNFTs: [myNFTOut],
     unshieldERC20s: [],
     crossContractCalls: finalCalls,
     shieldNFTs: [myNFTIn],
     shieldERC20s: [],
   });
 
-  await sendSelfSignedTransaction(
+  const result = await sendSelfSignedTransaction(
     selfSignerInfo(),
     getCurrentNetwork(),
     transaction,
   );
+  console.log("Waiting for execution...");
+  await result?.wait();
 }
 
 function selfSignerInfo() {

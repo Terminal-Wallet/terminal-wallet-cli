@@ -14,10 +14,10 @@ import { sendSelfSignedTransaction } from "../../transaction/transaction-builder
 import { getCurrentNetwork } from "../../engine/engine";
 
 import { populateCrossTransaction } from "../railgun-primitives";
+import { encodeMechExecute, encodeTranfer, encodeTranferFrom } from "../encode";
+import { findAvailableMech } from "../status";
 
 import deployments from "../deployments";
-
-import { encodeMechExecute, encodeTranfer, encodeTranferFrom } from "../encode";
 
 export async function withdrawFromMech({
   withdrawNFTs,
@@ -26,13 +26,19 @@ export async function withdrawFromMech({
   withdrawNFTs: RailgunNFTAmount[];
   withdrawERC20s: RailgunERC20Amount[];
 }) {
-  const mech = deployments.mech();
+  const hit = await findAvailableMech();
+  if (!hit) {
+    console.log("No available Mechs found");
+    return;
+  }
+
   const relayAdapt = deployments.relayAdapt();
+  const { mechAddress, tokenAddress, tokenId } = hit;
 
   const neuralLinkOut = {
-    nftAddress: mech.tokenAddress,
+    nftAddress: tokenAddress,
     nftTokenType: NFTTokenType.ERC721,
-    tokenSubID: zeroPadValue(toBeHex(mech.tokenId), 32),
+    tokenSubID: zeroPadValue(toBeHex(tokenId), 32),
     amount: BigInt(1),
   };
 
@@ -46,7 +52,7 @@ export async function withdrawFromMech({
     ...withdrawNFTs.map((e) => ({
       to: e.nftAddress,
       data: encodeTranferFrom(
-        mech.address,
+        mechAddress,
         relayAdapt.address,
         BigInt(e.tokenSubID),
       ),
@@ -56,7 +62,7 @@ export async function withdrawFromMech({
       to: e.tokenAddress,
       data: encodeTranfer(relayAdapt.address, e.amount),
     })),
-  ].map((tx) => ({ to: mech.address, data: encodeMechExecute(tx) }));
+  ].map((tx) => ({ to: mechAddress, data: encodeMechExecute(tx) }));
 
   const transaction = await populateCrossTransaction({
     unshieldNFTs: [neuralLinkOut],

@@ -1,30 +1,22 @@
-import { keccak256, ZeroHash } from "ethers";
+import { ZeroHash } from "ethers";
 import {
   RailgunProxyContract,
   RelayAdaptContract,
 } from "@railgun-community/shared-models";
 
 import { getCurrentNetwork } from "../engine/engine";
-import { getCurrentEthersWallet } from "../wallet/public-utils";
 import configDefaults from "../config/config-defaults";
+
 import { encodeMechCreate, predictMechAddress } from "./encode";
 
 // universal addresses:
 const erc6551Factory = "0x000000006551c19487814612e58fe06813775758";
 const mechMastercopy = "0xc62046fbbcf02725949afeab16dcf75f5066e2bb";
-const railgunNeuralLink = "0x4529bd704852b3e4b7d043ea1f866dd2443844ce";
+const railgunNeuralLink = "0xd53c76d176c45f93bd86da63842abbc6d467c3ea";
 
 function chainId() {
   const { chainId } = configDefaults.networkConfig[getCurrentNetwork()];
   return chainId;
-}
-
-function tokenId() {
-  return BigInt(
-    keccak256(
-      getCurrentEthersWallet().signMessageSync("RailgunNeuralLink tokenId"),
-    ),
-  );
 }
 
 export default {
@@ -34,20 +26,21 @@ export default {
   relayAdapt: () => ({
     address: RelayAdaptContract[getCurrentNetwork()].toLowerCase(),
   }),
-  mech: () => ({
+  railgunNeuralLink,
+  mech: (tokenId: bigint) => ({
     address: predictMechAddress({
       factory: erc6551Factory,
       chainId: chainId(),
       mastercopy: mechMastercopy,
       tokenAddress: railgunNeuralLink,
-      tokenId: tokenId(),
+      tokenId,
     }),
     tokenAddress: railgunNeuralLink,
-    tokenId: tokenId(),
+    tokenId,
   }),
 };
 
-export function mechDeploymentTx() {
+export function mechDeploymentTx(tokenId: bigint) {
   return {
     to: erc6551Factory,
     data: encodeMechCreate({
@@ -55,7 +48,7 @@ export function mechDeploymentTx() {
       mastercopy: mechMastercopy,
       chainId: chainId(),
       tokenAddress: railgunNeuralLink,
-      tokenId: tokenId(),
+      tokenId,
     }),
   };
 }
