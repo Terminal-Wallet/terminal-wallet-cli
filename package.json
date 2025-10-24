@@ -34,7 +34,6 @@
   "author": "anon",
   "license": "LGPL-3.0-or-later",
   "devDependencies": {
-    "@graphql-tools/utils": "^9.2.1",
     "@release-it/conventional-changelog": "^7.0.0",
     "@types/level-js": "4.0.2",
     "@types/leveldown": "4.0.3",

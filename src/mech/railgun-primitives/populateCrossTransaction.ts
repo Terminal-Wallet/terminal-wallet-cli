@@ -20,6 +20,9 @@ import { getOutputGasEstimate } from "../../transaction/private/unshield-tx";
 
 import { getCurrentNetwork } from "../../engine/engine";
 
+/*
+ * This goes throught RelayAdapt
+ */
 export async function populateCrossTransaction({
   // Assets to unshield FROM Railgun (these will be available in contract calls)
   unshieldNFTs,

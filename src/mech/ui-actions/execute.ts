@@ -1,4 +1,4 @@
-import { toBeHex, zeroPadValue } from "ethers";
+import { ContractTransaction, toBeHex, zeroPadValue } from "ethers";
 
 import { NFTTokenType } from "@railgun-community/wallet";
 
@@ -13,6 +13,7 @@ import { getCurrentNetwork } from "../../engine/engine";
 import { MetaTransaction } from "../http";
 import { encodeMechExecute, encodeMint } from "../encode";
 import { populateCrossTransaction } from "../railgun-primitives";
+
 import { mechStatus } from "./status";
 
 import deployments, { mechDeploymentTx } from "../deployments";
@@ -59,13 +60,11 @@ export async function executeViaMech(calls: MetaTransaction[]) {
   const finalCalls = [
     isMechDeployed ? null : deployMetaTx,
     isNFTMinted ? null : mintMetaTx,
-    ...calls,
-  ]
-    .filter((t) => !!t)
-    .map((t) => ({
+    ...calls.map((t) => ({
       to: mech.address,
-      data: encodeMechExecute(t!),
-    }));
+      data: encodeMechExecute(t),
+    })),
+  ].filter((t) => !!t) as ContractTransaction[];
 
   const transaction = await populateCrossTransaction({
     unshieldNFTs: isNFTMinted ? [myNFTOut] : [],

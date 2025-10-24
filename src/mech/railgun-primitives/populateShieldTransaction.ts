@@ -21,6 +21,9 @@ import {
 } from "../../gas/gas-util";
 import { getCurrentNetwork } from "../../engine/engine";
 
+/*
+ * Goes directly to RailgunSW
+ */
 export async function populateShieldTransaction({
   nftIn,
   erc20In,

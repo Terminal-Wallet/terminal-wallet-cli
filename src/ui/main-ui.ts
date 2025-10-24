@@ -83,7 +83,9 @@ import {
   withdrawFromMech,
   depositIntoMech,
   mechStatus,
+  executeViaMech,
 } from "../mech/ui-actions";
+import { deployMech } from "../mech/ui-actions/deploy";
 
 const { version } = require("../../package.json");
 
@@ -944,7 +946,7 @@ export const runMainMenu = async () => {
 
         if (confirmChoice === "confirm") {
           // deleteme
-          //await deployMech();
+          await deployMech();
         }
       } else if (mechChoice === "test-exec") {
         //const iface = new ethers.Interface(["function deposit() payable"]);
@@ -957,7 +959,7 @@ export const runMainMenu = async () => {
           operation: 0 as any,
         };
 
-        //await execFromMech([tx]);
+        await executeViaMech([tx]);
         // await depositIntoMech({
         //   depositNFTs: [],
         //   depositERC20s: [
@@ -967,15 +969,15 @@ export const runMainMenu = async () => {
         //     },
         //   ],
         // });
-        await withdrawFromMech({
-          withdrawNFTs: [],
-          withdrawERC20s: [
-            {
-              tokenAddress: "0x0d500b1d8e8ef31e21c99d1db9a6444d3adf1270",
-              amount: BigInt(5 * 10 ** 13),
-            },
-          ],
-        });
+        // await withdrawFromMech({
+        //   withdrawNFTs: [],
+        //   withdrawERC20s: [
+        //     {
+        //       tokenAddress: "0x0d500b1d8e8ef31e21c99d1db9a6444d3adf1270",
+        //       amount: BigInt(5 * 10 ** 13),
+        //     },
+        //   ],
+        // });
       }
       break;
     }
