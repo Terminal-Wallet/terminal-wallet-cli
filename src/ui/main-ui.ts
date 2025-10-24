@@ -1,3 +1,4 @@
+import { Interface, toBeHex } from "ethers";
 import { RailgunTransaction } from "../models/transaction-models";
 import {
   getPrivateDisplayBalances,
@@ -73,13 +74,17 @@ import { getScanProgressString, walletManager } from "../wallet/wallet-manager";
 import "colors";
 import { getStatusText, setStatusText } from "./status-ui";
 import { runRPCEditorPrompt } from "./provider-ui";
-import { launchPilot, promptTokenBalances } from "../mech";
+
 import { Prompt } from "enquirer";
-import { mechStatus } from "../mech/main-actions/status";
-import { execFromMech } from "../mech/main-actions/exec";
-import { Interface, toBeHex } from "ethers";
-import { depositIntoMech } from "../mech/main-actions/deposit";
-import { withdrawFromMech } from "../mech/main-actions/withdraw";
+
+import { launchPilot, promptTokenBalances } from "../mech";
+import {
+  // executeInMech,
+  withdrawFromMech,
+  depositIntoMech,
+  mechStatus,
+} from "../mech/ui-actions";
+
 const { version } = require("../../package.json");
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires

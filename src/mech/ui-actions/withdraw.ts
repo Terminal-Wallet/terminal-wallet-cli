@@ -12,7 +12,8 @@ import {
 } from "../../wallet/wallet-util";
 import { sendSelfSignedTransaction } from "../../transaction/transaction-builder";
 import { getCurrentNetwork } from "../../engine/engine";
-import { populateCrossTransaction } from "../populate/populateCrossTransaction";
+
+import { populateCrossTransaction } from "../railgun-primitives";
 
 import deployments from "../deployments";
 

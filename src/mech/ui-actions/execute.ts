@@ -2,8 +2,6 @@ import { toBeHex, zeroPadValue } from "ethers";
 
 import { NFTTokenType } from "@railgun-community/wallet";
 
-import { mechStatus } from "./status";
-
 import {
   getCurrentRailgunAddress,
   getCurrentRailgunID,
@@ -13,11 +11,13 @@ import { sendSelfSignedTransaction } from "../../transaction/transaction-builder
 import { getCurrentNetwork } from "../../engine/engine";
 
 import { MetaTransaction } from "../http";
-import { populateCrossTransaction } from "../populate/populateCrossTransaction";
-import deployments, { mechDeploymentTx } from "../deployments";
 import { encodeMechExecute, encodeMint } from "../encode";
+import { populateCrossTransaction } from "../railgun-primitives";
+import { mechStatus } from "./status";
 
-export async function execFromMech(calls: MetaTransaction[]) {
+import deployments, { mechDeploymentTx } from "../deployments";
+
+export async function executeViaMech(calls: MetaTransaction[]) {
   const mech = deployments.mech();
   const relayAdapt = deployments.relayAdapt();
 

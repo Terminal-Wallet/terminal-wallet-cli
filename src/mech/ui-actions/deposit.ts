@@ -11,7 +11,7 @@ import { getCurrentNetwork } from "../../engine/engine";
 
 import deployments from "../deployments";
 
-import { populateUnshieldTransaction } from "../populate/populateUnshieldTransaction";
+import { populateUnshieldTransaction } from "../railgun-primitives";
 
 export async function depositIntoMech({
   /*
