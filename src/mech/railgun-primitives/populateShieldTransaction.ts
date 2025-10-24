@@ -25,11 +25,11 @@ import { getCurrentNetwork } from "../../engine/engine";
  * Goes directly to RailgunSW
  */
 export async function populateShieldTransaction({
-  nftIn,
-  erc20In,
+  shieldNFTs = [],
+  shieldERC20s = [],
 }: {
-  nftIn: RailgunNFTAmountRecipient[];
-  erc20In: RailgunERC20AmountRecipient[];
+  shieldNFTs?: RailgunNFTAmountRecipient[];
+  shieldERC20s?: RailgunERC20AmountRecipient[];
 }): Promise<TransactionRequest> {
   const chainName = getCurrentNetwork();
 
@@ -37,18 +37,21 @@ export async function populateShieldTransaction({
     await getCurrentShieldPrivateKey();
   const txIDVersion = TXIDVersion.V2_PoseidonMerkle;
 
-  const { estimatedGasDetails } = await _gasEstimate(chainName, erc20In, nftIn);
+  const { estimatedGasDetails } = await _gasEstimate(
+    chainName,
+    shieldERC20s,
+    shieldNFTs,
+  );
 
   const { transaction } = await populateShield(
     txIDVersion,
     chainName,
     shieldPrivateKey,
-    erc20In,
-    nftIn,
+    shieldERC20s,
+    shieldNFTs,
     estimatedGasDetails,
   );
 
-  // Public wallet to shield from.
   transaction.from = fromWalletAddress;
   return transaction;
 }

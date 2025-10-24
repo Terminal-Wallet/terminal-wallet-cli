@@ -64,7 +64,7 @@ export async function mint() {
       selfSignerInfo(),
       getCurrentNetwork(),
       await populateShieldTransaction({
-        nftIn: [
+        shieldNFTs: [
           {
             nftAddress: railgunNeuralLink,
             nftTokenType: NFTTokenType.ERC721,
@@ -73,7 +73,6 @@ export async function mint() {
             recipientAddress: getCurrentRailgunAddress(),
           },
         ],
-        erc20In: [],
       }),
     );
     console.log("Waiting for Shield transaction...");

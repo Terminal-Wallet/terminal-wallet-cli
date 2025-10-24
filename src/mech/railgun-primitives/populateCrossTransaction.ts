@@ -51,7 +51,7 @@ export async function populateCrossTransaction({
   const encryptionKey = await getSaltedPassword();
   if (!encryptionKey) throw new Error("Failed to get encryption key");
 
-  const sendWithPublicWallet = true; // You'll pay gas yourself in ETH
+  const sendWithPublicWallet = true;
 
   const gasEstimateResponse = await gasEstimateForUnprovenCrossContractCalls(
     txIDVersion,
@@ -89,8 +89,8 @@ export async function populateCrossTransaction({
     encryptionKey,
     unshieldERC20s || [],
     unshieldNFTs,
-    shieldERC20s || [], // ✅ RailgunERC20Recipient[]
-    shieldNFTs || [], // ✅ RailgunNFTAmountRecipient[]
+    shieldERC20s || [],
+    shieldNFTs || [],
     crossContractCalls,
     finalGasDetails.broadcasterFeeERC20Recipient,
     sendWithPublicWallet,
