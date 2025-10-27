@@ -1,4 +1,8 @@
-import { ContractTransaction, toBeHex, zeroPadValue } from "ethers";
+import { toBeHex, zeroPadValue } from "ethers";
+import {
+  RailgunERC20Amount,
+  RailgunNFTAmount,
+} from "@railgun-community/shared-models";
 
 import { NFTTokenType } from "@railgun-community/wallet";
 
@@ -11,19 +15,38 @@ import { sendSelfSignedTransaction } from "../../transaction/transaction-builder
 import { getCurrentNetwork } from "../../engine/engine";
 
 import { MetaTransaction } from "../http";
-import { encodeMechExecute } from "../encode";
+import { encodeMechExecute, encodeTranfer, encodeTranferFrom } from "../encode";
 import { populateCrossTransaction } from "../railgun-primitives";
 
+import deployments, { mechDeploymentTx } from "../deployments";
 import { findAvailableMech } from "../status";
 
-export async function executeViaMech(calls: MetaTransaction[]) {
-  const entry = await findAvailableMech();
-  if (!entry) {
-    console.log("No available Mech for found");
+export async function executeViaMech({
+  unshieldNFTs = [],
+  unshieldERC20s = [],
+  calls,
+  shieldNFTs = [],
+  shieldERC20s = [],
+}: {
+  unshieldNFTs?: RailgunNFTAmount[];
+  unshieldERC20s?: RailgunERC20Amount[];
+  calls: MetaTransaction[];
+  shieldNFTs?: RailgunNFTAmount[];
+  shieldERC20s?: RailgunERC20Amount[];
+}) {
+  if (!calls.length) {
+    console.log("No calls provided");
     return;
   }
 
-  const { mechAddress, tokenAddress, tokenId } = entry;
+  const entry = await findAvailableMech();
+  if (!entry) {
+    console.log("No NFT/Mech is Ready for execution");
+    return;
+  }
+
+  const _0zkAddress = getCurrentRailgunAddress();
+  const { mechAddress, tokenAddress, tokenId, isMechDeployed } = entry;
 
   const myNFTOut = {
     nftAddress: tokenAddress,
@@ -37,17 +60,31 @@ export async function executeViaMech(calls: MetaTransaction[]) {
     recipientAddress: getCurrentRailgunAddress(),
   };
 
-  const finalCalls = calls.map((t) => ({
+  const callsFromMech = [
+    ...calls,
+    ...encodeTransferToRelayAdapt({ mechAddress, shieldNFTs, shieldERC20s }),
+  ].map((t) => ({
     to: mechAddress,
     data: encodeMechExecute(t),
   }));
 
   const transaction = await populateCrossTransaction({
-    unshieldNFTs: [myNFTOut],
-    unshieldERC20s: [],
-    crossContractCalls: finalCalls,
-    shieldNFTs: [myNFTIn],
-    shieldERC20s: [],
+    unshieldNFTs: [myNFTOut, ...unshieldNFTs],
+    unshieldERC20s,
+    crossContractCalls: isMechDeployed
+      ? callsFromMech
+      : [mechDeploymentTx(tokenId), ...callsFromMech],
+    shieldNFTs: [
+      ...shieldNFTs.map((e) => ({
+        ...e,
+        recipientAddress: _0zkAddress,
+      })),
+      myNFTIn,
+    ],
+    shieldERC20s: shieldERC20s.map((e) => ({
+      ...e,
+      recipientAddress: _0zkAddress,
+    })),
   });
 
   const result = await sendSelfSignedTransaction(
@@ -57,6 +94,37 @@ export async function executeViaMech(calls: MetaTransaction[]) {
   );
   console.log("Waiting for execution...");
   await result?.wait();
+}
+
+/*
+ * These move the withdraw assets into RelayAdpt
+ *
+ */
+function encodeTransferToRelayAdapt({
+  mechAddress,
+  shieldNFTs = [],
+  shieldERC20s = [],
+}: {
+  mechAddress: string;
+  shieldNFTs?: RailgunNFTAmount[];
+  shieldERC20s?: RailgunERC20Amount[];
+}) {
+  const { relayAdapt } = deployments;
+
+  return [
+    ...shieldNFTs.map((e) => ({
+      to: e.nftAddress,
+      data: encodeTranferFrom(
+        mechAddress,
+        relayAdapt().address,
+        BigInt(e.tokenSubID),
+      ),
+    })),
+    ...shieldERC20s.map((e) => ({
+      to: e.tokenAddress,
+      data: encodeTranfer(relayAdapt().address, e.amount),
+    })),
+  ];
 }
 
 function selfSignerInfo() {

@@ -9,8 +9,6 @@ import {
 import { sendSelfSignedTransaction } from "../../transaction/transaction-builder";
 import { getCurrentNetwork } from "../../engine/engine";
 
-import deployments from "../deployments";
-
 import { populateUnshieldTransaction } from "../railgun-primitives";
 import { findAvailableMech } from "../status";
 
@@ -18,25 +16,25 @@ export async function depositIntoMech({
   /*
    * Assets to unshield FROM Railgun (these will be available in contract calls)
    */
-  depositNFTs,
-  depositERC20s,
+  shieldNFTs,
+  shieldERC20s,
 }: {
-  depositNFTs: RailgunNFTAmount[];
-  depositERC20s: RailgunERC20Amount[];
+  shieldNFTs: RailgunNFTAmount[];
+  shieldERC20s: RailgunERC20Amount[];
 }) {
   const entry = await findAvailableMech();
   if (!entry) {
-    throw new Error("No available Mech found");
+    throw new Error("No suitable Mech address found");
   }
 
   const { mechAddress } = entry;
 
   const transaction = await populateUnshieldTransaction({
-    unshieldNFTs: depositNFTs.map((entry) => ({
+    unshieldNFTs: shieldNFTs.map((entry) => ({
       ...entry,
       recipientAddress: mechAddress,
     })),
-    unshieldERC20s: depositERC20s.map((entry) => ({
+    unshieldERC20s: shieldERC20s.map((entry) => ({
       ...entry,
       recipientAddress: mechAddress,
     })),

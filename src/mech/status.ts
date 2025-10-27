@@ -10,15 +10,26 @@ import { getCurrentNetwork } from "../engine/engine";
 
 import deployments from "./deployments";
 
+/*
+ * Includes mechs that are deployed and ready, and NFTs which are shielded
+ * and spendable. I.e., maybe mechs that are gonna be lazily deployed
+ */
 export async function findAvailableMech() {
   const entries = await status();
 
-  return entries.find(
+  // a mech that is deployed, shielded and spendable
+  const entry = entries.find(
     (e) =>
       e.isMechDeployed &&
       e.isNFTShielded &&
       !e.isNFTBlocked &&
-      !e.isNFTSpendable,
+      e.isNFTSpendable,
+  );
+  if (entry) return entry;
+
+  // a NFT that is shielded and spendable, but not deployed
+  return entries.find(
+    (e) => e.isNFTShielded && e.isNFTSpendable && !e.isNFTBlocked,
   );
 }
 
