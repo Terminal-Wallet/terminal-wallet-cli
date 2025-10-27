@@ -159,11 +159,13 @@ export const runMechMenu = async (networkName: NetworkName) => {
 };
 
 const launchPilotUI = async (balances: Balances) => {
-  const { resolve, promise: transactionRequestPromise } =
-    Promise.withResolvers<MetaTransaction[]>();
-  launchPilot(balances, (metaTransactions) => {
-    resolve(metaTransactions);
-  });
+  const transactionRequestPromise = new Promise<MetaTransaction[]>(
+    (resolve) => {
+      launchPilot(balances, (metaTransactions) => {
+        resolve(metaTransactions);
+      });
+    },
+  );
 
   const pilotPrompt = new Select({
     header: "Waiting for transaction to be submitted from Pilot...",
