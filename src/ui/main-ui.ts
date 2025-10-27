@@ -1,9 +1,5 @@
-import { Interface, toBeHex } from "ethers";
 import { RailgunTransaction } from "../models/transaction-models";
-import {
-  getPrivateDisplayBalances,
-  getPrivateERC20BalancesForChain,
-} from "../balance/balance-util";
+import { getPrivateDisplayBalances } from "../balance/balance-util";
 import { getCurrentNetwork } from "../engine/engine";
 import {
   getChainForName,
@@ -75,17 +71,7 @@ import "colors";
 import { getStatusText, setStatusText } from "./status-ui";
 import { runRPCEditorPrompt } from "./provider-ui";
 
-import { Prompt } from "enquirer";
-
-import { launchPilot, promptTokenBalances } from "../mech";
-import {
-  withdrawFromMech,
-  depositIntoMech,
-  executeViaMech,
-  deployMech,
-} from "../mech/ui-actions";
-import { mint } from "../mech/ui-actions/mint";
-import { status } from "../mech/status";
+import { runMechMenu, runTestMechMenu } from "./mech-ui";
 
 const { version } = require("../../package.json");
 
@@ -562,8 +548,13 @@ const getMainPrompt = (networkName: NetworkName, baseSymbol: string) => {
           !remoteConfig.network[chain.id].flags?.canRelayAdapt,
       },
       {
-        name: "launch-pilot",
-        message: "Launch Mech 🦾",
+        name: "launch-mech",
+        message: "Operate Mech 🦾",
+        disabled: false,
+      },
+      {
+        name: "test-mech",
+        message: "Debug Mech 🦾",
         disabled: false,
       },
 
@@ -663,23 +654,6 @@ export const walletBalancePoller = async () => {
   walletBalancePoller();
 };
 
-let activeMainPrompt: Prompt | null = null;
-
-const runInterrupt = async (callback: () => Promise<void>) => {
-  if (!activeMainPrompt) {
-    throw new Error(
-      "Can only accept interrupt prompt when main menu is active",
-    );
-  }
-
-  await (activeMainPrompt as any).close();
-  clearConsoleBuffer();
-  await callback();
-
-  // eslint-disable-next-line no-use-before-define
-  runMainMenu();
-};
-
 export const runMainMenu = async () => {
   clearHashedPassword();
   const networkName = getCurrentNetwork();
@@ -707,7 +681,6 @@ export const runMainMenu = async () => {
   mainPrompt.on("submit", () => {
     clearConsoleBuffer();
   });
-  activeMainPrompt = mainPrompt;
 
   const menuSelection = await mainPrompt.run().catch(async (err: any) => {
     const confirm = await confirmPromptExit(`Do you wish to EXIT?`, {
@@ -873,104 +846,13 @@ export const runMainMenu = async () => {
       toggleResponsiveMenu();
       break;
     }
-    case "launch-pilot": {
-      // const balances = await promptTokenBalances(networkName);
-      // launchPilot(balances, (metaTransactions) => {
-      //   runInterrupt(async () => {
-      //     const title =
-      //       metaTransactions.length === 1
-      //         ? `Executing the following call through Mech:\n\n`
-      //         : `Executing the following ${metaTransactions.length} calls through Mech:\n\n`;
-      //     const json = JSON.stringify(
-      //       metaTransactions.length === 1
-      //         ? metaTransactions[0]
-      //         : metaTransactions,
-      //       null,
-      //       2,
-      //     );
-      //     const proceed = await confirmPrompt(`Proceed with execution?`, {
-      //       header: title + json + "\n",
-      //       initial: true,
-      //     });
-      //   });
-      // });
-      const mechMenuPrompt = new Select({
-        header: " ",
-        message: "select",
-        choices: [
-          { name: "status", message: "Show Status" },
-          { name: "mint", message: "Mint NFT" },
-          { name: "deploy", message: "Deploy Mech" },
-          { name: "deposit", message: "Deposit" },
-          { name: "exec", message: "Execute" },
-          { name: "withdraw", message: "Withdraw" },
-          { name: "back", message: "Back".grey },
-        ],
-        multiple: false,
-      });
+    case "launch-mech": {
+      await runMechMenu(networkName);
+      break;
+    }
 
-      const mechChoice = await mechMenuPrompt.run().catch(confirmPromptCatch);
-
-      if (mechChoice === "status") {
-        const entries = await status();
-        for (const entry of entries) {
-          console.log("-----");
-          console.log(` Mech address:   ${entry.mechAddress}`);
-          console.log(` NFT address:    ${entry.tokenAddress}`);
-          console.log(` TokenId:        ${entry.tokenId}`);
-          console.log(` isDeployed:     ${entry.isMechDeployed}`);
-          console.log(` isNFTShielded:  ${entry.isNFTShielded}`);
-          console.log(` isNFTSpendable: ${entry.isNFTSpendable}`);
-          console.log(` isNFTBlocked:   ${entry.isNFTBlocked}`);
-        }
-        if (entries.length === 0) {
-          console.log("No NFT minted or Shielded");
-        }
-
-        // Just show status and return to main menu
-
-        await confirmPromptCatchRetry("");
-
-        break;
-      } else if (mechChoice === "mint") {
-        await mint();
-      } else if (mechChoice === "deploy") {
-        await deployMech();
-      } else if (mechChoice === "exec") {
-        //const iface = new ethers.Interface(["function deposit() payable"]);
-        //const data = iface.encodeFunctionData("deposit");
-        // WRAP ONE POL
-        const tx = {
-          to: "0x0d500b1d8e8ef31e21c99d1db9a6444d3adf1270", // wPOL contract
-          data: "0xd0e30db0", // deposit()
-          value: toBeHex(BigInt(10 ** 17), 32),
-          operation: 0 as any,
-        };
-
-        await executeViaMech([tx]);
-      } else if (mechChoice === "deposit") {
-        // await depositIntoMech({
-        //   depositNFTs: [],
-        //   depositERC20s: [
-        //     {
-        //       tokenAddress: "0x0d500b1d8e8ef31e21c99d1db9a6444d3adf1270",
-        //       amount: BigInt(10 ** 16),
-        //     },
-        //   ],
-        // });
-        await confirmPromptCatchRetry("");
-      } else if (mechChoice === "withdraw") {
-        // await withdrawFromMech({
-        //   withdrawNFTs: [],
-        //   withdrawERC20s: [
-        //     {
-        //       tokenAddress: "0x0d500b1d8e8ef31e21c99d1db9a6444d3adf1270",
-        //       amount: BigInt(5 * 10 ** 13),
-        //     },
-        //   ],
-        // });
-        await confirmPromptCatchRetry("");
-      }
+    case "test-mech": {
+      await runTestMechMenu();
       break;
     }
 
