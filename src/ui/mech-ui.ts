@@ -140,7 +140,7 @@ export const runMechMenu = async (networkName: NetworkName) => {
         break;
       }
       case "withdraw": {
-        // TODO render token balance prompt for Mech token balances
+        // TODO render token balance prompt for Mech token balances (skip in first demo version)
         throw new Error("Withdraw flow not implemented yet.");
         break;
       }
