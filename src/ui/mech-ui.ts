@@ -45,8 +45,8 @@ export const runMechMenu = async (networkName: NetworkName) => {
 
   {
     const cooldownMessage = isMechDeployed
-      ? "Mech is subject to a 1h cooldown for POI between executions"
-      : "Mech is subject to a 1h cooldown for POI after setup";
+      ? "1-hour cooldown period between transactions (required for proof of innocence)"
+      : "1-hour cooldown period after setup (required for proof of innocence)";
 
     const headerLines = [
       `Mech address: ${mechAddress}`,
@@ -57,7 +57,7 @@ export const runMechMenu = async (networkName: NetworkName) => {
     const optionsWhenReady = [
       { name: "deposit", message: "Move tokens into Mech" },
       { name: "withdraw", message: "Re-shield tokens from Mech" },
-      { name: "launch-pilot", message: "Connect to web3 with Mech" },
+      { name: "launch-pilot", message: "Launch Pilot (connect to dApps)" },
     ];
 
     const mechPrompt = new Select({
@@ -80,13 +80,13 @@ export const runMechMenu = async (networkName: NetworkName) => {
         const balances = await promptTokenBalances(networkName);
 
         const nextStepPrompt = new Select({
-          header: "Do you want to want to do anything with these tokens?",
+          header: "What would you like to do with these tokens?",
           message: isNFTSpendable ? "Select an action" : "",
           choices: [
-            { name: "execute-immediately", message: "Only move tokens" },
+            { name: "execute-immediately", message: "Deposit tokens only" },
             {
               name: "launch-pilot",
-              message: "Launch Pilot to connect to web3",
+              message: "Open Pilot to interact with dApps",
             },
             {
               name: "cancel",
@@ -156,11 +156,11 @@ const launchPilotUI = async (balances: Balances) => {
   );
 
   const pilotPrompt = new Select({
-    header: "Waiting for transaction to be submitted from Pilot...",
+    header: "Waiting for transaction from Pilot...",
     message: "",
     choices: [
-      { name: "deposit-only", message: "Proceed with moving tokens only" },
-      { name: "open-pilot", message: "Re-open Pilot" },
+      { name: "deposit-only", message: "Skip Pilot and deposit tokens only" },
+      { name: "open-pilot", message: "Open Pilot again" },
       {
         name: "cancel",
         message: "Cancel".grey,
