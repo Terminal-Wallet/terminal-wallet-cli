@@ -1,20 +1,9 @@
 import { toBeHex } from "ethers";
 import { launchPilot, promptTokenBalances } from "../mech";
-import {
-  withdrawFromMech,
-  depositIntoMech,
-  executeViaMech,
-  deployMech,
-} from "../mech/ui-actions";
-import { mint } from "../mech/ui-actions/mint";
+import { mint, operateMech } from "../mech/ui-actions";
 import { status } from "../mech/status";
-import {
-  confirmPrompt,
-  confirmPromptCatch,
-  confirmPromptCatchRetry,
-} from "./confirm-ui";
+import { confirmPromptCatch, confirmPromptCatchRetry } from "./confirm-ui";
 import { NetworkName } from "@railgun-community/shared-models";
-import { ProgressBar } from "./progressBar-ui";
 import { Balances } from "../mech/pilot";
 import { MetaTransaction } from "../mech/http";
 
@@ -66,8 +55,8 @@ export const runMechMenu = async (networkName: NetworkName) => {
     ].join("\n");
 
     const optionsWhenReady = [
-      { name: "deposit", message: "Move funds into Mech" },
-      { name: "withdraw", message: "Re-shield funds from Mech" },
+      { name: "deposit", message: "Move tokens into Mech" },
+      { name: "withdraw", message: "Re-shield tokens from Mech" },
       { name: "launch-pilot", message: "Connect to web3 with Mech" },
     ];
 
@@ -91,10 +80,10 @@ export const runMechMenu = async (networkName: NetworkName) => {
         const balances = await promptTokenBalances(networkName);
 
         const nextStepPrompt = new Select({
-          header: "Do you want to want to do anything with these funds?",
+          header: "Do you want to want to do anything with these tokens?",
           message: isNFTSpendable ? "Select an action" : "",
           choices: [
-            { name: "execute-immediately", message: "Only move funds" },
+            { name: "execute-immediately", message: "Only move tokens" },
             {
               name: "launch-pilot",
               message: "Launch Pilot to connect to web3",
@@ -117,9 +106,8 @@ export const runMechMenu = async (networkName: NetworkName) => {
             if (native)
               throw new Error("Native balance deposit not supported yet");
 
-            await depositIntoMech({
-              depositNFTs: [],
-              depositERC20s: Object.entries(erc20).map(
+            await operateMech({
+              unshieldERC20s: Object.entries(erc20).map(
                 ([tokenAddress, amount]) => ({
                   tokenAddress,
                   amount,
@@ -171,7 +159,7 @@ const launchPilotUI = async (balances: Balances) => {
     header: "Waiting for transaction to be submitted from Pilot...",
     message: "",
     choices: [
-      { name: "deposit-only", message: "Proceed with moving funds only" },
+      { name: "deposit-only", message: "Proceed with moving tokens only" },
       { name: "open-pilot", message: "Re-open Pilot" },
       {
         name: "cancel",
@@ -193,9 +181,8 @@ const launchPilotUI = async (balances: Balances) => {
         const { native, ...erc20 } = balances;
         if (native) throw new Error("Native balance deposit not supported yet");
 
-        await depositIntoMech({
-          depositNFTs: [],
-          depositERC20s: Object.entries(erc20).map(
+        await operateMech({
+          unshieldERC20s: Object.entries(erc20).map(
             ([tokenAddress, amount]) => ({
               tokenAddress,
               amount,
@@ -214,8 +201,16 @@ const launchPilotUI = async (balances: Balances) => {
       }
     }
   } else {
-    // TODO bundle with deposit of `balances` into Mech
-    await executeViaMech(result);
+    const { native, ...erc20 } = balances;
+    if (native) throw new Error("Native balance deposit not supported yet");
+
+    await operateMech({
+      unshieldERC20s: Object.entries(erc20).map(([tokenAddress, amount]) => ({
+        tokenAddress,
+        amount,
+      })),
+      calls: result,
+    });
   }
 };
 
@@ -226,7 +221,6 @@ export const runTestMechMenu = async () => {
     choices: [
       { name: "status", message: "Show Status" },
       { name: "mint", message: "Mint NFT" },
-      { name: "deploy", message: "Deploy Mech" },
       { name: "deposit", message: "Deposit" },
       { name: "exec", message: "Execute" },
       { name: "withdraw", message: "Withdraw" },
@@ -260,8 +254,6 @@ export const runTestMechMenu = async () => {
     return;
   } else if (mechChoice === "mint") {
     await mint();
-  } else if (mechChoice === "deploy") {
-    await deployMech();
   } else if (mechChoice === "exec") {
     //const iface = new ethers.Interface(["function deposit() payable"]);
     //const data = iface.encodeFunctionData("deposit");
@@ -273,11 +265,10 @@ export const runTestMechMenu = async () => {
       operation: 0 as any,
     };
 
-    await executeViaMech([tx]);
+    await operateMech({ calls: [tx] });
   } else if (mechChoice === "deposit") {
-    await depositIntoMech({
-      depositNFTs: [],
-      depositERC20s: [
+    await operateMech({
+      unshieldERC20s: [
         {
           tokenAddress: "0x0d500b1d8e8ef31e21c99d1db9a6444d3adf1270",
           amount: BigInt(10 ** 16),
