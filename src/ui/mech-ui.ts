@@ -6,7 +6,11 @@ import { confirmPromptCatch, confirmPromptCatchRetry } from "./confirm-ui";
 import { NetworkName } from "@railgun-community/shared-models";
 import { Balances } from "../mech/pilot";
 import { MetaTransaction } from "../mech/http";
-import { depositIntoMech, executeViaMech } from "../mech/ui-actions";
+import {
+  operateMech,
+  depositIntoMech,
+  executeViaMech,
+} from "../mech/ui-actions";
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { Select, Confirm } = require("enquirer");

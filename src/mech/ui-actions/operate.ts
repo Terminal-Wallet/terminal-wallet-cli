@@ -29,7 +29,7 @@ import { MetaTransaction } from "../http";
  * Supports lazy deployment - the mech will be deployed automatically if needed.
  */
 
-export async function operateMechDontUse({
+export async function operateMech({
   unshieldNFTs = [],
   unshieldERC20s = [],
   calls = [],
@@ -42,23 +42,23 @@ export async function operateMechDontUse({
   shieldNFTs?: RailgunNFTAmount[];
   shieldERC20s?: RailgunERC20Amount[];
 }) {
-  // const hasDeposit = unshieldERC20s.length > 0 || unshieldNFTs.length > 0;
-  // const hasWithdrawal = shieldNFTs.length > 0 || shieldERC20s.length > 0;
-  // const hasExecution = calls.length > 0;
-  // if (hasExecution || hasWithdrawal) {
-  //   // execute
-  //   await executeViaMech({
-  //     unshieldNFTs,
-  //     unshieldERC20s,
-  //     calls,
-  //     shieldNFTs,
-  //     shieldERC20s,
-  //   });
-  // } else {
-  //   assert(hasDeposit);
-  //   await depositIntoMech({
-  //     shieldNFTs,
-  //     shieldERC20s,
-  //   });
-  // }
+  const shouldExecute =
+    shieldERC20s.length + shieldNFTs.length + calls.length > 0;
+
+  if (shouldExecute) {
+    // if has execution or withdrawals, bundle whatever via RelayAdapt
+    await executeViaMech({
+      unshieldNFTs,
+      unshieldERC20s,
+      calls,
+      shieldNFTs,
+      shieldERC20s,
+    });
+  } else {
+    // otherwise use standalon unshield directly into Mech
+    await depositIntoMech({
+      unshieldNFTs,
+      unshieldERC20s,
+    });
+  }
 }
