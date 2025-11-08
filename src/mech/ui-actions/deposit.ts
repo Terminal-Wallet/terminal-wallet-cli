@@ -16,12 +16,16 @@ export async function depositIntoMech({
   /*
    * Assets to unshield FROM Railgun (these will be available in contract calls)
    */
-  shieldNFTs,
-  shieldERC20s,
+  unshieldNFTs = [],
+  unshieldERC20s = [],
 }: {
-  shieldNFTs: RailgunNFTAmount[];
-  shieldERC20s: RailgunERC20Amount[];
+  unshieldNFTs?: RailgunNFTAmount[];
+  unshieldERC20s?: RailgunERC20Amount[];
 }) {
+  if (unshieldNFTs.length + unshieldERC20s.length === 0) {
+    throw new Error("Nothing to deposit");
+  }
+
   const entry = await findAvailableMech();
   if (!entry) {
     throw new Error("No suitable Mech address found");
@@ -30,21 +34,23 @@ export async function depositIntoMech({
   const { mechAddress } = entry;
 
   const transaction = await populateUnshieldTransaction({
-    unshieldNFTs: shieldNFTs.map((entry) => ({
+    unshieldNFTs: unshieldNFTs.map((entry) => ({
       ...entry,
       recipientAddress: mechAddress,
     })),
-    unshieldERC20s: shieldERC20s.map((entry) => ({
+    unshieldERC20s: unshieldERC20s.map((entry) => ({
       ...entry,
       recipientAddress: mechAddress,
     })),
   });
 
-  await sendSelfSignedTransaction(
+  const result = await sendSelfSignedTransaction(
     selfSignerInfo(),
     getCurrentNetwork(),
     transaction,
   );
+  console.log("Waiting for deposit...");
+  await result?.wait();
 }
 
 function selfSignerInfo() {

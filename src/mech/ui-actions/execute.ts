@@ -21,23 +21,14 @@ import { populateCrossTransaction } from "../railgun-primitives";
 import deployments, { mechDeploymentTx } from "../deployments";
 
 export async function executeViaMech({
-  unshieldNFTs = [],
-  unshieldERC20s = [],
-  calls,
+  calls = [],
   shieldNFTs = [],
   shieldERC20s = [],
 }: {
-  unshieldNFTs?: RailgunNFTAmount[];
-  unshieldERC20s?: RailgunERC20Amount[];
-  calls: MetaTransaction[];
+  calls?: MetaTransaction[];
   shieldNFTs?: RailgunNFTAmount[];
   shieldERC20s?: RailgunERC20Amount[];
 }) {
-  if (!calls.length) {
-    console.log("No calls provided");
-    return;
-  }
-
   const entry = await findAvailableMech();
   if (!entry) {
     console.log("No NFT/Mech is Ready for execution");
@@ -69,6 +60,21 @@ export async function executeViaMech({
   };
 
   const deployment = isMechDeployed ? [] : [mechDeploymentTx(tokenId)];
+  // const deposit = [
+  //   ...unshieldNFTs.map((e) => ({
+  //     to: e.nftAddress,
+  //     data: encodeTranferFrom(
+  //       relayAdaptAddress,
+  //       mechAddress,
+  //       BigInt(e.tokenSubID),
+  //     ),
+  //   })),
+  //   ...unshieldERC20s.map((e) => ({
+  //     to: e.tokenAddress,
+  //     data: encodeTranfer(mechAddress, e.amount),
+  //   })),
+  // ];
+
   const execution = calls.map(viaMech);
   const withdrawal = [
     ...shieldNFTs.map((e) => ({
@@ -86,8 +92,8 @@ export async function executeViaMech({
   ].map(viaMech);
 
   const transaction = await populateCrossTransaction({
-    unshieldNFTs: [myNFTOut, ...unshieldNFTs],
-    unshieldERC20s,
+    unshieldNFTs: [myNFTOut],
+    unshieldERC20s: [],
     crossContractCalls: [...deployment, ...execution, ...withdrawal],
     shieldNFTs: [...shieldNFTs.map(toOur0zk), myNFTIn],
     shieldERC20s: shieldERC20s.map(toOur0zk),

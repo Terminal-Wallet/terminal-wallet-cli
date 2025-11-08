@@ -7,14 +7,15 @@ import {
   ZeroHash,
 } from "ethers";
 
+const MECH_SALT =
+  "0x0000000000000000000000000000000000000000000000000000000000000bad";
+
 export function encodeMechCreate({
-  salt,
   mastercopy,
   chainId,
   tokenAddress,
   tokenId,
 }: {
-  salt: string;
   mastercopy: string;
   chainId: number | bigint;
   tokenAddress: string;
@@ -26,7 +27,7 @@ export function encodeMechCreate({
 
   return iface.encodeFunctionData("createAccount", [
     mastercopy,
-    salt,
+    MECH_SALT,
     chainId,
     tokenAddress,
     tokenId,
@@ -58,7 +59,7 @@ export function predictMechAddress({
   ]);
   return getCreate2Address(
     factory,
-    ZeroHash,
+    salt,
     keccak256(eip6551ProxyCreationBytecode),
   );
 }
@@ -114,17 +115,3 @@ export function encodeApprove(to: string, tokenId: bigint) {
 
   return iface.encodeFunctionData("approve", [to, tokenId]);
 }
-
-// export function encodeDoSomething() {
-//   const abi = [
-//     "function transfer(address to, uint256 amount)",
-//     "function doSomething(uint256 v)",
-//   ];
-
-//   // Create an Interface
-//   const iface = new Interface(abi);
-
-//   // Encode the function data
-//   const data = iface.encodeFunctionData("doSomething", [919289128918298]);
-//   return { to: "0x47C2a8aA719877d26a09B79419cBF65ddE833A58", data };
-// }

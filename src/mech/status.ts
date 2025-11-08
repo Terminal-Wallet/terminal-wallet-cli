@@ -98,7 +98,7 @@ async function bucketBalancesForToken(tokenAddress: string): Promise<
     return Object.values(balances)
       .filter(
         ({ balance, tokenData }) =>
-          tokenAddress === tokenData.tokenAddress.toLowerCase() &&
+          tokenAddress.toLowerCase() === tokenData.tokenAddress.toLowerCase() &&
           BigInt(1) === BigInt(balance),
       )
       .map(({ tokenData }) => ({

@@ -1,4 +1,3 @@
-import { ZeroHash } from "ethers";
 import {
   RailgunProxyContract,
   RelayAdaptContract,
@@ -44,7 +43,6 @@ export function mechDeploymentTx(tokenId: bigint) {
   return {
     to: erc6551Factory,
     data: encodeMechCreate({
-      salt: ZeroHash,
       mastercopy: mechMastercopy,
       chainId: chainId(),
       tokenAddress: railgunNeuralLink,

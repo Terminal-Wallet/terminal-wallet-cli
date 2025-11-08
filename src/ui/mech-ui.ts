@@ -1,11 +1,12 @@
-import { toBeHex } from "ethers";
+import { Interface, toBeHex } from "ethers";
 import { launchPilot, promptTokenBalances } from "../mech";
-import { mint, operateMech } from "../mech/ui-actions";
+import { mint } from "../mech/ui-actions";
 import { status } from "../mech/status";
 import { confirmPromptCatch, confirmPromptCatchRetry } from "./confirm-ui";
 import { NetworkName } from "@railgun-community/shared-models";
 import { Balances } from "../mech/pilot";
 import { MetaTransaction } from "../mech/http";
+import { depositIntoMech, executeViaMech } from "../mech/ui-actions";
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { Select, Confirm } = require("enquirer");
@@ -220,10 +221,7 @@ export const runTestMechMenu = async () => {
     message: "select",
     choices: [
       { name: "status", message: "Show Status" },
-      { name: "mint", message: "Mint NFT" },
-      { name: "deposit", message: "Deposit" },
       { name: "exec", message: "Execute" },
-      { name: "withdraw", message: "Withdraw" },
       { name: "back", message: "Back".grey },
     ],
     multiple: false,
@@ -252,40 +250,85 @@ export const runTestMechMenu = async () => {
     await confirmPromptCatchRetry("");
 
     return;
-  } else if (mechChoice === "mint") {
-    await mint();
   } else if (mechChoice === "exec") {
-    //const iface = new ethers.Interface(["function deposit() payable"]);
-    //const data = iface.encodeFunctionData("deposit");
-    // WRAP ONE POL
-    const tx = {
-      to: "0x0d500b1d8e8ef31e21c99d1db9a6444d3adf1270", // wPOL contract
-      data: "0xd0e30db0", // deposit()
-      value: toBeHex(BigInt(10 ** 17), 32),
-      operation: 0 as any,
-    };
-
-    await operateMech({ calls: [tx] });
-  } else if (mechChoice === "deposit") {
-    await operateMech({
-      unshieldERC20s: [
-        {
-          tokenAddress: "0x0d500b1d8e8ef31e21c99d1db9a6444d3adf1270",
-          amount: BigInt(10 ** 16),
-        },
-      ],
-    });
-    await confirmPromptCatchRetry("");
-  } else if (mechChoice === "withdraw") {
-    // await withdrawFromMech({
-    //   withdrawNFTs: [],
-    //   withdrawERC20s: [
-    //     {
-    //       tokenAddress: "0x0d500b1d8e8ef31e21c99d1db9a6444d3adf1270",
-    //       amount: BigInt(5 * 10 ** 13),
-    //     },
-    //   ],
-    // });
-    await confirmPromptCatchRetry("");
+    await justDeposit();
+    // await justWithdraw();
+    // await justExecute();
+    // await executeAndWithdraw();
   }
 };
+
+const WPOL = "0x0d500b1d8e8ef31e21c99d1db9a6444d3adf1270";
+
+async function justDeposit() {
+  // requires 0.01 WPOL to be shielded in Railgun
+  await depositIntoMech({
+    unshieldERC20s: [
+      {
+        tokenAddress: WPOL,
+        amount: BigInt(10 ** 16),
+      },
+    ],
+  });
+}
+
+async function justWithdraw() {
+  // REQUIRES 0.001 WPOL in the mech
+  // shield WPOL from mech to Railgun
+  await executeViaMech({
+    shieldERC20s: [
+      {
+        tokenAddress: WPOL,
+        amount: BigInt(10 ** 15),
+      },
+    ],
+  });
+}
+
+async function justExecute() {
+  // REQUIRES 0.01 POL
+  // wraps POL into WPOL
+  const tx = {
+    to: "0x0d500b1d8e8ef31e21c99d1db9a6444d3adf1270", // wPOL contract
+    data: "0xd0e30db0",
+    operation: 0 as any,
+    value: BigInt(10 ** 16),
+  };
+
+  await executeViaMech({
+    calls: [tx],
+  });
+}
+
+async function executeAndWithdraw() {
+  const iface = new Interface([
+    "function deposit() payable",
+    "function withdraw(uint256 wad)",
+  ]);
+
+  // Requires WPOL 0.003 to be sitting in the Mech:
+  // Unwraps WPOL into POL 0.001
+  // sends 0.001 POL to some EOA
+  // shield 0.001 WPOL back to Railgun
+
+  const amount = BigInt(10 ** 15);
+
+  const unwrapTx = {
+    to: WPOL,
+    data: iface.encodeFunctionData("withdraw", [amount]),
+    value: 0,
+    operation: 0 as any,
+  };
+
+  const sendNative = {
+    to: "0x63EDeE5c8E332335630FB1A46607668CCFB2F4eE",
+    data: "0x",
+    value: amount,
+    operation: 0 as any,
+  };
+
+  await executeViaMech({
+    calls: [unwrapTx, sendNative],
+    shieldERC20s: [{ tokenAddress: WPOL, amount: amount }],
+  });
+}
