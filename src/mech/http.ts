@@ -31,7 +31,7 @@ function listenAsync(server: Server, port: number): Promise<void> {
 }
 
 const startHttpServer = async () => {
-  console.log("Starting Pilot callback server...");
+  console.log("Starting Pilot Connect server...");
 
   // Generate a random, URL-safe secret
   secret = crypto

@@ -48,6 +48,7 @@ const subtractRailgunFee = (balances: Balances) =>
   );
 
 export const launchPilot = async (
+  mechAddress: `0x${string}`,
   balances: Balances,
   processTransactionRequest: (request: MetaTransaction[]) => void,
 ) => {
@@ -57,12 +58,11 @@ export const launchPilot = async (
   const { port, secret } = await ensureHttpServer();
   const callbackAddress = `http://localhost:${port}?secret=${secret}`;
 
-  const address = "0x123B1D6F8ed9B5c136a6E5284b7193ecA58bC2b7";
   const chainShortName = "matic";
   const label = "Terminal Mech";
 
   const launchUrl = new URL(
-    `/offline/launch/${chainShortName}:${address.toLowerCase()}/${encodeURIComponent(
+    `/offline/launch/${chainShortName}:${mechAddress.toLowerCase()}/${encodeURIComponent(
       label,
     )}`,
     PILOT_BASE_URL,
@@ -71,7 +71,7 @@ export const launchPilot = async (
   launchUrl.searchParams.set(
     "setup",
     JSON.stringify(
-      encodeBalanceSpoofRequests(address, subtractRailgunFee(balances)),
+      encodeBalanceSpoofRequests(mechAddress, subtractRailgunFee(balances)),
     ),
   );
 

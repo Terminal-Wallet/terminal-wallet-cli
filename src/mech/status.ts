@@ -35,8 +35,8 @@ export async function findAvailableMech() {
 
 export async function status(): Promise<
   Array<{
-    mechAddress: string;
-    tokenAddress: string;
+    mechAddress: `0x${string}`;
+    tokenAddress: `0x${string}`;
     tokenId: bigint;
     isMechDeployed: boolean;
     isNFTShielded: boolean;
@@ -47,8 +47,8 @@ export async function status(): Promise<
   const { railgunNeuralLink } = deployments;
 
   const result: Array<{
-    mechAddress: string;
-    tokenAddress: string;
+    mechAddress: `0x${string}`;
+    tokenAddress: `0x${string}`;
     tokenId: bigint;
     isMechDeployed: boolean;
     isNFTShielded: boolean;

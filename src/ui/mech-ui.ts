@@ -122,7 +122,7 @@ export const runMechMenu = async (networkName: NetworkName) => {
             break;
           }
           case "launch-pilot": {
-            await launchPilotUI(balances);
+            await launchPilotUI(mechAddress, balances);
             break;
           }
           case "cancel":
@@ -138,7 +138,7 @@ export const runMechMenu = async (networkName: NetworkName) => {
         break;
       }
       case "launch-pilot": {
-        await launchPilotUI({});
+        await launchPilotUI(mechAddress);
         break;
       }
       case "back-main-menu":
@@ -151,10 +151,13 @@ export const runMechMenu = async (networkName: NetworkName) => {
   runMechMenu(networkName);
 };
 
-const launchPilotUI = async (balances: Balances) => {
+const launchPilotUI = async (
+  mechAddress: `0x${string}`,
+  balances: Balances = {},
+) => {
   const transactionRequestPromise = new Promise<MetaTransaction[]>(
     (resolve) => {
-      launchPilot(balances, (metaTransactions) => {
+      launchPilot(mechAddress, balances, (metaTransactions) => {
         resolve(metaTransactions);
       });
     },
@@ -180,6 +183,8 @@ const launchPilotUI = async (balances: Balances) => {
 
   const result = await Promise.race([choicePromise, transactionRequestPromise]);
 
+  console.log(result);
+
   if (typeof result === "string") {
     switch (result) {
       case "deposit-only": {
@@ -197,7 +202,7 @@ const launchPilotUI = async (balances: Balances) => {
         return;
       }
       case "open-pilot": {
-        launchPilotUI(balances);
+        launchPilotUI(mechAddress, balances);
         return;
       }
       case "cancel":

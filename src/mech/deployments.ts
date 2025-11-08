@@ -25,7 +25,7 @@ export default {
   relayAdapt: () => ({
     address: RelayAdaptContract[getCurrentNetwork()].toLowerCase(),
   }),
-  railgunNeuralLink,
+  railgunNeuralLink: railgunNeuralLink as `0x${string}`,
   mech: (tokenId: bigint) => ({
     address: predictMechAddress({
       factory: erc6551Factory,
@@ -33,8 +33,8 @@ export default {
       mastercopy: mechMastercopy,
       tokenAddress: railgunNeuralLink,
       tokenId,
-    }),
-    tokenAddress: railgunNeuralLink,
+    }) as `0x${string}`,
+    tokenAddress: railgunNeuralLink as `0x${string}`,
     tokenId,
   }),
 };
