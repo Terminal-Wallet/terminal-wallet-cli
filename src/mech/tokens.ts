@@ -1,4 +1,3 @@
-import { ZeroAddress } from "ethers";
 import { NetworkName } from "@railgun-community/shared-models";
 import {
   tokenAmountSelectionPrompt,
@@ -8,6 +7,7 @@ import { Balances } from "./pilot";
 
 export const promptTokenBalances = async (
   chainName: NetworkName,
+  mechAddress: string,
 ): Promise<Balances> => {
   const selections = await tokenSelectionPrompt(
     chainName,
@@ -19,8 +19,8 @@ export const promptTokenBalances = async (
     selections,
     false, // private transfer
     true, // single recipient
-    false,
-    ZeroAddress, // don't ask for recipient address
+    false, // not a shield event
+    mechAddress, // don't ask for recipient address
   );
 
   return amountSelections.reduce((acc, selection) => {

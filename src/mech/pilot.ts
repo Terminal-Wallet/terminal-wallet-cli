@@ -37,6 +37,16 @@ const encodeBalanceSpoofRequests = (
   );
 };
 
+const RAILGUN_FEE_BPS = 25n; // 0.25%
+
+const subtractRailgunFee = (balances: Balances) =>
+  Object.fromEntries(
+    Object.entries(balances).map(([token, balance]) => [
+      token,
+      balance - (balance * RAILGUN_FEE_BPS) / 10000n,
+    ]),
+  );
+
 export const launchPilot = async (
   balances: Balances,
   processTransactionRequest: (request: MetaTransaction[]) => void,
@@ -60,7 +70,9 @@ export const launchPilot = async (
   launchUrl.searchParams.set("callback", callbackAddress);
   launchUrl.searchParams.set(
     "setup",
-    JSON.stringify(encodeBalanceSpoofRequests(address, balances)),
+    JSON.stringify(
+      encodeBalanceSpoofRequests(address, subtractRailgunFee(balances)),
+    ),
   );
 
   await open(launchUrl.toString());

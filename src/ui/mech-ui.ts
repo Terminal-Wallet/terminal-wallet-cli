@@ -1,4 +1,4 @@
-import { Interface, toBeHex } from "ethers";
+import { Interface } from "ethers";
 import { launchPilot, promptTokenBalances } from "../mech";
 import { mint } from "../mech/ui-actions";
 import { status } from "../mech/status";
@@ -82,7 +82,7 @@ export const runMechMenu = async (networkName: NetworkName) => {
 
     switch (choice) {
       case "deposit": {
-        const balances = await promptTokenBalances(networkName);
+        const balances = await promptTokenBalances(networkName, mechAddress);
 
         const nextStepPrompt = new Select({
           header: "What would you like to do with these tokens?",
