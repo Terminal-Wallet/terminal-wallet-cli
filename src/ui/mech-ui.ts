@@ -163,11 +163,20 @@ const launchPilotUI = async (
     },
   );
 
+  const hasDeposits = Object.values(balances).some((amount) => amount > 0n);
+
   const pilotPrompt = new Select({
     header: "Waiting for transaction from Pilot...",
     message: "",
     choices: [
-      { name: "deposit-only", message: "Skip Pilot and deposit tokens only" },
+      ...(hasDeposits
+        ? [
+            {
+              name: "deposit-only",
+              message: "Skip Pilot and deposit tokens only",
+            },
+          ]
+        : []),
       { name: "open-pilot", message: "Open Pilot again" },
       {
         name: "cancel",
@@ -182,8 +191,6 @@ const launchPilotUI = async (
     .catch(confirmPromptCatch);
 
   const result = await Promise.race([choicePromise, transactionRequestPromise]);
-
-  console.log(result);
 
   if (typeof result === "string") {
     switch (result) {
@@ -211,8 +218,21 @@ const launchPilotUI = async (
       }
     }
   } else {
+    // received Pilot callback
+
+    // cancel prompt
+    pilotPrompt.cancel();
+
     const { native, ...erc20 } = balances;
     if (native) throw new Error("Native balance deposit not supported yet");
+
+    console.log({
+      unshieldERC20s: Object.entries(erc20).map(([tokenAddress, amount]) => ({
+        tokenAddress,
+        amount,
+      })),
+      calls: result,
+    });
 
     await operateMech({
       unshieldERC20s: Object.entries(erc20).map(([tokenAddress, amount]) => ({
@@ -223,121 +243,3 @@ const launchPilotUI = async (
     });
   }
 };
-
-export const runTestMechMenu = async () => {
-  const mechMenuPrompt = new Select({
-    header: " ",
-    message: "select",
-    choices: [
-      { name: "status", message: "Show Status" },
-      { name: "exec", message: "Execute" },
-      { name: "back", message: "Back".grey },
-    ],
-    multiple: false,
-  });
-
-  const mechChoice = await mechMenuPrompt.run().catch(confirmPromptCatch);
-
-  if (mechChoice === "status") {
-    const entries = await status();
-    for (const entry of entries) {
-      console.log("-----");
-      console.log(` Mech address:   ${entry.mechAddress}`);
-      console.log(` NFT address:    ${entry.tokenAddress}`);
-      console.log(` TokenId:        ${entry.tokenId}`);
-      console.log(` isDeployed:     ${entry.isMechDeployed}`);
-      console.log(` isNFTShielded:  ${entry.isNFTShielded}`);
-      console.log(` isNFTSpendable: ${entry.isNFTSpendable}`);
-      console.log(` isNFTBlocked:   ${entry.isNFTBlocked}`);
-    }
-    if (entries.length === 0) {
-      console.log("No NFT minted or Shielded");
-    }
-
-    // Just show status and return to main menu
-
-    await confirmPromptCatchRetry("");
-
-    return;
-  } else if (mechChoice === "exec") {
-    await justDeposit();
-    // await justWithdraw();
-    // await justExecute();
-    // await executeAndWithdraw();
-  }
-};
-
-const WPOL = "0x0d500b1d8e8ef31e21c99d1db9a6444d3adf1270";
-
-async function justDeposit() {
-  // requires 0.01 WPOL to be shielded in Railgun
-  await depositIntoMech({
-    unshieldERC20s: [
-      {
-        tokenAddress: WPOL,
-        amount: BigInt(10 ** 16),
-      },
-    ],
-  });
-}
-
-async function justWithdraw() {
-  // REQUIRES 0.001 WPOL in the mech
-  // shield WPOL from mech to Railgun
-  await executeViaMech({
-    shieldERC20s: [
-      {
-        tokenAddress: WPOL,
-        amount: BigInt(10 ** 15),
-      },
-    ],
-  });
-}
-
-async function justExecute() {
-  // REQUIRES 0.01 POL
-  // wraps POL into WPOL
-  const tx = {
-    to: "0x0d500b1d8e8ef31e21c99d1db9a6444d3adf1270", // wPOL contract
-    data: "0xd0e30db0",
-    operation: 0 as any,
-    value: BigInt(10 ** 16),
-  };
-
-  await executeViaMech({
-    calls: [tx],
-  });
-}
-
-async function executeAndWithdraw() {
-  const iface = new Interface([
-    "function deposit() payable",
-    "function withdraw(uint256 wad)",
-  ]);
-
-  // Requires WPOL 0.003 to be sitting in the Mech:
-  // Unwraps WPOL into POL 0.001
-  // sends 0.001 POL to some EOA
-  // shield 0.001 WPOL back to Railgun
-
-  const amount = BigInt(10 ** 15);
-
-  const unwrapTx = {
-    to: WPOL,
-    data: iface.encodeFunctionData("withdraw", [amount]),
-    value: 0,
-    operation: 0 as any,
-  };
-
-  const sendNative = {
-    to: "0x63EDeE5c8E332335630FB1A46607668CCFB2F4eE",
-    data: "0x",
-    value: amount,
-    operation: 0 as any,
-  };
-
-  await executeViaMech({
-    calls: [unwrapTx, sendNative],
-    shieldERC20s: [{ tokenAddress: WPOL, amount: amount }],
-  });
-}

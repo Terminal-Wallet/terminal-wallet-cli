@@ -71,7 +71,7 @@ import "colors";
 import { getStatusText, setStatusText } from "./status-ui";
 import { runRPCEditorPrompt } from "./provider-ui";
 
-import { runMechMenu, runTestMechMenu } from "./mech-ui";
+import { runMechMenu } from "./mech-ui";
 
 const { version } = require("../../package.json");
 
@@ -552,11 +552,6 @@ const getMainPrompt = (networkName: NetworkName, baseSymbol: string) => {
         message: "Operate Mech 🦾",
         disabled: false,
       },
-      {
-        name: "test-mech",
-        message: "Debug Mech 🦾",
-        disabled: false,
-      },
 
       {
         message: ` >> ${"Public Actions".grey.bold} <<`,
@@ -848,11 +843,6 @@ export const runMainMenu = async () => {
     }
     case "launch-mech": {
       await runMechMenu(networkName);
-      break;
-    }
-
-    case "test-mech": {
-      await runTestMechMenu();
       break;
     }
 
