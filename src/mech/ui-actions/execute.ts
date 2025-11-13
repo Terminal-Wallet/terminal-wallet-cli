@@ -121,13 +121,19 @@ export async function executeViaMech({
     shieldERC20s: shieldERC20s.map(toOur0zk),
   });
 
-  const result = await sendSelfSignedTransaction(
-    selfSignerInfo(),
-    getCurrentNetwork(),
-    transaction,
-  );
-  console.log("Waiting for execution...");
-  await result?.wait();
+  try {
+    const result = await sendSelfSignedTransaction(
+      selfSignerInfo(),
+      getCurrentNetwork(),
+      transaction,
+    );
+
+    console.log("Waiting for execution...");
+    await result?.wait();
+  } catch (error) {
+    console.error(error);
+    process.exit(1);
+  }
 }
 
 function minusUnshieldFee(amount: bigint, feeBP: bigint = 25n) {
