@@ -296,13 +296,16 @@ export const runTokenAmountSelection = async (
   token: RailgunReadableAmount,
   publicTransfer: boolean,
   isShieldEvent = false,
+  recipientAddress?: string,
 ): Promise<RailgunSelectedAmount | undefined> => {
-  const recipientAddress = publicTransfer
-    ? await runInputPublicAddress(`[${token.symbol}] `, isShieldEvent)
-    : await runInputRailgunAddress(`[${token.symbol}] `, isShieldEvent);
-
   if (!recipientAddress) {
-    return undefined;
+    recipientAddress = publicTransfer
+      ? await runInputPublicAddress(`[${token.symbol}] `, isShieldEvent)
+      : await runInputRailgunAddress(`[${token.symbol}] `, isShieldEvent);
+
+    if (!recipientAddress) {
+      return undefined;
+    }
   }
 
   const result = await getTokenAmountSelectionPrompt(
@@ -326,6 +329,7 @@ export const tokenAmountSelectionPrompt = async (
   publicTransfer: boolean,
   singleTransfer = false,
   isShieldEvent = false,
+  recipientAddress?: string,
 ): Promise<RailgunSelectedAmount[]> => {
   const selections = [];
 
@@ -346,6 +350,7 @@ export const tokenAmountSelectionPrompt = async (
           bal,
           publicTransfer,
           isShieldEvent,
+          recipientAddress,
         );
         if (selection) {
           currentBalance = currentBalance - selection.selectedAmount;

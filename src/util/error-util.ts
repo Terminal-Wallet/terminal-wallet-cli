@@ -46,12 +46,12 @@ export const processSafeExit = async () => {
   console.log("Shutting Down Modules");
   clearConsoleBuffer();
   await killEngineAndWaku();
-  console.clear();
+  // console.clear();
   process.exit(0);
 };
 
 process.on("SIGINT", async () => {
-  console.clear();
+  // console.clear();
   await processSafeExit();
 });
 process.on("unhandledRejection", async (err: Error | string) => {

@@ -36,7 +36,10 @@ import {
   processDestroyExit,
   processSafeExit,
 } from "../util/error-util";
-import { runAddTokenPrompt } from "./token-ui";
+import {
+  runAddTokenPrompt,
+  transferTokenAmountSelectionPrompt,
+} from "./token-ui";
 import {
   confirmPrompt,
   confirmPromptCatch,
@@ -67,10 +70,13 @@ import { getScanProgressString, walletManager } from "../wallet/wallet-manager";
 import "colors";
 import { getStatusText, setStatusText } from "./status-ui";
 import { runRPCEditorPrompt } from "./provider-ui";
+
+import { runMechMenu } from "./mech-ui";
+
 const { version } = require("../../package.json");
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-const { Select } = require("enquirer");
+const { Select, Confirm } = require("enquirer");
 
 const stripColors = (input: string): string => {
   // eslint-disable-next-line no-control-regex
@@ -128,6 +134,10 @@ const runNetworkSelectionPrompt = async () => {
       { name: NetworkName.BNBChain, message: `${"Binance".green} Network` },
       { name: NetworkName.Polygon, message: `${"Polygon".green} Network` },
       { name: NetworkName.Arbitrum, message: `${"Arbitrum".green} Network` },
+      {
+        name: NetworkName.EthereumSepolia,
+        message: `${"Sepolia".green} Network`,
+      },
       // {
       //   name: NetworkName.EthereumGoerli_DEPRECATED,
       //   message: `${"Ethereum Görli".green} Testnet`,
@@ -204,19 +214,26 @@ const runPOIToolsPrompt = async (chainName: NetworkName) => {
 };
 
 const runWalletToolsPrompt = async (chainName: NetworkName) => {
-  const currentShowStatus = `[${shouldShowSender() ? "SHOWING".green : "HIDING".grey}]`
+  const currentShowStatus = `[${
+    shouldShowSender() ? "SHOWING".green : "HIDING".grey
+  }]`;
   const generateOptionPrompt = new Select({
     header: " ",
     message: "Wallet Tools",
     choices: [
       { name: "add-wallet", message: "Add Wallet" },
       { name: "poi-tools", message: "POI Tools" },
-      { name: "show-sender-address", message: `${currentShowStatus} ${shouldShowSender() ? "Hide" : "Show"} Private TX Sender address.` },
+      {
+        name: "show-sender-address",
+        message: `${currentShowStatus} ${
+          shouldShowSender() ? "Hide" : "Show"
+        } Private TX Sender address.`,
+      },
       {
         name: "show-mnemonic",
         message: "Show Current Mnemonic & Index",
       },
-      { name: 'full-txid-rescan', message: "Full TXID Rescan" },
+      { name: "full-txid-rescan", message: "Full TXID Rescan" },
       { name: "full-balance-rescan", message: "Full Balance Rescan" },
       {
         name: "destruct-wallet",
@@ -258,7 +275,7 @@ const runWalletToolsPrompt = async (chainName: NetworkName) => {
         break;
       }
       case "full-txid-rescan": {
-        fullResetTXIDMerkletreesV2(chainName)
+        fullResetTXIDMerkletreesV2(chainName);
         break;
       }
       case "full-balance-rescan": {
@@ -301,16 +318,16 @@ const runWalletToolsPrompt = async (chainName: NetworkName) => {
 };
 
 const getMainPrompt = (networkName: NetworkName, baseSymbol: string) => {
-
   const chain = getChainForName(networkName);
 
   return new Select({
     logoHeader: RAILGUN_HEADER,
     header: async () => {
-      const broadcasterStatus = `Broadcasters: ${isWakuConnected()
-        ? "Available".dim.green.bold
-        : "Disconnected".dim.yellow.bold
-        }`.grey;
+      const broadcasterStatus = `Broadcasters: ${
+        isWakuConnected()
+          ? "Available".dim.green.bold
+          : "Disconnected".dim.yellow.bold
+      }`.grey;
 
       const walletName = getCurrentWalletName();
       const currentRailgunAddress = getCurrentRailgunAddress();
@@ -329,16 +346,17 @@ const getMainPrompt = (networkName: NetworkName, baseSymbol: string) => {
         scanString === "" ? statusString : `${scanString}${statusString}`;
       const buckets = Object.keys(RailgunWalletBalanceBucket);
 
-      let balanceBlock = ""
+      let balanceBlock = "";
       for (const bucket of buckets) {
-        const output = await getPrivateDisplayBalances(networkName, bucket as RailgunWalletBalanceBucket).then(
-          (v) => {
-            return v;
-          },
-        );
+        const output = await getPrivateDisplayBalances(
+          networkName,
+          bucket as RailgunWalletBalanceBucket,
+        ).then((v) => {
+          return v;
+        });
 
         const outputstring = `${output}`;
-        balanceBlock += `${outputstring}`
+        balanceBlock += `${outputstring}`;
       }
 
       return [
@@ -346,9 +364,10 @@ const getMainPrompt = (networkName: NetworkName, baseSymbol: string) => {
         walletInfoString,
         broadcasterStatus,
         balanceBlock,
-        `${!isMenuResponsive()
-          ? "Auto Refresh Disabled, Refresh on Movement Enabled.\n".yellow.dim
-          : ""
+        `${
+          !isMenuResponsive()
+            ? "Auto Refresh Disabled, Refresh on Movement Enabled.\n".yellow.dim
+            : ""
         }${balanceScanned}`,
       ].join("\n");
     },
@@ -430,12 +449,12 @@ const getMainPrompt = (networkName: NetworkName, baseSymbol: string) => {
       );
       const visible = await Promise.all(choices);
 
-      const privActions = visible.slice(0, 4);
-      const pubActions = visible.slice(4, 9);
-      const swapActions = visible.slice(9, 12);
-      const utilActions = visible.slice(12, 18);
-      const extraUtilAction = visible.slice(18, 23);
-      const exitAction = visible.slice(23);
+      const privActions = visible.slice(0, 5);
+      const pubActions = visible.slice(5, 10);
+      const swapActions = visible.slice(10, 13);
+      const utilActions = visible.slice(13, 19);
+      const extraUtilAction = visible.slice(19, 24);
+      const exitAction = visible.slice(24);
 
       const txstuff = [...privActions, " ", ...pubActions, " ", ...swapActions];
       const utilstuff = [
@@ -500,8 +519,9 @@ const getMainPrompt = (networkName: NetworkName, baseSymbol: string) => {
       return this.render();
     },
     prefix: process.platform === "win32" ? " [*]" : "🛡️ ",
-    message: `Now arriving at Terminal Wallet ${("v" + version).grey}... ${"(Featuring RAILGUN Privacy)".grey
-      }`,
+    message: `Now arriving at Terminal Wallet ${("v" + version).grey}... ${
+      "(Featuring RAILGUN Privacy)".grey
+    }`,
     separator: " ",
     initial: lastMenuSelection ?? "private-transfer",
     choices: [
@@ -513,19 +533,26 @@ const getMainPrompt = (networkName: NetworkName, baseSymbol: string) => {
       {
         name: "private-transfer",
         message: `Send ${"ERC20s".cyan.bold} Privately`,
-        disabled: !remoteConfig.network[chain.id].flags?.canSendShielded
+        disabled: !remoteConfig.network[chain.id].flags?.canSendShielded,
       },
       {
         name: "unshield-private-balances",
         message: `Unshield ${"ERC20s".cyan.bold}`,
-        disabled: !remoteConfig.network[chain.id].flags?.canUnshield
+        disabled: !remoteConfig.network[chain.id].flags?.canUnshield,
       },
-
       {
         name: "base-unshield",
         message: `Unshield [${baseSymbol.cyan.bold}]`,
-        disabled: !remoteConfig.network[chain.id].flags?.canUnshield && !remoteConfig.network[chain.id].flags?.canRelayAdapt
+        disabled:
+          !remoteConfig.network[chain.id].flags?.canUnshield &&
+          !remoteConfig.network[chain.id].flags?.canRelayAdapt,
       },
+      {
+        name: "launch-mech",
+        message: "Operate Mech 🦾",
+        disabled: false,
+      },
+
       {
         message: ` >> ${"Public Actions".grey.bold} <<`,
         role: "separator",
@@ -533,22 +560,22 @@ const getMainPrompt = (networkName: NetworkName, baseSymbol: string) => {
       {
         name: "shield-public-balances",
         message: `Shield ${"ERC20s".cyan.bold}`,
-        disabled: !remoteConfig.network[chain.id].flags?.canShield
+        disabled: !remoteConfig.network[chain.id].flags?.canShield,
       },
       {
         name: "base-shield",
         message: `Shield [${baseSymbol.cyan.bold}]`,
-        disabled: !remoteConfig.network[chain.id].flags?.canShield
+        disabled: !remoteConfig.network[chain.id].flags?.canShield,
       },
       {
         name: "public-transfer",
         message: `Send ${"ERC20s".cyan.bold} Publicly`,
-        disabled: !remoteConfig.network[chain.id].flags?.canSendPublic
+        disabled: !remoteConfig.network[chain.id].flags?.canSendPublic,
       },
       {
         name: "public-base-transfer",
         message: `Send [${baseSymbol.cyan.bold}]`,
-        disabled: !remoteConfig.network[chain.id].flags?.canSendPublic
+        disabled: !remoteConfig.network[chain.id].flags?.canSendPublic,
       },
       {
         message: ` >> ${"0X SWAP Tools".grey.bold} <<`,
@@ -557,12 +584,12 @@ const getMainPrompt = (networkName: NetworkName, baseSymbol: string) => {
       {
         name: "private-swap",
         message: `${"Privately"} ${"SWAP"} ${"ERC20".cyan.bold} ${"Tokens"}`,
-        disabled: !remoteConfig.network[chain.id].flags?.canSwapShielded
+        disabled: !remoteConfig.network[chain.id].flags?.canSwapShielded,
       },
       {
         name: "public-swap",
         message: `${"Publicly"} ${"SWAP"} ${"ERC20".cyan.bold} ${"Tokens"}`,
-        disabled: !remoteConfig.network[chain.id].flags?.canSwapPublic
+        disabled: !remoteConfig.network[chain.id].flags?.canSwapPublic,
       },
       {
         message: ` >> ${"Utilities".grey.bold} <<`,
@@ -579,8 +606,9 @@ const getMainPrompt = (networkName: NetworkName, baseSymbol: string) => {
       { name: "refresh-balances", message: "Refresh Balances" },
       {
         name: "toggle-balance",
-        message: `Toggle ${shouldDisplayPrivateBalances() ? "Public" : "Private"
-          } Balances`.yellow.dim,
+        message: `Toggle ${
+          shouldDisplayPrivateBalances() ? "Public" : "Private"
+        } Balances`.yellow.dim,
       },
       { name: "reset-broadcasters", message: "Reset Broadcaster Connection" },
       { name: "edit-rpc", message: "Edit RPC Providers" },
@@ -813,6 +841,10 @@ export const runMainMenu = async () => {
       toggleResponsiveMenu();
       break;
     }
+    case "launch-mech": {
+      await runMechMenu(networkName);
+      break;
+    }
 
     case "exit": {
       clearConsoleBuffer();
@@ -823,6 +855,7 @@ export const runMainMenu = async () => {
       break;
     }
   }
+
   clearConsoleBuffer();
   runMainMenu();
 };

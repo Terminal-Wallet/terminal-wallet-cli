@@ -140,6 +140,7 @@ export const getPrivateERC20BalancesForChain = (
     return [];
   }
   const erc20Addresses = Object.keys(cache);
+
   const balances: RailgunDisplayBalance[] = [];
   erc20Addresses.map(async (tokenAddress) => {
     const { name, symbol, decimals } = await getTokenInfo(
@@ -185,8 +186,10 @@ export const getDisplayStringFromBalance = (
   return balanceDisplayString;
 };
 
-export const getPrivateDisplayBalances = async (chainName: NetworkName, bucketType: RailgunWalletBalanceBucket) => {
-
+export const getPrivateDisplayBalances = async (
+  chainName: NetworkName,
+  bucketType: RailgunWalletBalanceBucket,
+) => {
   const CHAIN_NAME = configDefaults.networkConfig[chainName].name.toUpperCase();
   const display: string[] = [];
 
@@ -195,18 +198,19 @@ export const getPrivateDisplayBalances = async (chainName: NetworkName, bucketTy
     ? await getPrivateERC20BalancesForChain(chainName, bucketType)
     : await getPublicERC20BalancesForChain(chainName, true);
 
-
-  if(bucketType !== RailgunWalletBalanceBucket.Spendable){
-    if(balances.length === 0){
-      return ""
+  if (bucketType !== RailgunWalletBalanceBucket.Spendable) {
+    if (balances.length === 0) {
+      return "";
     }
-    if(!isPrivate){
+    if (!isPrivate) {
       // if not private, only show set of balances once. dont add header.
-      return ""
+      return "";
     }
   }
   const balanceType = isPrivate ? "PRIVATE" : "PUBLIC";
-  const header = `${CHAIN_NAME.green} ${ isPrivate ? bucketType.green : ''} ${balanceType} BALANCES`;
+  const header = `${CHAIN_NAME.green} ${
+    isPrivate ? bucketType.green : ""
+  } ${balanceType} BALANCES`;
   const headLen = stripColors(header).length;
   display.push("");
   const headerLine = `${header}`;

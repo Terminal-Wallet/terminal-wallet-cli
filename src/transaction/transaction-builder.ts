@@ -356,7 +356,7 @@ const sendBroadcastedTransaction = async (
   return sendResult;
 };
 
-const sendSelfSignedTransaction = async (
+export const sendSelfSignedTransaction = async (
   selfSignerInfo: any,
   chainName: NetworkName,
   provedTransaction: any,
