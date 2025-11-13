@@ -209,7 +209,7 @@ const launchPilotUI = async (
         return;
       }
       case "open-pilot": {
-        launchPilotUI(mechAddress, balances);
+        await launchPilotUI(mechAddress, balances);
         return;
       }
       case "cancel":
