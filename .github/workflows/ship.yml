@@ -9,29 +9,28 @@ on:
 permissions:
   contents: write
 
-
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
   ship:
     strategy:
-      fail-fast: false # prevents GitHub from cancelling all in-progress jobs if any matrix job fails.
+      fail-fast: false
       matrix:
-        node-version: [20.12.1]
-        os: [ubuntu-22.04, macos-latest, windows-latest]
+        node-version: [22.16.0]
+        os: [ubuntu-22.04, macos-latest, windows-2022]
         include:
           - os: macos-latest
             output: terminal-wallet-cli
           - os: ubuntu-22.04
             output: terminal-wallet-cli
-          - os: windows-latest
+          - os: windows-2022
             output: terminal-wallet-cli.exe
 
     runs-on: ${{ matrix.os }}
     outputs:
       version: ${{ steps.versionStore.outputs.version }}
-      
+
     steps:
       - uses: actions/checkout@v4
 
@@ -39,6 +38,62 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
+          cache: npm
+
+      # ---------------- WINDOWS PREREQS ----------------
+
+      - name: Setup Python (Windows)
+        if: runner.os == 'Windows'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Setup MSVC Dev Cmd (Windows)
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Force MSVC linker (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          # Remove Git-for-Windows usr\bin (contains GNU link) from PATH
+          $parts = $env:Path -split ';' | Where-Object { $_ -and ($_ -notmatch '\\Git\\usr\\bin') }
+          $env:Path = ($parts -join ';')
+
+          # Prepend MSVC bin directory containing link.exe
+          $msvcLink = Get-ChildItem "C:\Program Files\Microsoft Visual Studio" -Recurse -Filter link.exe -ErrorAction SilentlyContinue |
+            Where-Object { $_.FullName -match '\\VC\\Tools\\MSVC\\' -and $_.FullName -match '\\bin\\Hostx64\\x64\\link\.exe$' } |
+            Select-Object -First 1
+
+          if (-not $msvcLink) {
+            Write-Error "MSVC link.exe not found — Visual Studio Build Tools missing"
+            exit 1
+          }
+
+          $msvcBin = Split-Path $msvcLink.FullName
+          $env:Path = "$msvcBin;$env:Path"
+          "PATH=$env:Path" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+          where.exe link
+          link.exe /? | Select-Object -First 2
+
+      - name: Configure node-gyp (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          npm config set msvs_version 2022
+          npm config set python python
+          node -p "process.versions"
+          python --version
+          where.exe python
+          where.exe cl
+
+      # ---------------- COMMON SETUP ----------------
+
+      - name: Enable Corepack (prepare Yarn)
+        run: |
+          corepack enable
+          corepack prepare yarn@1.22.19 --activate
 
       - name: Set up Rust
         uses: actions-rs/toolchain@v1
@@ -48,28 +103,84 @@ jobs:
 
       - name: Store Current Version
         id: versionStore
+        shell: bash
         run: |
           echo "version=$(jq -r '.version' package.json)" >> $GITHUB_OUTPUT
 
-      - name: Retrieve Cached Dependencies
-        id: cache-npm
+      - name: Cache Cargo
         uses: actions/cache@v4
-        env:
-          cache-name: dep-cache
         with:
           path: |
-            ~/.npm
-            ~/.cargo
-            node_modules
-          key: ${{ runner.os }}-build-${{ env.cache-name }}
-          restore-keys: ${{ runner.os }}-build-${{ env.cache-name }}
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
 
-      - if: ${{ steps.cache-npm.outputs.cache-hit != 'true' }}
-        name: Setup nj-cli & Install Dependencies
-        continue-on-error: true
+      # ---------------- nj-cli (RUST) ----------------
+
+      - name: Setup nj-cli (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: cargo install nj-cli --locked
+
+      - name: Setup nj-cli (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: cargo install nj-cli --locked
+
+      # ---------------- DEPENDENCIES ----------------
+
+      - name: Install Dependencies (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
         run: |
-          cargo install nj-cli
-          npm ci --legacy-peer-deps
+          npm ci --legacy-peer-deps --no-audit --no-fund
+
+      # Windows: DO NOT run lifecycle scripts during install (bufferutil/leveldown/utf-8-validate will fail on Node 22).
+      - name: Install Dependencies (Windows, ignore scripts)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          # Ensure dev deps install (rimraf is a devDep in your root)
+          npm_config_production: "false"
+          # Keep npm using cmd; avoid git-bash shims
+          npm_config_script_shell: "C:\\Windows\\System32\\cmd.exe"
+          npm_config_msvs_version: "2022"
+          npm_config_python: "python"
+          npm_config_audit: "false"
+          npm_config_fund: "false"
+        run: |
+          if (Test-Path node_modules) { Remove-Item -Recurse -Force node_modules }
+          npm ci --legacy-peer-deps --no-audit --no-fund --ignore-scripts
+
+          # Sanity: root devDep should exist after a complete install
+          node -e "require('rimraf'); console.log('rimraf ok')"
+          node -e "require('ws'); console.log('ws ok')"
+
+      # Windows: selectively rebuild ONLY the railgun rsjs modules (enable their scripts), not the problematic native addons.
+      - name: Build Railgun rsjs modules (Windows only)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          npm_config_production: "false"
+          npm_config_script_shell: "C:\\Windows\\System32\\cmd.exe"
+          npm_config_msvs_version: "2022"
+          npm_config_python: "python"
+        run: |
+          # Rebuild just these packages so their native artifacts exist
+          npm rebuild @railgun-community/curve25519-scalarmult-rsjs --verbose
+          npm rebuild @railgun-community/poseidon-hash-rsjs --verbose
+
+      # Windows: remove perf addons that would remain unbuilt due to ignore-scripts
+      - name: Remove problematic native perf addons (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          if (Test-Path "node_modules/bufferutil") { Remove-Item -Recurse -Force "node_modules/bufferutil" }
+          if (Test-Path "node_modules/utf-8-validate") { Remove-Item -Recurse -Force "node_modules/utf-8-validate" }
+
+      # ---------------- SHIP ----------------
 
       - name: Ship
         run: npm run ship
@@ -83,24 +194,24 @@ jobs:
     needs: ship
     runs-on: ubuntu-latest
     steps:
-    - name: Download artifacts
-      uses: actions/download-artifact@v4
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
 
-    - name: Prepare artifacts
-      run: |
-        mv cli-macos-latest/terminal-wallet-cli terminal-wallet-macos
-        mv cli-ubuntu-22.04/terminal-wallet-cli terminal-wallet-linux
-        mv cli-windows-latest/terminal-wallet-cli.exe terminal-wallet-win.exe
-        chmod a+x terminal-wallet-macos terminal-wallet-linux
-        tar -czf release-${{needs.ship.outputs.version}}-macos.tar.gz terminal-wallet-macos
-        tar -czf release-${{needs.ship.outputs.version}}-linux.tar.gz terminal-wallet-linux
-        tar -czf release-${{needs.ship.outputs.version}}-win.tar.gz terminal-wallet-win.exe
-        sha256sum release-* >> SHA256SUMS.sha
+      - name: Prepare artifacts
+        run: |
+          mv cli-macos-latest/terminal-wallet-cli terminal-wallet-macos
+          mv cli-ubuntu-22.04/terminal-wallet-cli terminal-wallet-linux
+          mv cli-windows-2022/terminal-wallet-cli.exe terminal-wallet-win.exe
+          chmod a+x terminal-wallet-macos terminal-wallet-linux
+          tar -czf release-${{needs.ship.outputs.version}}-macos.tar.gz terminal-wallet-macos
+          tar -czf release-${{needs.ship.outputs.version}}-linux.tar.gz terminal-wallet-linux
+          tar -czf release-${{needs.ship.outputs.version}}-win.tar.gz terminal-wallet-win.exe
+          sha256sum release-* >> SHA256SUMS.sha
 
-    - name: Upload artifacts to GitHub Release
-      uses: softprops/action-gh-release@v1
-      with:
-        draft: ${{ !startsWith(github.ref, 'refs/tags/v') }}
-        files: |
-          release-*.tar.gz
-          SHA256SUMS.sha
+      - name: Upload artifacts to GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          draft: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+          files: |
+            release-*.tar.gz
+            SHA256SUMS.sha

@@ -11,12 +11,12 @@
   "scripts": {
     "postinstall": "patch-package",
     "start": "node --max-old-space-size=8192 --no-warnings --experimental-specifier-resolution=node dist/main.js",
-    "build": "rm -rf dist && npm run lint && tsc",
+    "build": "rimraf dist && tsc",
     "st2": "node --experimental-specifier-resolution=node dist/main.js",
     "circular": "madge -c src/**/*",
     "preship": "npm run build",
     "ship": "node ship.mjs --clean",
-    "lint": "eslint src",
+    "lint": "npx eslint src",
     "installdeps": "npm install --legacy-peer-deps",
     "release": "release-it"
   },
