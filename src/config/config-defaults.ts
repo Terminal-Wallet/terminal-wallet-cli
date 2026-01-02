@@ -108,10 +108,8 @@ export default {
       chainId: 1,
       blockscan: "https://etherscan.io/",
       providers: [
-        getProviderObjectFromURL("https://eth.llamarpc.com"),
-        getProviderObjectFromURL("https://eth-mainnet.public.blastapi.io"),
+        getProviderObjectFromURL("https://ethereum.rpc.subquery.network/public"),
         getProviderObjectFromURL("https://ethereum-rpc.publicnode.com"),
-        getProviderObjectFromURL("https://cloudflare-eth.com/"),
       ],
     },
     [NetworkName.Polygon]: {

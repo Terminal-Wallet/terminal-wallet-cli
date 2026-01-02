@@ -9,6 +9,7 @@ import {
 export type BroadcasterOptions = {
   pubSubTopic?: string;
   additionalDirectPeers?: string[];
+  trustedFeeSigner: string;
   peerDiscoveryTimeout?: number;
 };
 export type BroadcasterConnectionStatusCallback = (
