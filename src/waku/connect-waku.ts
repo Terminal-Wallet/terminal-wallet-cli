@@ -9,11 +9,16 @@ import {
 let wakuBroadcasterTransaction: WakuBroadcasterTransaction;
 let wakuLoaded = false;
 let isConnected = false;
+export let baseAllowList: string[] | undefined = undefined;
+export let baseBlockList: string[] | undefined = undefined;
+export let wakuClient: WakuBroadcasterClient;
 
+const trustedFeeSigner = '0zk1qyzgh9ctuxm6d06gmax39xutjgrawdsljtv80lqnjtqp3exxayuf0rv7j6fe3z53laetcl9u3cma0q9k4npgy8c8ga4h6mx83v09m8ewctsekw4a079dcl5sw4k'
 const broadcasterOptions: BroadcasterOptions = {
-  pubSubTopic: "/waku/2/rs/0/1",
-  additionalDirectPeers: [],
+  trustedFeeSigner,
 };
+
+
 
 export const initializeLists = (allowList: string[], blockList: string[]) => {
   baseAllowList = allowList.length > 0 ? allowList : undefined;
@@ -29,7 +34,6 @@ const wakuStatusCallback = (chain: Chain, status: string) => {
   }
 };
 
-export let wakuClient: WakuBroadcasterClient;
 
 export const isWakuLoaded = () => {
   return wakuLoaded;
@@ -98,6 +102,4 @@ export const resetWakuClient = async () => {
   await wakuClient.tryReconnect();
 };
 
-export let baseAllowList: string[] | undefined = undefined;
-export let baseBlockList: string[] | undefined = undefined;
 

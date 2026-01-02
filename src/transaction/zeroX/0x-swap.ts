@@ -119,7 +119,9 @@ export const getZer0XSwapInputs = async (
       erc20Amounts: relayAdaptUnshieldERC20Amounts,
       nfts: [],
     };
-    const { minGasLimit } = swap.config;
+    // hardcode min gas limit for now. 
+    const minGasLimit  = 5_000_000n;
+    // const { minGasLimit } = swap.config;
     const recipeOutput: RecipeOutput = await swap.getRecipeOutput(recipeInput);
     const { crossContractCalls, erc20AmountRecipients } = recipeOutput;
 
