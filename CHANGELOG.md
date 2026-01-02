@@ -1,5 +1,12 @@
 
 
+## [1.4.0](https://github.com/Terminal-Wallet/terminal-wallet-cli/compare/v1.3.9...v1.4.0) (2026-01-02)
+
+
+### Bug Fixes
+
+* update build and lint scripts for improved compatibility ([4f67f54](https://github.com/Terminal-Wallet/terminal-wallet-cli/commit/4f67f5442c0493186c6585a5046183ea746cf751))
+
 ## [1.3.9](https://github.com/Terminal-Wallet/terminal-wallet-cli/compare/v1.3.8...v1.3.9) (2025-07-28)
 
 ## [1.3.8](https://github.com/Terminal-Wallet/terminal-wallet-cli/compare/v1.3.7...v1.3.8) (2025-06-20)
