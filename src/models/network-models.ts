@@ -82,4 +82,5 @@ export type RemoteConfig = {
   blacklist: string[];
   apiKeys?: APIKeys;
   network: RPCConfig;
+  trustedFeeSigner?: string | string [];
 }
