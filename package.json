@@ -65,7 +65,7 @@
     "@railgun-community/curve25519-scalarmult-rsjs": "0.2.4",
     "@railgun-community/poseidon-hash-rsjs": "1.0.1",
     "@railgun-community/shared-models": "8.0.0",
-    "@railgun-community/waku-broadcaster-client-node": "9.0.1",
+    "@railgun-community/waku-broadcaster-client-node": "9.0.3",
     "@railgun-community/wallet": "10.8.1",
     "bn": "1.0.5",
     "colors": "^1.4.0",

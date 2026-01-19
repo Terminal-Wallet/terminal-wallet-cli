@@ -1,4 +1,4 @@
-import { Chain, NetworkName } from "@railgun-community/shared-models";
+import { Chain, isDefined, NetworkName } from "@railgun-community/shared-models";
 import { getChainForName, remoteConfig } from "../network/network-util";
 import {
   WakuBroadcasterClient,
@@ -88,6 +88,9 @@ export const startWakuClient = async (chainName: NetworkName) => {
   const peerOverrides = remoteConfig.additionalDirectPeers ?? [];
   broadcasterOptions.additionalDirectPeers = peerOverrides;
   broadcasterOptions.pubSubTopic = remoteConfig.wakuPubSubTopic;
+  if(isDefined(remoteConfig.trustedFeeSigner)){
+    broadcasterOptions.trustedFeeSigner = remoteConfig.trustedFeeSigner;
+  }
   wakuClient.start(chain, broadcasterOptions, wakuStatusCallback, undefined);
 };
 
