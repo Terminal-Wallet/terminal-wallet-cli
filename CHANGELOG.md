@@ -1,5 +1,12 @@
 
 
+## [1.4.1](https://github.com/Terminal-Wallet/terminal-wallet-cli/compare/v1.4.0...v1.4.1) (2026-01-19)
+
+
+### Bug Fixes
+
+* update waku-broadcaster-client-node to version 9.0.3 ([#26](https://github.com/Terminal-Wallet/terminal-wallet-cli/issues/26)) ([106b0e3](https://github.com/Terminal-Wallet/terminal-wallet-cli/commit/106b0e301cbe3660398ab9d664937c5083a05f25))
+
 ## [1.4.0](https://github.com/Terminal-Wallet/terminal-wallet-cli/compare/v1.3.9...v1.4.0) (2026-01-02)
 
 
