@@ -13,10 +13,12 @@ export enum ChainIDs {
   Hardhat = 31337,
   PolygonMumbai = 80001,
   ArbitrumGoerli = 421613,
+  EthereumSepolia = 11155111
 }
 
 export const ChainIDToNameMap: NumMapType<NetworkName> = {
   [ChainIDs.Ethereum]: NetworkName.Ethereum,
+  [ChainIDs.EthereumSepolia]: NetworkName.EthereumSepolia,
   [ChainIDs.EthereumGoerli]: NetworkName.EthereumGoerli_DEPRECATED,
   [ChainIDs.BNBChain]: NetworkName.BNBChain,
   [ChainIDs.PolygonPOS]: NetworkName.Polygon,
@@ -82,5 +84,5 @@ export type RemoteConfig = {
   blacklist: string[];
   apiKeys?: APIKeys;
   network: RPCConfig;
-  trustedFeeSigner?: string | string [];
+  trustedFeeSigner: string;
 }

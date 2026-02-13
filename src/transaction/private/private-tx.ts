@@ -90,9 +90,9 @@ export const getOriginalGasDetailsForPrivateTransaction = async (
     if (!sendWithPublicWallet) {
       feeTokenDetails = broadcasterSelection
         ? {
-            tokenAddress: broadcasterSelection.tokenAddress,
-            feePerUnitGas: BigInt(broadcasterSelection.tokenFee.feePerUnitGas),
-          }
+          tokenAddress: broadcasterSelection.tokenAddress,
+          feePerUnitGas: BigInt(broadcasterSelection.tokenFee.feePerUnitGas),
+        }
         : undefined;
 
       if (feeTokenDetails) {
@@ -112,7 +112,7 @@ export const getOriginalGasDetailsForPrivateTransaction = async (
       } as ERC20Token;
     }
     return {
-      originalGasDetails,
+      originalGasDetails: originalGasDetails!,
       overallBatchMinGasPrice,
       sendWithPublicWallet,
       feeTokenDetails,
