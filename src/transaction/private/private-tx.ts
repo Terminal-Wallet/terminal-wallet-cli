@@ -41,6 +41,9 @@ export const getOriginalGasDetailsForPrivateTransaction = async (
 ): Promise<PrivateGasDetails | undefined> => {
   try {
     const feeData = await getFeeDetailsForChain(chainName);
+    if (!isDefined(feeData)) {
+      throw new Error("getOriginalGasDetailsForPrivateTransaction: missing feeData")
+    }
     const gasPrice = feeData.gasPrice ?? 0n;
     const maxFeePerGas = feeData.maxFeePerGas ?? feeData.gasPrice ?? 0n;
     const maxPriorityFeePerGas =

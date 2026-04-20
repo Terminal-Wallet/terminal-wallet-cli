@@ -7,7 +7,7 @@ import {
   TransactionGasDetailsType2,
   isDefined,
 } from "@railgun-community/shared-models";
-import { ContractTransaction } from "ethers";
+import { ContractTransaction, FeeData } from "ethers";
 import { throwError } from "../util/util";
 import { getGasEstimateMatrix, getGasEstimates } from "./gas-fee";
 import { getProviderForChain } from "../network/network-util";
@@ -71,7 +71,7 @@ export const getPublicGasEstimate = async (
   }
 };
 
-export const getFeeDetailsForChain = async (chainName: NetworkName) => {
+export const getFeeDetailsForChain = async (chainName: NetworkName): Promise<FeeData | undefined> => {
   // eslint-disable-next-line @typescript-eslint/switch-exhaustiveness-check
   switch (chainName) {
     case NetworkName.Ethereum:
@@ -86,7 +86,7 @@ export const getFeeDetailsForChain = async (chainName: NetworkName) => {
         gasPrice,
         maxFeePerGas,
         maxPriorityFeePerGas,
-      };
+      } as FeeData
     }
   }
   const provider = getProviderForChain(chainName);
@@ -105,6 +105,9 @@ export const getPublicGasDetails = async (
   isShield = false,
 ) => {
   const feeData = await getFeeDetailsForChain(chainName);
+  if (!isDefined(feeData)) {
+    throw new Error("getPublicGasDetails: missing feeData")
+  }
   const { gasPrice, maxFeePerGas, maxPriorityFeePerGas } = feeData;
   let gasDetailsInfo: {
     gasPrice?: bigint;

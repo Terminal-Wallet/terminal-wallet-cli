@@ -48,7 +48,7 @@ export const getProviderForURL = (rpcEndpoint: string) => {
 };
 
 // gas estimates should use this
-export const getFallbackProviderForChain = (chainName: NetworkName) => {
+export const getFallbackProviderForChain = (chainName: NetworkName): ReturnType<typeof getFallbackProviderForNetwork> => {
   return getFallbackProviderForNetwork(chainName);
 };
 
@@ -61,7 +61,7 @@ export const getFirstPollingProviderForChain = (
     .provider as unknown as JsonRpcProvider;
 };
 
-export const getProviderForChain = (chainName: NetworkName) => {
+export const getProviderForChain = (chainName: NetworkName): ReturnType<typeof getFallbackProviderForNetwork> => {
   return getFallbackProviderForChain(chainName);
 };
 
@@ -96,14 +96,21 @@ export const loadConfigForNetwork = async () => {
   // windows cmd
   // set REMOTE_CONFIG_RPC=http..
 
-  const remoteConfigUrl = process.env.REMOTE_CONFIG_RPC ?? 'https://rpc.flashbots.net';
+  const remoteConfigUrl = process.env.REMOTE_CONFIG_RPC ?? 'https://eth.llamarpc.com';
   const remoteConfigContract = '0x5e982525d50046A813DBf55Ae72a3E00e99fbC94'
   const provider = new JsonRpcProvider(remoteConfigUrl);
   const contract = new Contract(remoteConfigContract, [
     'function getConfig() public view returns (string memory str)',
   ], provider);
 
-  const raw = await contract.getConfig();
+
+  const raw = await contract.getConfig().catch(async (err: any) => {
+    console.error(`[remote-config] Failed to fetch config from ${remoteConfigUrl}. ${err.message}`);
+    console.error(
+      '[remote-config] Use a healthy RPC endpoint, for example: REMOTE_CONFIG_RPC="https://eth.llamarpc.com" npm run start',
+    );
+    process.exit(69)
+  });
   const config = JSON.parse(raw) as RemoteConfig;
   remoteConfig = config;
   return config;
