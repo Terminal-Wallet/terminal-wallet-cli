@@ -1,5 +1,13 @@
 
 
+## [1.4.2](https://github.com/Terminal-Wallet/terminal-wallet-cli/compare/v1.4.1...v1.4.2) (2026-04-20)
+
+
+### Bug Fixes
+
+* add EthereumSepolia to ChainIDs and update ChainIDToNameMap ([36cef0f](https://github.com/Terminal-Wallet/terminal-wallet-cli/commit/36cef0f0cff42c38948b269fa65ed47b44af06cb))
+* add feeData validation in gas detail calculations and update return types for provider functions ([8b8711b](https://github.com/Terminal-Wallet/terminal-wallet-cli/commit/8b8711bbcda5282f5906c6b4141ef1d0ef8a5b57))
+
 ## [1.4.1](https://github.com/Terminal-Wallet/terminal-wallet-cli/compare/v1.4.0...v1.4.1) (2026-01-19)
 
 
