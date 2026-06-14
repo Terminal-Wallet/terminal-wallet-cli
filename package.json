@@ -18,6 +18,7 @@
     "ship": "node ship.mjs --clean",
     "lint": "npx eslint src",
     "installdeps": "npm install --legacy-peer-deps",
+    "installdeps:hardware": "npm install --legacy-peer-deps && npm install @trezor/connect@^9.7.3 --no-save --legacy-peer-deps",
     "release": "release-it"
   },
   "keywords": [

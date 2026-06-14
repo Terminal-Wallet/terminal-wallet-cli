@@ -1,4 +1,3 @@
-import FS from "node:fs";
 import Path from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify as p } from "node:util";
@@ -9,12 +8,13 @@ import { rimrafSync } from "rimraf";
 import * as FSE from "fs-extra/esm";
 import * as esbuild from "esbuild";
 import caxa from "caxa";
+import { patchLeveldownBinding } from "./ship/lib/leveldown.mjs";
+import { collectSignerShipSteps } from "./ship/signers/index.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = Path.dirname(__filename);
 
 const BUILD_NAME = "terminal-wallet-cli";
-
 const DIST_DIR = Path.join(__dirname, "dist");
 const BUILD_DIR = Path.join(__dirname, "build");
 const SOURCE_NODE_MODULES = Path.join(__dirname, "node_modules");
@@ -75,48 +75,33 @@ const preserveNodeModules = [
     process.exit(1);
   }
 
-  console.log("Applying custom patches to use leveldown prebuilds...");
-  const arch = os.arch();
   const platform = os.platform();
-  const leveldownBindingJS = Path.join(
-    BUILD_DIR,
-    "node_modules",
-    "leveldown",
-    "binding.js",
-  );
-  rimrafSync(leveldownBindingJS);
-  let leveldownNodeFile;
-  if (platform === "darwin") {
-    leveldownNodeFile = ["darwin-x64+arm64", "node.napi.node"];
-  } else if (platform === "linux" && arch === "x64") {
-    leveldownNodeFile = ["linux-x64", "node.napi.glibc.node"];
-  } else if (platform === "linux" && arch === "arm64") {
-    leveldownNodeFile = ["linux-arm64", "node.napi.glibc.node"];
-  } else if (platform === "win32" && arch === "x64") {
-    leveldownNodeFile = ["win32-x64", "node.napi.node"];
-  } else if (platform === "win32" && arch === "ia32") {
-    leveldownNodeFile = ["win32-ia32", "node.napi.node"];
+  const arch = os.arch();
+
+  console.log("Applying custom patches to use leveldown prebuilds...");
+  patchLeveldownBinding({
+    buildDir: BUILD_DIR,
+    buildNodeModules: BUILD_NODE_MODULES,
+    platform,
+    arch,
+    preserveNodeModules,
+  });
+
+  const {
+    plugins: signerPlugins,
+    logs: signerLogs,
+    bundledSignerIds,
+  } = collectSignerShipSteps({
+    repoRoot: __dirname,
+    buildDir: BUILD_DIR,
+    buildNodeModules: BUILD_NODE_MODULES,
+    platform,
+    arch,
+    preserveNodeModules,
+  });
+  for (const line of signerLogs) {
+    console.log(line);
   }
-  if (!leveldownNodeFile) {
-    console.error("ERR Unsupported os/arch, no leveldown prebuilds found");
-    process.exit(1);
-  }
-  const expanded = leveldownNodeFile.map((str) => `'${str}'`).join(", ");
-  FS.writeFileSync(
-    leveldownBindingJS,
-    `const path = require('path');\n` +
-      `module.exports = require(path.join(` +
-      `__dirname, 'node_modules', 'leveldown', 'prebuilds', ${expanded}` +
-      `));`,
-  );
-  preserveNodeModules.push(
-    Path.join(
-      BUILD_NODE_MODULES,
-      "leveldown",
-      "prebuilds",
-      ...leveldownNodeFile,
-    ),
-  );
 
   // Create a single bundled JavaScript file
   console.log("Bundling with esbuild...");
@@ -127,6 +112,14 @@ const preserveNodeModules = [
     bundle: true,
     platform: "node",
     outfile: BUNDLE,
+    plugins: signerPlugins,
+    // Tell the runtime registry which signer backends are compiled in. node_modules
+    // is stripped from the bundle, so require.resolve() can't detect them otherwise.
+    define: {
+      "process.env.TW_BUNDLED_SIGNERS": JSON.stringify(
+        bundledSignerIds.join(","),
+      ),
+    },
     alias: {
       "default-gateway": "no-op",
       "@achingbrain/ssdp": "no-op",

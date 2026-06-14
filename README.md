@@ -1,13 +1,18 @@
 ## Tooling
 
-- Use Node.js 16.x
+- Use Node.js 20+
 - Use Rust (required for building executable)
 
 ### Install Node Dependencies
 
 ##### (_Required_)
 
-- Use `npm install --legacy-peer-deps` to install dependencies.
+- Use `npm run installdeps` to install dependencies (`npm install --legacy-peer-deps`).
+
+##### Hardware wallet (_optional_)
+
+- Trezor support: `npm run installdeps:hardware` (adds `@trezor/connect` without modifying `package.json`).
+  The base install never pulls hardware-wallet packages; run this only if you use a Trezor.
 
 <hr>
 
