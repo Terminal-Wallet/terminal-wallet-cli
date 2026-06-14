@@ -15,4 +15,11 @@ export type SignerBackendDefinition = {
 };
 
 /** Add new external signers here and implement backends/<id>/. */
-export const SIGNER_BACKEND_DEFINITIONS: SignerBackendDefinition[] = [];
+export const SIGNER_BACKEND_DEFINITIONS: SignerBackendDefinition[] = [
+  {
+    id: "trezor",
+    label: "Trezor",
+    npmPackage: "@trezor/connect",
+    load: () => import("../backends/trezor/index.js"),
+  },
+];
