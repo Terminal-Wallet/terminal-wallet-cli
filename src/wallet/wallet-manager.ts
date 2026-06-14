@@ -1,6 +1,6 @@
 import { ProgressBar } from "../ui/progressBar-ui";
 import { KeychainFile, WalletCache } from "../models/wallet-models";
-import { Wallet } from "ethers";
+import { TerminalSigner } from "./signer/terminal-signer";
 import { RailgunReadableAmount } from "../models/balance-models";
 import {
   POIProofProgressEvent,
@@ -21,7 +21,9 @@ export type WalletManager = {
   keyChain: KeychainFile;
   activeWalletName: string;
   currentActiveWallet: WalletCache;
-  currentEthersWallet: Wallet;
+  currentEthersWallet: TerminalSigner;
+  // Cached after one external-signer signMessage per session; shield ops reuse it.
+  cachedShieldPrivateKey?: string;
   comparisonRefHash: Optional<string | undefined>;
   menuLoaded: boolean;
   saltedPassword: string;

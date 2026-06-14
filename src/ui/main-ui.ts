@@ -26,6 +26,7 @@ import {
   toggleResponsiveMenu,
   shouldShowSender,
   toggleShouldShowSender,
+  usesExternalSigner,
 } from "../wallet/wallet-util";
 import { runTransactionBuilder } from "../transaction/transaction-builder";
 
@@ -214,7 +215,9 @@ const runWalletToolsPrompt = async (chainName: NetworkName) => {
       { name: "show-sender-address", message: `${currentShowStatus} ${shouldShowSender() ? "Hide" : "Show"} Private TX Sender address.` },
       {
         name: "show-mnemonic",
-        message: "Show Current Mnemonic & Index",
+        message: usesExternalSigner(walletManager.currentActiveWallet)
+            ? "Show Railgun Backup Seed & Index"
+            : "Show Current Mnemonic & Index",
       },
       { name: 'full-txid-rescan', message: "Full TXID Rescan" },
       { name: "full-balance-rescan", message: "Full Balance Rescan" },
@@ -250,6 +253,20 @@ const runWalletToolsPrompt = async (chainName: NetworkName) => {
         break;
       }
       case "show-mnemonic": {
+        if (usesExternalSigner(walletManager.currentActiveWallet)) {
+          console.log(
+            "NOTE: This is the Railgun backup seed DERIVED from your external signer — not your device recovery seed."
+              .yellow,
+          );
+          console.log(
+            "BACK THIS UP. Your device should regenerate the same seed on a fresh install, but verify"
+              .red,
+          );
+          console.log(
+            "recovery on your own device/firmware before relying on it — keep this phrase safe regardless."
+              .red,
+          );
+        }
         const walletInfo = await getCurrentWalletMnemonicAndIndex();
         if (isDefined(walletInfo)) {
           console.log(walletInfo);

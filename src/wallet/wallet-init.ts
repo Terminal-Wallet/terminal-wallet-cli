@@ -27,8 +27,12 @@ import {
 import { initWakuClient, startWakuClient } from "../waku/connect-waku";
 import { importKnownAddressesFromWallet } from "../ui/known-address-ui";
 import { processSafeExit } from "../util/error-util";
-import { getEthersWallet } from "../network/network-util";
+import {
+  getEthersWallet,
+} from "../network/network-util";
 import { walletManager } from "./wallet-manager";
+import { createSignerForWallet } from "./signer/factory";
+import { usesExternalSigner } from "./wallet-util";
 import {
   scanBalancesCallback,
   merkelTreeScanCallback,
@@ -143,7 +147,8 @@ export const initilizeFreshWallet = async (isInit = false) => {
       railgunWalletID: railWalletInfo.id,
       railgunWalletAddress: railWalletInfo.railgunAddress,
       derivationIndex: walletInfo.derivationIndex,
-      publicAddress: "",
+      publicAddress: walletInfo.publicAddress ?? "",
+      signer: walletInfo.signer,
     };
     walletManager.activeWalletName = walletInfo.walletName;
     walletManager.keyChain.selectedWallet = walletManager.activeWalletName;
@@ -165,6 +170,26 @@ export const initilizeFreshWallet = async (isInit = false) => {
 };
 
 export const initializeEthersWallet = async () => {
+  walletManager.cachedShieldPrivateKey = undefined;
+
+  const network =
+    walletManager.keyChain.currentNetwork ?? NetworkName.Ethereum;
+  const currentWallet = walletManager.currentActiveWallet;
+
+  if (usesExternalSigner(currentWallet)) {
+    const signer = await createSignerForWallet(currentWallet, network);
+    walletManager.currentEthersWallet = signer;
+    const publicAddress = await signer.getAddress();
+    if (walletManager.keyChain.wallets && !currentWallet.publicAddress) {
+      walletManager.keyChain.wallets[
+        walletManager.activeWalletName
+      ].publicAddress = publicAddress;
+      const { keyChainPath } = configDefaults.engine;
+      saveKeychainFile(walletManager.keyChain, keyChainPath);
+    }
+    return;
+  }
+
   walletManager.hashedPassword = await getSaltedPassword();
   if (!isDefined(walletManager.hashedPassword)) {
     throw new Error("Hashed Password Timed Out");

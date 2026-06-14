@@ -1,6 +1,11 @@
 import { HDNodeWallet, Mnemonic } from "ethers";
-import { TMPWalletInfo } from "../models/wallet-models";
+import { SignerId, TMPWalletInfo } from "../models/wallet-models";
 import { confirmPrompt, confirmPromptCatch } from "./confirm-ui";
+import { deriveRailgunSeedFromExternalSigner } from "../wallet/signer/seed-derivation";
+import {
+  getSignerBackend,
+  listExternalSignerBackends,
+} from "../wallet/signer/registry";
 const { Input, NumberPrompt, Select, Password } = require("enquirer");
 
 export const getWalletNamePrompt = async () => {
@@ -39,17 +44,65 @@ export const getDerivationIndex = async () => {
   return result;
 };
 
+const connectExternalSignerPrompt = async (
+  walletName: string,
+  signerId: SignerId,
+  derivationIndex: number,
+): Promise<TMPWalletInfo | undefined> => {
+  const backend = await getSignerBackend(signerId);
+
+  let addressIndex = derivationIndex;
+  const selectIndex = await confirmPrompt(
+    "Select Address Index? -- Default: 0",
+  );
+  if (selectIndex) {
+    const selectedIndex = await getDerivationIndex();
+    if (selectedIndex === false) {
+      return undefined;
+    }
+    addressIndex = selectedIndex;
+  }
+
+  try {
+    console.log(
+      `Connect your ${backend.label} and confirm the prompts on the device...`
+        .cyan,
+    );
+    const { mnemonic: derivedSeed, publicAddress } =
+      await deriveRailgunSeedFromExternalSigner(signerId, addressIndex);
+    return {
+      mnemonic: derivedSeed,
+      walletName,
+      derivationIndex: addressIndex,
+      signer: signerId,
+      publicAddress,
+    };
+  } catch (error) {
+    console.log((error as Error).message.red);
+    const retry = await confirmPrompt("Try Again?", { initial: false });
+    if (retry) {
+      return connectExternalSignerPrompt(walletName, signerId, addressIndex);
+    }
+    return undefined;
+  }
+};
+
 export const generateNewWalletPrompt = async (
   _walletName?: string,
   _walletMnemonic?: string,
   _walletIndex = 0,
 ): Promise<TMPWalletInfo | undefined> => {
+  const externalBackends = await listExternalSignerBackends();
   const generateOptionPrompt = new Select({
     header: " ",
     message: "Wallet Generation",
     choices: [
       { name: "new-wallet", message: "New Wallet" },
       { name: "import-seed", message: "Import Seed" },
+      ...externalBackends.map((backend) => ({
+        name: `signer:${backend.id}`,
+        message: backend.label,
+      })),
     ],
     multiple: false,
   });
@@ -71,6 +124,14 @@ export const generateNewWalletPrompt = async (
     } else {
       return undefined;
     }
+  }
+
+  if (generateOption.startsWith("signer:")) {
+    if (!walletName) {
+      return undefined;
+    }
+    const signerId = generateOption.replace("signer:", "") as SignerId;
+    return connectExternalSignerPrompt(walletName, signerId, derivationIndex);
   }
 
   if (generateOption && !mnemonic) {

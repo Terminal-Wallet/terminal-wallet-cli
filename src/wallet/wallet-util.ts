@@ -1,5 +1,5 @@
 import { NetworkName, isDefined } from "@railgun-community/shared-models";
-import { WalletCache } from "../models/wallet-models";
+import { WalletCache, SignerId } from "../models/wallet-models";
 import { getCurrentNetwork } from "../engine/engine";
 import { getChainForName, getProviderForChain } from "../network/network-util";
 import { walletManager } from "./wallet-manager";
@@ -39,6 +39,14 @@ export const togglePrivateBalances = () => {
   walletManager.keyChain.displayPrivate = walletManager.displayPrivate;
   saveKeychainFile(walletManager.keyChain, keyChainPath);
 };
+
+export const getSignerId = (
+  wallet?: Pick<WalletCache, "signer">,
+): SignerId | undefined => wallet?.signer;
+
+export const usesExternalSigner = (
+  wallet?: Pick<WalletCache, "signer">,
+): boolean => getSignerId(wallet) != null;
 
 export const getWalletInfoForName = (walletName: string): WalletCache => {
   if (!walletManager.keyChain || !walletManager.keyChain.wallets) {

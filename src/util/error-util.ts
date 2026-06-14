@@ -3,6 +3,7 @@ import { rimrafSync } from "rimraf";
 import path from "path";
 import configDefaults from "../config/config-defaults";
 import { stopWakuClient } from "../waku/connect-waku";
+import { disposeExternalSigners } from "../wallet/signer/registry";
 
 export const RAILGUN_HEADER = `
  ███████████ ██████████ ███████████   ██████   ██████ █████ ██████   █████   █████████   █████      
@@ -27,6 +28,7 @@ const killEngineAndWaku = async () => {
 export const processDestroyExit = async () => {
   console.log("Deleting Database And Keychains");
   await killEngineAndWaku();
+  await disposeExternalSigners();
 
   const { databasePath, artifactPath, keyChainPath } = configDefaults.engine;
 
@@ -46,6 +48,7 @@ export const processSafeExit = async () => {
   console.log("Shutting Down Modules");
   clearConsoleBuffer();
   await killEngineAndWaku();
+  await disposeExternalSigners();
   console.clear();
   process.exit(0);
 };

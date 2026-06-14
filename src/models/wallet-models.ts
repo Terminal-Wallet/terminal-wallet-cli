@@ -20,10 +20,14 @@ export type RailWalletFile = {
   wallets: RailWallet[];
 };
 
+export type SignerId = "trezor";
+
 export type TMPWalletInfo = {
   mnemonic: string;
   walletName: string;
   derivationIndex: number;
+  signer?: SignerId;
+  publicAddress?: string;
 };
 
 export type WalletCache = {
@@ -31,6 +35,7 @@ export type WalletCache = {
   railgunWalletAddress: string;
   derivationIndex: number;
   publicAddress?: string;
+  signer?: SignerId;
 };
 
 export type KnownAddressKey = {
