@@ -150,6 +150,9 @@ export const runFeeTokenSelector = async (
   chainName: NetworkName,
   amountRecipients: RailgunERC20AmountRecipient[],
   currentBroadcaster?: SelectedBroadcaster,
+  // 7702 (relay-adapt) flows must only pick broadcasters that advertise 7702
+  // support, otherwise the type-4 bundle cannot be submitted.
+  use7702 = false,
 ): Promise<{ bestBroadcaster: SelectedBroadcaster } | undefined> => {
   const additionalChoices = currentBroadcaster
     ? [
@@ -203,6 +206,7 @@ export const runFeeTokenSelector = async (
                 chainName,
                 amountRecipients,
                 currentBroadcaster,
+                use7702,
               );
             }
             feeTokenAddress = feeToken.tokenAddress;
@@ -215,6 +219,7 @@ export const runFeeTokenSelector = async (
               chain,
               feeTokenAddress.toLowerCase(),
               true,
+              use7702,
             );
             if (bestBroadcaster) {
               return { bestBroadcaster };
@@ -224,6 +229,7 @@ export const runFeeTokenSelector = async (
               chainName,
               amountRecipients,
               currentBroadcaster,
+              use7702,
             );
           } catch (err) {
             console.log(err);
@@ -236,7 +242,12 @@ export const runFeeTokenSelector = async (
       }
       case "clear-broadcaster-list": {
         resetBroadcasterFilters();
-        return runFeeTokenSelector(chainName, amountRecipients, undefined);
+        return runFeeTokenSelector(
+          chainName,
+          amountRecipients,
+          undefined,
+          use7702,
+        );
       }
       case "go-back": {
         throw new Error("Going back to previous menu.");

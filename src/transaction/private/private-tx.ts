@@ -325,8 +325,31 @@ export const getBroadcasterTranaction = async (
   const { nullifiers, preTransactionPOIsPerTxidLeafPerList } = tx;
   const broadcasterFeesID = tx.feesID;
   const chain = getChainForName(networkName);
-  const overallBatchMinGasPrice = tx.transaction.gasPrice;
   const relayTx = getWakuTransaction();
+
+  // EIP-7702 (type-4) bundles carry a signed authorization tuple and EIP-1559 fee
+  // fields instead of a legacy gasPrice. Forward both so the broadcaster submits a
+  // TX7702 request; without them it falls back to a legacy COMMON submission and the
+  // authorization is silently dropped, so the bundle can never be broadcast.
+  const is7702Transaction = tx.transaction.type === 4;
+  const authorization = is7702Transaction
+    ? tx.transaction.authorizationList?.[0]
+    : undefined;
+  if (is7702Transaction && !isDefined(authorization)) {
+    throw new Error(
+      "7702 transaction is missing its authorization tuple; cannot broadcast.",
+    );
+  }
+  const type4FeeOverrides = is7702Transaction
+    ? {
+        maxFeePerGas: tx.transaction.maxFeePerGas,
+        maxPriorityFeePerGas: tx.transaction.maxPriorityFeePerGas,
+      }
+    : undefined;
+  const overallBatchMinGasPrice = is7702Transaction
+    ? 0n
+    : tx.transaction.gasPrice;
+
   const encryptedTransaction = await relayTx.create(
     txidVersion,
     to,
@@ -338,6 +361,8 @@ export const getBroadcasterTranaction = async (
     overallBatchMinGasPrice,
     useRelayAdapt,
     preTransactionPOIsPerTxidLeafPerList,
+    authorization,
+    type4FeeOverrides,
   );
   return encryptedTransaction;
 };

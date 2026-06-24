@@ -7,7 +7,7 @@ import {
   ZeroXV2SwapRecipe,
   ZeroXV2Quote,
   SwapQuoteDataV2,
-  SwapQuoteParamsV2
+  SwapQuoteParamsV2,
 } from "@railgun-community/cookbook";
 import {
   NetworkName,
@@ -19,8 +19,8 @@ import {
 } from "@railgun-community/shared-models";
 import configDefaults from "../../config/config-defaults";
 import {
-  gasEstimateForUnprovenCrossContractCalls,
-  generateCrossContractCallsProof,
+  gasEstimateForUnprovenCrossContractCalls7702,
+  generateCrossContractCallsProof7702,
   populateProvedCrossContractCalls,
 } from "@railgun-community/wallet";
 import {
@@ -28,6 +28,7 @@ import {
   getCurrentRailgunID,
   getCurrentWalletPublicAddress,
 } from "../../wallet/wallet-util";
+import { syncEphemeralIndexOnce } from "../../wallet/ephemeral-util";
 import { getOutputGasEstimate } from "../private/unshield-tx";
 import {
   PrivateGasDetails,
@@ -50,15 +51,14 @@ import { getCurrentEthersWallet } from "../../wallet/public-utils";
 export const updateApiKey = () => {
   const zeroXApiKey = configDefaults.apiKeys.zeroXApi;
   ZeroXConfig.API_KEY = zeroXApiKey;
-}
+};
 export const getSwapQuote = async (
   chainName: NetworkName,
   sellERC20Amount: RecipeERC20Amount,
   buyERC20Info: RecipeERC20Info,
   slippagePercentage = 500,
   isRailgun = false,
-  activeWalletAddress?: string
-
+  activeWalletAddress?: string,
 ): Promise<SwapQuoteDataV2> => {
   const quoteParams: SwapQuoteParamsV2 = {
     networkName: chainName,
@@ -66,7 +66,7 @@ export const getSwapQuote = async (
     buyERC20Info,
     slippageBasisPoints: slippagePercentage,
     isRailgun,
-    activeWalletAddress
+    activeWalletAddress,
   };
   const quote = await ZeroXV2Quote.getSwapQuote(quoteParams);
 
@@ -119,8 +119,8 @@ export const getZer0XSwapInputs = async (
       erc20Amounts: relayAdaptUnshieldERC20Amounts,
       nfts: [],
     };
-    // hardcode min gas limit for now. 
-    const minGasLimit  = 5_000_000n;
+    // hardcode min gas limit for now.
+    const minGasLimit = 5_000_000n;
     // const { minGasLimit } = swap.config;
     const recipeOutput: RecipeOutput = await swap.getRecipeOutput(recipeInput);
     const { crossContractCalls, erc20AmountRecipients } = recipeOutput;
@@ -162,8 +162,8 @@ export const getZer0XSwapInputs = async (
     buyERC20Info,
     slippageBasisPoints,
     false,
-    currentPublicWalletAddress
-  )
+    currentPublicWalletAddress,
+  );
   const swapAmounts: Zer0XSwapOutput = {
     sellUnshieldFee: 0n,
     buyShieldFee: 0n,
@@ -187,7 +187,6 @@ export const getZer0XSwapInputs = async (
   };
 };
 
-
 export const getZer0XSwapTransactionGasEstimate = async (
   chainName: NetworkName,
   zer0XSwapInputs: Zer0XSwap,
@@ -196,6 +195,10 @@ export const getZer0XSwapTransactionGasEstimate = async (
 ): Promise<PrivateGasEstimate | undefined> => {
   const railgunWalletID = getCurrentRailgunID();
   const txIDVersion = TXIDVersion.V2_PoseidonMerkle;
+
+  // Private swaps run through the 7702 relay-adapt path; realign the ephemeral index with
+  // history once before the SDK derives the ephemeral address for this op.
+  await syncEphemeralIndexOnce(chainName, encryptionKey);
 
   const gasDetailsResult = await getTransactionGasDetails(
     chainName,
@@ -222,7 +225,7 @@ export const getZer0XSwapTransactionGasEstimate = async (
     minGasLimit,
   } = zer0XSwapInputs;
 
-  const { gasEstimate } = await gasEstimateForUnprovenCrossContractCalls(
+  const { gasEstimate } = await gasEstimateForUnprovenCrossContractCalls7702(
     txIDVersion,
     chainName,
     railgunWalletID,
@@ -283,7 +286,7 @@ export const getProvedZer0XSwapTransaction = async (
   const sendWithPublicWallet =
     typeof broadcasterFeeERC20Recipient !== "undefined" ? false : true;
   try {
-    await generateCrossContractCallsProof(
+    await generateCrossContractCallsProof7702(
       txIDVersion,
       chainName,
       railgunWalletID,
@@ -298,13 +301,9 @@ export const getProvedZer0XSwapTransaction = async (
       overallBatchMinGasPrice,
       minGasLimit,
       progressCallback,
-    )
-      .catch((err) => {
-        console.log("We errored out");
-      })
-      .finally(() => {
-        progressBar.complete();
-      });
+    ).finally(() => {
+      progressBar.complete();
+    });
 
     const { transaction, nullifiers, preTransactionPOIsPerTxidLeafPerList } =
       await populateProvedCrossContractCalls(
@@ -325,7 +324,11 @@ export const getProvedZer0XSwapTransaction = async (
     return { transaction, nullifiers, preTransactionPOIsPerTxidLeafPerList };
   } catch (err) {
     const error = err as Error;
-    console.log('ERROR getting proved transaction.', error.message, error.cause);
+    console.log(
+      "ERROR getting proved transaction.",
+      error.message,
+      error.cause,
+    );
   }
 };
 

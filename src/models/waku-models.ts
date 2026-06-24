@@ -5,6 +5,7 @@ import {
   SelectedBroadcaster,
   TXIDVersion,
 } from "@railgun-community/shared-models";
+import type { AuthorizationLike, BigNumberish } from "ethers";
 
 export type BroadcasterOptions = {
   pubSubTopic?: string;
@@ -35,6 +36,7 @@ export type WakuBroadcasterClient = {
     chain: Chain,
     tokenAddress: string,
     useRelayAdapt: boolean,
+    use7702Only?: boolean,
   ) => SelectedBroadcaster;
   findBroadcastersForToken: (
     chain: Chain,
@@ -59,5 +61,10 @@ export type WakuBroadcasterTransaction = {
     overallBatchMinGasPrice: bigint,
     useRelayAdapt: boolean,
     preTransactionPOIsPerTxidLeafPerList: PreTransactionPOIsPerTxidLeafPerList,
+    authorization?: AuthorizationLike,
+    type4FeeOverrides?: {
+      maxFeePerGas: BigNumberish;
+      maxPriorityFeePerGas: BigNumberish;
+    },
   ) => { send: () => Promise<string> };
 };

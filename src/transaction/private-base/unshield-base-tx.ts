@@ -21,6 +21,7 @@ import {
 } from "../private/private-tx";
 import { PrivateGasEstimate } from "../../models/transaction-models";
 import { getCurrentRailgunID } from "../../wallet/wallet-util";
+import { syncEphemeralIndexOnce } from "../../wallet/ephemeral-util";
 import { getCurrentNetwork } from "../../engine/engine";
 
 export const getUnshieldBaseTokenGasEstimate = async (
@@ -31,6 +32,10 @@ export const getUnshieldBaseTokenGasEstimate = async (
 ): Promise<PrivateGasEstimate | undefined> => {
   const railgunWalletID = getCurrentRailgunID();
   const txIDVersion = TXIDVersion.V2_PoseidonMerkle;
+
+  // Base-token unshield runs through the 7702 relay-adapt path; realign the ephemeral
+  // index with history once before the SDK derives the ephemeral address for this op.
+  await syncEphemeralIndexOnce(chainName, encryptionKey);
 
   const gasDetailsResult = await getTransactionGasDetails(
     chainName,
