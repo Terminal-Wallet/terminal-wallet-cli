@@ -42,7 +42,13 @@ export type WakuBroadcasterClient = {
     chain: Chain,
     tokenAddress: string,
     useRelayAdapt: boolean,
+    use7702Only?: boolean,
   ) => SelectedBroadcaster[];
+  findAllBroadcastersForChain: (
+    chain: Chain,
+    useRelayAdapt: boolean,
+    use7702Only?: boolean,
+  ) => SelectedBroadcaster[] | undefined;
   setAddressFilters(
     allowlist: Optional<string[]>,
     blocklist: Optional<string[]>,

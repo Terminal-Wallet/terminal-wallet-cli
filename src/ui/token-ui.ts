@@ -48,13 +48,24 @@ export const tokenSelectionPrompt = async (
   publicBalances: boolean = false,
   amountRecipients?: RailgunERC20AmountRecipient[],
   addGasToken: boolean = false,
+  // When provided, only these token addresses are offered (eg. fee tokens that a
+  // 7702-capable broadcaster actually accepts).
+  allowedTokenAddresses?: string[],
 ) => {
-  const balances = publicBalances
+  const fetchedBalances = publicBalances
     ? await getPublicERC20BalancesForChain(
         chainName,
         publicBalances && addGasToken,
       )
     : await getPrivateERC20BalancesForChain(chainName);
+
+  const balances = isDefined(allowedTokenAddresses)
+    ? fetchedBalances.filter((bal: RailgunDisplayBalance) =>
+        allowedTokenAddresses.some(
+          (address) => address.toLowerCase() === bal.tokenAddress.toLowerCase(),
+        ),
+      )
+    : fetchedBalances;
 
   if (balances.length === 0) {
     await confirmPromptCatchRetry(
@@ -134,13 +145,28 @@ export const feeTokenSelectionPrompt = async (
   chainName: NetworkName,
   publicBalances: boolean = false,
   amountRecipients: RailgunERC20AmountRecipient[],
+  // 7702 (relay-adapt) flows: only offer fee tokens that a 7702-capable broadcaster
+  // accepts, so the user is never presented a token that has no eligible broadcaster.
+  use7702: boolean = false,
 ) => {
+  let allowedTokenAddresses: string[] | undefined;
+  if (use7702) {
+    const waku = getWakuClient();
+    const chain = getChainForName(chainName);
+    const broadcasters = waku.findAllBroadcastersForChain(chain, true, true);
+    allowedTokenAddresses = [
+      ...new Set((broadcasters ?? []).map((b) => b.tokenAddress.toLowerCase())),
+    ];
+  }
+
   const selection = await tokenSelectionPrompt(
     chainName,
     "Fee Token Selection",
     false,
     publicBalances,
     amountRecipients,
+    false,
+    allowedTokenAddresses,
   );
 
   return selection;
@@ -199,6 +225,7 @@ export const runFeeTokenSelector = async (
               chainName,
               false,
               amountRecipients,
+              use7702,
             );
             if (!feeToken) {
               console.log("THROWING ERROR WHY?");
