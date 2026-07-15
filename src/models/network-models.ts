@@ -13,7 +13,7 @@ export enum ChainIDs {
   Hardhat = 31337,
   PolygonMumbai = 80001,
   ArbitrumGoerli = 421613,
-  EthereumSepolia = 11155111
+  EthereumSepolia = 11155111,
 }
 
 export const ChainIDToNameMap: NumMapType<NetworkName> = {
@@ -50,7 +50,7 @@ export const getProviderObjectFromURL = (rpcURL: string): ProviderJson => {
   };
 };
 
-type APIKey = "zeroXApi" | string
+type APIKey = "zeroXApi" | string;
 
 type APIKeys = Record<APIKey, string>;
 
@@ -62,17 +62,15 @@ type FeatureFlags = {
   canSwapPublic: boolean;
   canSwapShielded: boolean;
   canRelayAdapt: boolean;
-}
+};
 
 type ChainConfig = {
   name: NetworkName;
   providers: (string | ProviderJson)[]; // looks for 'provider' in or typeof == 'string'
   flags?: FeatureFlags;
-}
-
+};
 
 type RPCConfig = Record<number, ChainConfig>;
-
 
 export type RemoteConfig = {
   currentVersionNumber: string;
@@ -84,5 +82,5 @@ export type RemoteConfig = {
   blacklist: string[];
   apiKeys?: APIKeys;
   network: RPCConfig;
-  trustedFeeSigner: string;
-}
+  trustedFeeSigner: string | string[];
+};
