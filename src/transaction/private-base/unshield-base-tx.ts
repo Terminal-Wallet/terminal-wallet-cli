@@ -132,11 +132,11 @@ export const getProvedUnshieldBaseTokenTransaction = async (
     }
   };
 
-  const {
-    broadcasterFeeERC20Recipient,
-    overallBatchMinGasPrice,
-    estimatedGasDetails,
-  } = privateGasEstimate;
+  const { broadcasterFeeERC20Recipient, estimatedGasDetails } =
+    privateGasEstimate;
+  // EIP-7702 relay-adapt does not commit an overall-batch-min-gas-price (type-4 maxFeePerGas
+  // governs pricing). A non-zero value reverts as "Gas price too low", so pin it to 0.
+  const overallBatchMinGasPrice = 0n;
 
   const sendWithPublicWallet =
     typeof broadcasterFeeERC20Recipient !== "undefined" ? false : true;

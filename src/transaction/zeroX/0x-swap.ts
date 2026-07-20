@@ -278,11 +278,13 @@ export const getProvedZer0XSwapTransaction = async (
     minGasLimit,
   } = zer0XSwapInputs;
 
-  const {
-    broadcasterFeeERC20Recipient,
-    overallBatchMinGasPrice,
-    estimatedGasDetails,
-  } = privateGasEstimate as PrivateGasEstimate;
+  const { broadcasterFeeERC20Recipient, estimatedGasDetails } =
+    privateGasEstimate as PrivateGasEstimate;
+  // EIP-7702 relay-adapt does not use the overall-batch-min-gas-price commitment — pricing
+  // is governed by the type-4 maxFeePerGas. Committing a non-zero value makes the
+  // RailgunSmartWallet gas-price check revert ("Gas price too low") whenever the effective
+  // type-4 gas price falls below it, so pin it to 0 (matching the SDK's own 7702 estimate).
+  const overallBatchMinGasPrice = 0n;
   const sendWithPublicWallet =
     typeof broadcasterFeeERC20Recipient !== "undefined" ? false : true;
   try {
