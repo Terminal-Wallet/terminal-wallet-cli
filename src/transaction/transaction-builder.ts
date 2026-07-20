@@ -1402,6 +1402,14 @@ export const runTransactionBuilder = async (
           _selfSignerInfo = await getSelfSignerWalletPrompt();
         }
 
+        // Pick the gas fee after the broadcaster/self-signer so the estimate below — and the
+        // broadcaster fee quote, which scales with the gas price — reflect the chosen speed.
+        // Sets the per-build override honored by getFeeDetailsForChain.
+        await gasFeeMatrixPrompt(
+          chainName,
+          privateGasEstimate?.estimatedGasDetails?.gasEstimate,
+        );
+
         // eslint-disable-next-line @typescript-eslint/switch-exhaustiveness-check
         switch (transactionType) {
           case RailgunTransaction.Transfer: {
