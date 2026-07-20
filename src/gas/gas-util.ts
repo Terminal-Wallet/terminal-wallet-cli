@@ -9,7 +9,11 @@ import {
 } from "@railgun-community/shared-models";
 import { ContractTransaction, FeeData } from "ethers";
 import { throwError } from "../util/util";
-import { getGasEstimateMatrix, getGasEstimates } from "./gas-fee";
+import {
+  getGasEstimateMatrix,
+  getGasEstimates,
+  getGasFeeSelection,
+} from "./gas-fee";
 import { getProviderForChain } from "../network/network-util";
 
 export const calculatePublicGasFee = async (
@@ -72,6 +76,12 @@ export const getPublicGasEstimate = async (
 };
 
 export const getFeeDetailsForChain = async (chainName: NetworkName): Promise<FeeData | undefined> => {
+  // A gas fee selected during transaction build overrides the auto-fetched fee data for
+  // this chain — applies to every flow, since all gas details funnel through here.
+  const selectedFee = getGasFeeSelection(chainName);
+  if (isDefined(selectedFee)) {
+    return selectedFee;
+  }
   // eslint-disable-next-line @typescript-eslint/switch-exhaustiveness-check
   switch (chainName) {
     case NetworkName.Ethereum:

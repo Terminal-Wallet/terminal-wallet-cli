@@ -40,6 +40,8 @@ import {
   shouldShowSender,
 } from "../wallet/wallet-util";
 import { ratchetEphemeralIfRelayAdapt } from "../wallet/ephemeral-util";
+import { gasFeeMatrixPrompt } from "../ui/gas-ui";
+import { clearGasFeeSelection } from "../gas/gas-fee";
 import {
   getPrivateTransactionGasEstimate,
   getProvedPrivateTransaction,
@@ -402,6 +404,11 @@ export const runTransactionBuilder = async (
   transactionType: RailgunTransaction,
   resultObj?: TerminalTransaction,
 ): Promise<any> => {
+  // A fresh build (no carried state) starts on default gas — clear any prior selection so
+  // a gas override from a previous transaction can never leak into this one.
+  if (!isDefined(resultObj)) {
+    clearGasFeeSelection();
+  }
   const {
     confirmAmountsDisabled,
     selections,
@@ -508,6 +515,13 @@ export const runTransactionBuilder = async (
       : regularSelectText.yellow,
   });
 
+  if (hasSelectionInfo) {
+    choices.push({
+      name: "set-gas",
+      message: "Set Gas Fee".cyan,
+    });
+  }
+
   if (sendTransactionDisabled === false) {
     choices.push({
       message: ``.padEnd(50, "=*=").grey,
@@ -570,6 +584,26 @@ export const runTransactionBuilder = async (
 
       // just reset back to previous menu
       return runTransactionBuilder(chainName, transactionType, resultObj);
+    }
+    case "set-gas": {
+      await gasFeeMatrixPrompt(
+        chainName,
+        privateGasEstimate?.estimatedGasDetails?.gasEstimate,
+      );
+      // Gas price changed → any prior estimate/proof is stale. Reset to the confirm step so
+      // the estimate (and, for broadcaster flows, the fee quote) recompute at the new price
+      // before sending.
+      return runTransactionBuilder(chainName, transactionType, {
+        ...resultObj,
+        incomingHeader: header,
+        broadcasterSelection: undefined,
+        privateGasEstimate: undefined,
+        provedTransaction: undefined,
+        confirmAmountsDisabled: false,
+        selectFeesDisabled: true,
+        sendTransactionDisabled: undefined,
+        generateProofDisabled: undefined,
+      });
     }
     case "select-edit": {
       clearHashedPassword();

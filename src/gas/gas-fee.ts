@@ -1,5 +1,5 @@
 import { NetworkName, isDefined } from "@railgun-community/shared-models";
-import { formatUnits } from "ethers";
+import { formatUnits, FeeData } from "ethers";
 import { getFirstPollingProviderForChain } from "../network/network-util";
 import { promiseTimeout } from "../util/util";
 import { FeeHistoryResponse } from "../models/gas-models";
@@ -161,4 +161,64 @@ export const getGasEstimateMatrix = (gasEstimate: CustomGasEstimate) => {
     },
   };
   return matrix;
+};
+
+// --- Gas-fee tiers as raw bigints, for the per-transaction gas-fee matrix prompt ---
+
+export type GasTierKey = "slow" | "average" | "fast";
+
+export type GasTier = {
+  key: GasTierKey;
+  maxPriorityFeePerGas: bigint;
+  maxFeePerGas: bigint;
+};
+
+export type GasFeeTiers = {
+  chainName: NetworkName;
+  baseFeePerGas: bigint;
+  gasPrice: bigint;
+  tiers: GasTier[];
+};
+
+// EIP-1559 tiers derived from feeHistory percentiles (60/80/95). maxFee = priority + base.
+export const getGasFeeTiers = async (
+  chainName: NetworkName,
+): Promise<GasFeeTiers> => {
+  const estimate = await getGasEstimates(chainName);
+  const { baseFeePerGas, gasPrice, slow, average, fast } = estimate;
+  const tier = (key: GasTierKey, priority: bigint): GasTier => ({
+    key,
+    maxPriorityFeePerGas: priority,
+    maxFeePerGas: priority + baseFeePerGas,
+  });
+  return {
+    chainName,
+    baseFeePerGas,
+    gasPrice,
+    tiers: [tier("slow", slow), tier("average", average), tier("fast", fast)],
+  };
+};
+
+// --- Per-build gas-fee override (user selection during transaction build) ---
+// A single build is single-chain; the selection is keyed by chain and cleared when a new
+// build starts, so a stale override can never bleed into the next transaction.
+
+let selectedGasFee: { chainName: NetworkName; feeData: FeeData } | undefined;
+
+export const setGasFeeSelection = (
+  chainName: NetworkName,
+  feeData: FeeData,
+): void => {
+  selectedGasFee = { chainName, feeData };
+};
+
+export const getGasFeeSelection = (
+  chainName: NetworkName,
+): FeeData | undefined =>
+  isDefined(selectedGasFee) && selectedGasFee.chainName === chainName
+    ? selectedGasFee.feeData
+    : undefined;
+
+export const clearGasFeeSelection = (): void => {
+  selectedGasFee = undefined;
 };
