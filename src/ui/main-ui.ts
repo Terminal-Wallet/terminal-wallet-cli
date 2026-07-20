@@ -67,6 +67,7 @@ import { getScanProgressString, walletManager } from "../wallet/wallet-manager";
 import "colors";
 import { getStatusText, setStatusText } from "./status-ui";
 import { runRPCEditorPrompt } from "./provider-ui";
+import { runEphemeralAdminPrompt } from "./ephemeral-admin-ui";
 const { version } = require("../../package.json");
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -216,6 +217,7 @@ const runWalletToolsPrompt = async (chainName: NetworkName) => {
         name: "show-mnemonic",
         message: "Show Current Mnemonic & Index",
       },
+      { name: "ephemeral-accounts", message: "7702 Ephemeral Accounts" },
       { name: 'full-txid-rescan', message: "Full TXID Rescan" },
       { name: "full-balance-rescan", message: "Full Balance Rescan" },
       {
@@ -255,6 +257,10 @@ const runWalletToolsPrompt = async (chainName: NetworkName) => {
           console.log(walletInfo);
           await confirmPromptCatchRetry("");
         }
+        break;
+      }
+      case "ephemeral-accounts": {
+        await runEphemeralAdminPrompt(chainName);
         break;
       }
       case "full-txid-rescan": {
