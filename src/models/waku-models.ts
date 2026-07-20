@@ -69,6 +69,7 @@ export type WakuBroadcasterTransaction = {
     preTransactionPOIsPerTxidLeafPerList: PreTransactionPOIsPerTxidLeafPerList,
     authorization?: AuthorizationLike,
     type4FeeOverrides?: {
+      gasLimit?: BigNumberish;
       maxFeePerGas: BigNumberish;
       maxPriorityFeePerGas: BigNumberish;
     },

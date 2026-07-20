@@ -342,6 +342,11 @@ export const getBroadcasterTranaction = async (
   }
   const type4FeeOverrides = is7702Transaction
     ? {
+        // Hand the broadcaster the gas limit we already computed. Without it, the broadcaster
+        // runs its own estimateGas on the type-4 tx (which underestimates 7702 execution) and
+        // submits below RelayAdapt's `gasleft() > minGasLimit` check ("Not enough gas
+        // supplied"). This is the app's populated limit (calculateGasLimit = estimate x1.2).
+        gasLimit: tx.transaction.gasLimit,
         maxFeePerGas: tx.transaction.maxFeePerGas,
         maxPriorityFeePerGas: tx.transaction.maxPriorityFeePerGas,
       }
