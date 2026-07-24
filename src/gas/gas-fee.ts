@@ -1,15 +1,25 @@
 import { NetworkName, isDefined } from "@railgun-community/shared-models";
-import { formatUnits, FeeData } from "ethers";
+import { formatUnits, parseUnits, FeeData } from "ethers";
 import { getFirstPollingProviderForChain } from "../network/network-util";
 import { promiseTimeout } from "../util/util";
 import { FeeHistoryResponse } from "../models/gas-models";
 import { CustomGasEstimate } from "../models/gas-models";
 import { FeeHistoryBlock } from "../models/gas-models";
 
-const avg = (arr: bigint[]): bigint => {
-  const sum = arr.reduce((a, v) => a + v);
-  const avgsum = BigInt(Math.round(Number(sum) / arr.length));
-  return avgsum;
+// Median across the sampled blocks. Priority-fee percentiles are dominated by MEV/urgent
+// tips, so an arithmetic mean is dragged far above the typical fee by a few spike blocks;
+// the median reflects the fee a normal transaction actually needs.
+const median = (arr: bigint[]): bigint => {
+  const sorted = arr
+    .filter((v): v is bigint => typeof v === "bigint")
+    .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+  if (sorted.length === 0) {
+    return 0n;
+  }
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 1
+    ? sorted[mid]
+    : (sorted[mid - 1] + sorted[mid]) / 2n;
 };
 
 export const formatFeeHistory = (
@@ -104,11 +114,16 @@ export const getGasEstimates = async (
     false,
     historicalBlocks,
   );
-  const slow = avg(blocks.map((b) => b.priorityFeePerGas[0] as bigint));
-  const average = avg(blocks.map((b) => b.priorityFeePerGas[1] as bigint));
-  const fast = avg(blocks.map((b) => b.priorityFeePerGas[2] as bigint));
+  const slow = median(blocks.map((b) => b.priorityFeePerGas[0] as bigint));
+  const average = median(blocks.map((b) => b.priorityFeePerGas[1] as bigint));
+  const fast = median(blocks.map((b) => b.priorityFeePerGas[2] as bigint));
 
-  const maxPriorityFeePerGas = average;
+  // Inclusion floor: the median can collapse to 0 when most sampled blocks report no tip at the
+  // percentile, which would leave a tx with a 0 priority fee (starved, may never mine). Keep a
+  // small minimum so the auto-default is always mineable.
+  const MIN_PRIORITY_FEE = parseUnits("0.02", "gwei");
+  const maxPriorityFeePerGas =
+    average > MIN_PRIORITY_FEE ? average : MIN_PRIORITY_FEE;
 
   const maxFeePerGas = maxPriorityFeePerGas + baseFeePerGas;
 
