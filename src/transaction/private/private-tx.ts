@@ -38,6 +38,7 @@ import { getFeeDetailsForChain } from "../../gas/gas-util";
 export const getOriginalGasDetailsForPrivateTransaction = async (
   chainName: NetworkName,
   broadcasterSelection?: SelectedBroadcaster,
+  is7702Transaction?: boolean,
 ): Promise<PrivateGasDetails | undefined> => {
   try {
     const feeData = await getFeeDetailsForChain(chainName);
@@ -55,13 +56,20 @@ export const getOriginalGasDetailsForPrivateTransaction = async (
     let overallBatchMinGasPrice: Optional<bigint>;
     let originalGasDetails: TransactionGasDetails;
     let feeTokenInfo: ERC20Token;
+    // A 7702 (type-4) tx must keep its EIP-1559 fee fields (maxFeePerGas/maxPriorityFeePerGas)
+    // through the whole flow. The broadcaster branch below otherwise forces Type1 (gasPrice
+    // only), which drops the priority fee to 0 on the populated type-4 tx — starving the
+    // builder tip. So when this is a 7702 tx, pin Type4 regardless of broadcaster routing;
+    // broadcasterSelection still governs fee-token details and sendWithPublicWallet below.
+    const is7702 = isDefined(is7702Transaction) && is7702Transaction;
     if (broadcasterSelection) {
-      evmGasType = getEVMGasTypeForTransaction(
-        chainName,
-        false,
-      ) as EVMGasType.Type1;
+      evmGasType = is7702
+        ? EVMGasType.Type4
+        : (getEVMGasTypeForTransaction(chainName, false) as EVMGasType.Type1);
     } else {
-      evmGasType = getEVMGasTypeForTransaction(chainName, true);
+      evmGasType = is7702
+        ? EVMGasType.Type4
+        : getEVMGasTypeForTransaction(chainName, true);
       sendWithPublicWallet = true;
     }
 
@@ -78,7 +86,8 @@ export const getOriginalGasDetailsForPrivateTransaction = async (
         break;
       }
       // self relayed transactions
-      case EVMGasType.Type2: {
+      case EVMGasType.Type2:
+      case EVMGasType.Type4: {
         originalGasDetails = {
           evmGasType, // Type 2 for self-relayed transactions
           gasEstimate: 0n, // Always 0, we don't have this yet.
@@ -130,10 +139,12 @@ export const getOriginalGasDetailsForPrivateTransaction = async (
 export const getTransactionGasDetails = async (
   chainName: NetworkName,
   broadcasterSelection?: SelectedBroadcaster,
+  is7702tx?: boolean,
 ): Promise<PrivateGasDetails | undefined> => {
   const gasDetailsResult = await getOriginalGasDetailsForPrivateTransaction(
     chainName,
     broadcasterSelection,
+    is7702tx
   );
   if (!gasDetailsResult) {
     return undefined;
@@ -151,7 +162,8 @@ export const calculateSelfSignedGasEstimate = (
     case EVMGasType.Type1: {
       return estimatedGasDetails.gasPrice * gasEstimate;
     }
-    case EVMGasType.Type2: {
+    case EVMGasType.Type2:
+    case EVMGasType.Type4: {
       return estimatedGasDetails.maxFeePerGas * gasEstimate;
     }
     default: {

@@ -10,6 +10,7 @@ import {
   SwapQuoteParamsV2,
 } from "@railgun-community/cookbook";
 import {
+  EVMGasType,
   NetworkName,
   RailgunERC20Recipient,
   RailgunPopulateTransactionResponse,
@@ -28,7 +29,11 @@ import {
   getCurrentRailgunID,
   getCurrentWalletPublicAddress,
 } from "../../wallet/wallet-util";
-import { syncEphemeralIndexOnce } from "../../wallet/ephemeral-util";
+import {
+  syncEphemeralIndexOnce,
+  getCurrentEphemeralInfo,
+} from "../../wallet/ephemeral-util";
+import { getSaltedPassword } from "../../wallet/wallet-password";
 import { getOutputGasEstimate } from "../private/unshield-tx";
 import {
   PrivateGasDetails,
@@ -66,12 +71,59 @@ export const getSwapQuote = async (
     buyERC20Info,
     slippageBasisPoints: slippagePercentage,
     isRailgun,
-    activeWalletAddress,
+    // rc.1 renamed the taker field to `recipient` (required): getQuoteParams sets
+    // taker/txOrigin = recipient directly. For a public swap this is the user's own wallet.
+    recipient: activeWalletAddress as string,
   };
   const quote = await ZeroXV2Quote.getSwapQuote(quoteParams);
 
   return quote;
 };
+
+// The stock 0x V2 recipe fetches its swap quote with taker/txOrigin defaulting to the
+// network's relayAdaptContract (see ZeroXV2Quote.getQuoteParams). Under EIP-7702 the
+// relay-adapt code executes *as the ephemeral EOA*, so the swap's on-chain taker/recipient
+// must be that ephemeral address — otherwise the bought tokens are routed to the
+// (non-executing) relay-adapt contract and the downstream shield step operates on the wrong
+// account. This subclass injects the ephemeral address as the quote's activeWalletAddress so
+// the generated cross-contract calls target it.
+class Ephemeral7702ZeroXV2SwapRecipe extends ZeroXV2SwapRecipe {
+  private readonly ephemeralAddress: string;
+  private readonly buyERC20InfoForQuote: RecipeERC20Info;
+  private readonly slippageBasisPointsForQuote: number;
+
+  constructor(
+    sellERC20Info: RecipeERC20Info,
+    buyERC20Info: RecipeERC20Info,
+    slippageBasisPoints: number,
+    destinationAddress: string,
+    ephemeralAddress: string,
+  ) {
+    super(sellERC20Info, buyERC20Info, slippageBasisPoints, destinationAddress);
+    this.ephemeralAddress = ephemeralAddress;
+    this.buyERC20InfoForQuote = buyERC20Info;
+    this.slippageBasisPointsForQuote = slippageBasisPoints;
+  }
+
+  async getSwapQuote(
+    networkName: NetworkName,
+    sellERC20Amount: RecipeERC20Amount,
+  ): Promise<SwapQuoteDataV2> {
+    // The 0x quote's taker/txOrigin must be the ephemeral EOA that the 7702 relay-adapt
+    // executes as — otherwise the calldata routes the bought tokens to the network's
+    // relayAdaptContract (observed on-chain). rc.1 exposes this as the required `recipient`
+    // field (getQuoteParams sets taker/txOrigin = recipient), so we pass it explicitly. No
+    // isRailgun coupling anymore — keep isRailgun:true for correct proxy routing.
+    return ZeroXV2Quote.getSwapQuote({
+      networkName,
+      sellERC20Amount,
+      buyERC20Info: this.buyERC20InfoForQuote,
+      slippageBasisPoints: this.slippageBasisPointsForQuote,
+      isRailgun: true,
+      recipient: this.ephemeralAddress,
+    });
+  }
+}
 
 export const getZer0XSwapInputs = async (
   chainName: NetworkName,
@@ -107,11 +159,25 @@ export const getZer0XSwapInputs = async (
     // FORCE US AS RECIPIENT FOR NOW
     const privateSwapRecipient = getCurrentRailgunAddress();
 
-    const swap = new ZeroXV2SwapRecipe(
+    // Derive the ephemeral EOA that the 7702 relay-adapt will execute as, so the swap quote
+    // is built with that address as taker/recipient (not the relay-adapt contract). Sync the
+    // ephemeral index first so this address matches the one the proof/submission derive.
+    const encryptionKey = await getSaltedPassword();
+    if (!isDefined(encryptionKey)) {
+      throw new Error("Cannot build private swap: wallet is locked.");
+    }
+    await syncEphemeralIndexOnce(chainName, encryptionKey);
+    const { address: ephemeralAddress } = await getCurrentEphemeralInfo(
+      chainName,
+      encryptionKey,
+    );
+
+    const swap = new Ephemeral7702ZeroXV2SwapRecipe(
       sellERC20Info,
       buyERC20Info,
       slippageBasisPoints,
       privateSwapRecipient,
+      ephemeralAddress,
     );
     const recipeInput: RecipeInput = {
       networkName: chainName,
@@ -120,7 +186,9 @@ export const getZer0XSwapInputs = async (
       nfts: [],
     };
     // hardcode min gas limit for now.
-    const minGasLimit = 5_000_000n;
+    // const minGasLimit = 0n; //5_000_000n;
+    const minGasLimit = 0n; //5_000_000n;
+
     // const { minGasLimit } = swap.config;
     const recipeOutput: RecipeOutput = await swap.getRecipeOutput(recipeInput);
     const { crossContractCalls, erc20AmountRecipients } = recipeOutput;
@@ -203,6 +271,7 @@ export const getZer0XSwapTransactionGasEstimate = async (
   const gasDetailsResult = await getTransactionGasDetails(
     chainName,
     broadcasterSelection,
+    true
   );
 
   if (!gasDetailsResult) {
@@ -322,7 +391,7 @@ export const getProvedZer0XSwapTransaction = async (
         overallBatchMinGasPrice,
         estimatedGasDetails,
       );
-
+    transaction.type = EVMGasType.Type4
     return { transaction, nullifiers, preTransactionPOIsPerTxidLeafPerList };
   } catch (err) {
     const error = err as Error;

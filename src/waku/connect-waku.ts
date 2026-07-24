@@ -1,4 +1,8 @@
-import { Chain, isDefined, NetworkName } from "@railgun-community/shared-models";
+import {
+  Chain,
+  isDefined,
+  NetworkName,
+} from "@railgun-community/shared-models";
 import { getChainForName, remoteConfig } from "../network/network-util";
 import {
   WakuBroadcasterClient,
@@ -13,18 +17,17 @@ export let baseAllowList: string[] | undefined = undefined;
 export let baseBlockList: string[] | undefined = undefined;
 export let wakuClient: WakuBroadcasterClient;
 
-const trustedFeeSigner = '0zk1qyzgh9ctuxm6d06gmax39xutjgrawdsljtv80lqnjtqp3exxayuf0rv7j6fe3z53laetcl9u3cma0q9k4npgy8c8ga4h6mx83v09m8ewctsekw4a079dcl5sw4k'
+const trustedFeeSigner =
+  "0zk1qyzgh9ctuxm6d06gmax39xutjgrawdsljtv80lqnjtqp3exxayuf0rv7j6fe3z53laetcl9u3cma0q9k4npgy8c8ga4h6mx83v09m8ewctsekw4a079dcl5sw4k";
 const broadcasterOptions: BroadcasterOptions = {
   trustedFeeSigner,
 };
-
-
 
 export const initializeLists = (allowList: string[], blockList: string[]) => {
   baseAllowList = allowList.length > 0 ? allowList : undefined;
   baseBlockList = blockList.length > 0 ? blockList : undefined;
   wakuClient.setAddressFilters(baseAllowList, baseBlockList);
-}
+};
 
 const wakuStatusCallback = (chain: Chain, status: string) => {
   if (status === "Connected") {
@@ -33,7 +36,6 @@ const wakuStatusCallback = (chain: Chain, status: string) => {
     isConnected = false;
   }
 };
-
 
 export const isWakuLoaded = () => {
   return wakuLoaded;
@@ -69,7 +71,10 @@ export const initWakuClient = async () => {
   // @ts-ignore
   wakuBroadcasterTransaction = waku.BroadcasterTransaction; // as WakuBroadcasterTransaction;
   wakuLoaded = true;
-  initializeLists(remoteConfig.bootstrap, remoteConfig.blacklist)
+  initializeLists(
+    remoteConfig.trustedFeeSigner as string[],
+    remoteConfig.blacklist,
+  );
 };
 
 export const switchWakuNetwork = async (chainName: NetworkName) => {
@@ -87,7 +92,7 @@ export const startWakuClient = async (chainName: NetworkName) => {
   const chain = getChainForName(chainName);
   // const peerOverrides = remoteConfig.additionalDirectPeers ?? [];
   // broadcasterOptions.additionalDirectPeers = peerOverrides;
-  broadcasterOptions.pubSubTopic = '/waku/2/rs/5/1'; //remoteConfig.wakuPubSubTopic;
+  broadcasterOptions.pubSubTopic = "/waku/2/rs/5/1"; //remoteConfig.wakuPubSubTopic;
   if (isDefined(remoteConfig.trustedFeeSigner)) {
     broadcasterOptions.trustedFeeSigner = remoteConfig.trustedFeeSigner;
   }
@@ -104,5 +109,3 @@ export const stopWakuClient = async () => {
 export const resetWakuClient = async () => {
   await wakuClient.tryReconnect();
 };
-
-

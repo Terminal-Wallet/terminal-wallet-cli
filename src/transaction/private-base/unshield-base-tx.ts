@@ -37,9 +37,13 @@ export const getUnshieldBaseTokenGasEstimate = async (
   // index with history once before the SDK derives the ephemeral address for this op.
   await syncEphemeralIndexOnce(chainName, encryptionKey);
 
+  // Base-token unshield is always a 7702 (type-4) relay-adapt tx — flag it so the gas details
+  // stay Type4 (EIP-1559) instead of being downgraded to Type1 for the broadcaster, which
+  // would zero the priority fee on the populated tx.
   const gasDetailsResult = await getTransactionGasDetails(
     chainName,
     broadcasterSelection,
+    true,
   );
 
   if (!gasDetailsResult) {
