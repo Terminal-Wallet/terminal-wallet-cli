@@ -108,8 +108,10 @@ export default {
       chainId: 1,
       blockscan: "https://etherscan.io/",
       providers: [
-        getProviderObjectFromURL("https://ethereum.rpc.subquery.network/public"),
         getProviderObjectFromURL("https://ethereum-rpc.publicnode.com"),
+        getProviderObjectFromURL("https://eth.drpc.org"),
+        getProviderObjectFromURL("https://eth.merkle.io"),
+        getProviderObjectFromURL("https://cloudflare-eth.com"),
       ],
     },
     [NetworkName.Polygon]: {
@@ -118,12 +120,9 @@ export default {
       chainId: 137,
       blockscan: "https://polygonscan.com/",
       providers: [
-        getProviderObjectFromURL("https://polygon.llamarpc.com"),
-        getProviderObjectFromURL("https://polygon.meowrpc.com"),
-        getProviderObjectFromURL("https://rpc-mainnet.matic.quiknode.pro"),
         getProviderObjectFromURL("https://polygon-bor.publicnode.com"),
-        getProviderObjectFromURL("https://polygon-rpc.com"),
-        getProviderObjectFromURL("https://rpc-mainnet.maticvigil.com"),
+        getProviderObjectFromURL("https://polygon.drpc.org"),
+        getProviderObjectFromURL("https://1rpc.io/matic"),
       ],
     },
     [NetworkName.BNBChain]: {
@@ -132,9 +131,7 @@ export default {
       chainId: 56,
       blockscan: "https://bscscan.com/",
       providers: [
-        getProviderObjectFromURL("https://binance.llamarpc.com"),
         getProviderObjectFromURL("https://bsc-mainnet.public.blastapi.io"),
-        getProviderObjectFromURL("https://bsc.blockpi.network/v1/rpc/public"),
         getProviderObjectFromURL("https://bsc.rpc.blxrbdn.com"),
         getProviderObjectFromURL("https://bsc-dataseed4.defibit.io"),
         getProviderObjectFromURL("https://bsc-dataseed2.binance.org"),
@@ -146,13 +143,10 @@ export default {
       type: ChainType.EVM,
       chainId: 42161,
       providers: [
-        getProviderObjectFromURL("https://arbitrum.llamarpc.com"),
-        getProviderObjectFromURL("https://arbitrum-one.public.blastapi.io"),
-        getProviderObjectFromURL(
-          "https://endpoints.omniatech.io/v1/arbitrum/one/public",
-        ),
         getProviderObjectFromURL("https://arbitrum-one.publicnode.com"),
-        getProviderObjectFromURL("https://arbitrum.blockpi.network/v1/rpc/public"),
+        getProviderObjectFromURL("https://arb1.arbitrum.io/rpc"),
+        getProviderObjectFromURL("https://arbitrum.drpc.org"),
+        getProviderObjectFromURL("https://arbitrum-one.public.blastapi.io"),
       ],
     },
     [NetworkName.EthereumGoerli_DEPRECATED]: {

@@ -106,7 +106,8 @@ export const loadConfigForNetwork = async (): Promise<
   // windows cmd
   // set REMOTE_CONFIG_RPC=http..
 
-  const remoteConfigUrl = process.env.REMOTE_CONFIG_RPC ?? 'https://eth.llamarpc.com';
+  const remoteConfigUrl =
+    process.env.REMOTE_CONFIG_RPC ?? "https://ethereum-rpc.publicnode.com";
   const remoteConfigContract = '0x5e982525d50046A813DBf55Ae72a3E00e99fbC94'
   const provider = new JsonRpcProvider(remoteConfigUrl);
   const contract = new Contract(remoteConfigContract, [
