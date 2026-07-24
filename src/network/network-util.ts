@@ -3,6 +3,7 @@ import {
   FallbackProviderJsonConfig,
   NETWORK_CONFIG,
   NetworkName,
+  isDefined,
 } from "@railgun-community/shared-models";
 import { WrappedTokenInfo } from "../models/token-models";
 import configDefaults from "../config/config-defaults";
@@ -84,8 +85,17 @@ export const getEthersWallet = (
 export let remoteConfig: RemoteConfig;
 
 
-export const loadConfigForNetwork = async () => {
+// Set the active remote config (used to install the built-in fallback when the remote fetch or
+// parse fails, so the app runs on baked-in defaults instead of exiting).
+export const setRemoteConfig = (config: RemoteConfig) => {
+  remoteConfig = config;
+};
 
+// Fetch the remote config. Returns undefined on any failure (fetch or parse) — the caller falls
+// back to the built-in default config rather than the app hard-exiting.
+export const loadConfigForNetwork = async (): Promise<
+  RemoteConfig | undefined
+> => {
   // Remote config will be added to a single chain;
   // optional ENVIRONMENT variable REMOTE_CONFIG_RPC to an rpc on Ethereum.
   // the OFFICIAL remote-config contract address is 0x5e982525d50046A813DBf55Ae72a3E00e99fbC94
@@ -104,14 +114,24 @@ export const loadConfigForNetwork = async () => {
   ], provider);
 
 
-  const raw = await contract.getConfig().catch(async (err: any) => {
+  const raw = await contract.getConfig().catch((err: any) => {
     console.error(`[remote-config] Failed to fetch config from ${remoteConfigUrl}. ${err.message}`);
     console.error(
-      '[remote-config] Use a healthy RPC endpoint, for example: REMOTE_CONFIG_RPC="https://eth.llamarpc.com" npm run start',
+      '[remote-config] Falling back to built-in defaults. Set REMOTE_CONFIG_RPC to a healthy Ethereum RPC to use remote config.',
     );
-    process.exit(69)
+    return undefined;
   });
-  const config = JSON.parse(raw) as RemoteConfig;
-  remoteConfig = config;
-  return config;
+  if (!isDefined(raw)) {
+    return undefined;
+  }
+  try {
+    const config = JSON.parse(raw) as RemoteConfig;
+    remoteConfig = config;
+    return config;
+  } catch (err) {
+    console.error(
+      `[remote-config] Failed to parse config; falling back to built-in defaults. ${(err as Error).message}`,
+    );
+    return undefined;
+  }
 }
