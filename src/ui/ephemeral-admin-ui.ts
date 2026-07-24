@@ -3,11 +3,22 @@ import "colors";
 import {
   advanceEphemeralIndex,
   getCurrentEphemeralInfo,
+  getEphemeralAddressForIndex,
   getEphemeralHistory,
   setEphemeralIndex,
   syncEphemeralIndexFromHistory,
 } from "../wallet/ephemeral-util";
+import {
+  getProvedEphemeralRecoveryTransaction,
+  scanEphemeralAssets,
+  submitRecoveryTransaction,
+} from "../wallet/ephemeral-recovery";
+import { runFeeTokenSelector } from "./token-ui";
+import { gasFeeMatrixPrompt } from "./gas-ui";
+import { clearGasFeeSelection } from "../gas/gas-fee";
+import { getTransactionURLForChain } from "../network/network-util";
 import { getSaltedPassword } from "../wallet/wallet-password";
+import { formatUnits } from "ethers";
 import {
   confirmPrompt,
   confirmPromptCatch,
@@ -15,7 +26,7 @@ import {
 } from "./confirm-ui";
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-const { Select, NumberPrompt } = require("enquirer");
+const { Select, NumberPrompt, MultiSelect } = require("enquirer");
 
 const ephemeralAdminLoop = async (
   chainName: NetworkName,
@@ -40,6 +51,8 @@ const ephemeralAdminLoop = async (
       `  address       : ${info.address.grey}`,
     choices: [
       { name: "show", message: "Show current ephemeral" },
+      { name: "balances", message: "Show on-chain balances (current index)" },
+      { name: "recover", message: "Recover stranded funds (reshield)" },
       { name: "history", message: "Show history" },
       { name: "sync", message: "Sync index from history" },
       { name: "advance", message: "Advance to next ephemeral (ratchet +1)" },
@@ -59,6 +72,176 @@ const ephemeralAdminLoop = async (
       console.log(
         `Ephemeral index ${`${info.index}`.cyan}  ->  ${info.address.green}`,
       );
+      await confirmPromptCatchRetry("");
+      break;
+    }
+    case "balances": {
+      try {
+        const scan = await scanEphemeralAssets(chainName, info.address);
+        console.log(
+          `Ephemeral [${`${info.index}`.cyan}] ${info.address.grey}`,
+        );
+        const native = formatUnits(scan.nativeWei, 18);
+        console.log(
+          `  ${"ETH".padEnd(8)} ${scan.nativeWei > 0n ? native.green : native.grey}`,
+        );
+        for (const t of scan.erc20s) {
+          console.log(
+            `  ${t.symbol.padEnd(8)} ${formatUnits(t.balance, t.decimals).green}  ${t.tokenAddress.grey}`,
+          );
+        }
+        if (scan.nativeWei === 0n && scan.erc20s.length === 0) {
+          console.log("  (nothing stranded at this ephemeral)".grey);
+        }
+        if (scan.method === "tokenlist") {
+          console.log(
+            "  note: log scan unavailable — curated token list only; arbitrary tokens may be missed."
+              .yellow,
+          );
+        }
+      } catch (err) {
+        console.log(`Balance lookup failed: ${(err as Error).message}`.red);
+      }
+      await confirmPromptCatchRetry("");
+      break;
+    }
+    case "recover": {
+      clearGasFeeSelection(); // start fresh; no stale tier from a prior op
+      const idxInput = new NumberPrompt({
+        header: " ",
+        message: "Recover from ephemeral index:",
+        initial: info.index,
+      });
+      const idxVal = await idxInput.run().catch(confirmPromptCatch);
+      if (!isDefined(idxVal)) {
+        break;
+      }
+      const targetIndex = Math.trunc(Number(idxVal));
+      if (!Number.isInteger(targetIndex) || targetIndex < 0) {
+        console.log("Index must be a non-negative integer.".red);
+        await confirmPromptCatchRetry("");
+        break;
+      }
+      try {
+        const address = await getEphemeralAddressForIndex(
+          chainName,
+          encryptionKey,
+          targetIndex,
+        );
+        console.log(
+          `Scanning ephemeral [${`${targetIndex}`.cyan}] ${address.grey} ...`,
+        );
+        const scan = await scanEphemeralAssets(chainName, address);
+        const hasNative = scan.nativeWei > 0n;
+        if (!hasNative && scan.erc20s.length === 0) {
+          console.log("Nothing stranded at this ephemeral.".grey);
+          await confirmPromptCatchRetry("");
+          break;
+        }
+        if (scan.method === "tokenlist") {
+          console.log(
+            "  note: curated-list scan only; arbitrary tokens may be missed.".yellow,
+          );
+        }
+
+        // Selective picker — choose which stranded assets to reshield (all pre-selected).
+        const NATIVE = "__native__";
+        const pickChoices = [
+          ...(hasNative
+            ? [
+                {
+                  name: NATIVE,
+                  message: `ETH   ${formatUnits(scan.nativeWei, 18)}  (wrap -> WETH -> shield)`,
+                },
+              ]
+            : []),
+          ...scan.erc20s.map((t) => ({
+            name: t.tokenAddress,
+            message: `${t.symbol.padEnd(8)} ${formatUnits(t.balance, t.decimals)}`,
+          })),
+        ];
+        const picker = new MultiSelect({
+          header: " ",
+          message:
+            "Select assets to reshield (space to toggle, enter to confirm)",
+          choices: pickChoices,
+          initial: pickChoices.map((c) => c.name),
+        });
+        const picked: string[] | undefined = await picker
+          .run()
+          .catch(confirmPromptCatch);
+        if (!isDefined(picked) || picked.length === 0) {
+          console.log("Nothing selected.".grey);
+          break;
+        }
+        const pickedNative = picked.includes(NATIVE);
+        const pickedERC20s = scan.erc20s.filter((t) =>
+          picked.includes(t.tokenAddress),
+        );
+
+        // 1) Signer / fee funding — broadcaster (relayed) or self-broadcast, never assumed.
+        const funding = await runFeeTokenSelector(chainName, [], undefined, true);
+        const broadcaster = funding?.bestBroadcaster;
+        const fundingLabel = isDefined(broadcaster)
+          ? `broadcaster (fee token ${broadcaster.tokenAddress})`
+          : "self-broadcast (your public wallet pays gas)";
+
+        // 2) Gas price — pick a tier (or keep the conservative default).
+        await gasFeeMatrixPrompt(chainName);
+
+        // 3) Build the proof (respects the gas selection above).
+        console.log("Building recovery proof...".yellow);
+        const proved = await getProvedEphemeralRecoveryTransaction(
+          chainName,
+          encryptionKey,
+          targetIndex,
+          {
+            erc20s: pickedERC20s,
+            nativeWei: pickedNative ? scan.nativeWei : undefined,
+          },
+          broadcaster,
+        );
+
+        // 4) Confirm with the action + resolved gas displayed.
+        const summary = [
+          ...(pickedNative ? [`${formatUnits(scan.nativeWei, 18)} ETH`] : []),
+          ...pickedERC20s.map(
+            (t) => `${formatUnits(t.balance, t.decimals)} ${t.symbol}`,
+          ),
+        ].join(", ");
+        const gwei = (v?: bigint) =>
+          isDefined(v) ? `${formatUnits(v, "gwei")} gwei` : "n/a";
+        const tx = proved.transaction;
+        console.log("");
+        console.log("Recovery summary".yellow);
+        console.log(`  reshield : ${summary.green}  -> your RAILGUN balance`);
+        console.log(`  from     : ephemeral [${`${targetIndex}`.cyan}]`);
+        console.log(`  funding  : ${fundingLabel}`);
+        console.log(
+          `  gas      : limit ${`${tx.gasLimit}`.cyan}, maxFee ${gwei(tx.maxFeePerGas as bigint)}`,
+        );
+        console.log(
+          `  est cost : ${`${proved.estimatedCost}`.cyan} ${proved.feeSymbol}`,
+        );
+        console.log("");
+        const confirmed = await confirmPrompt("Send this recovery?");
+        if (!confirmed) {
+          break;
+        }
+
+        console.log("Submitting recovery...".yellow);
+        const txHash = await submitRecoveryTransaction(
+          chainName,
+          proved,
+          broadcaster,
+        );
+        console.log(
+          `Recovery submitted: ${getTransactionURLForChain(chainName, txHash).green}`,
+        );
+      } catch (err) {
+        console.log(`Recovery failed: ${(err as Error).message}`.red);
+      }
+      clearGasFeeSelection();
       await confirmPromptCatchRetry("");
       break;
     }

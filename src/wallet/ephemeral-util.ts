@@ -105,6 +105,22 @@ export const getCurrentEphemeralInfo = async (
   return { index, address };
 };
 
+// Derive the ephemeral address for a SPECIFIC index without touching the persisted current
+// index (recovery inspection/targeting). Read-only: derives locally from the wallet keys.
+export const getEphemeralAddressForIndex = async (
+  chainName: NetworkName,
+  encryptionKey: string,
+  index: number,
+): Promise<string> => {
+  const keyManager = new EphemeralKeyManager(
+    fullWalletForID(getCurrentRailgunID()),
+    encryptionKey,
+  );
+  const account = await keyManager.getAccount(ephemeralChainId(chainName), index);
+  return account.address;
+};
+
+
 // Realign the index against the wallet's on-chain history (unshield recipients only — a
 // shield leaves no trace here, so the per-broadcast ratchet remains the authority for those).
 // Returns the before/after index so the caller can report what changed.
