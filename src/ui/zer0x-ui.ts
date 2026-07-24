@@ -8,10 +8,7 @@ import {
   getERC20TokenInfosForChain,
   getTokenInfo,
 } from "../balance/token-util";
-import {
-  SwapQuoteData,
-  ZERO_X_PRICE_DECIMALS,
-} from "@railgun-community/cookbook";
+import { SwapQuoteData } from "@railgun-community/cookbook";
 import { Zer0XSwapOutput, Zer0XSwapSelection } from "../models/0x-models";
 import { getWrappedTokenInfoForChain } from "../network/network-util";
 
@@ -159,8 +156,10 @@ export const getReadablePricesFromQuote = async (
     chainName,
     sellTokenAddress,
   );
-  const fPrice = formatUnits(price, ZERO_X_PRICE_DECIMALS);
-  const fGuaranteedPrice = formatUnits(guaranteedPrice, ZERO_X_PRICE_DECIMALS);
+  // rc.1: quote price/guaranteedPrice are denominated in the sell token's decimals
+  // (getSwapQuote uses parseUnits(..., sellERC20Amount.decimals)), not a fixed constant.
+  const fPrice = formatUnits(price, sellTokenDecimals);
+  const fGuaranteedPrice = formatUnits(guaranteedPrice, sellTokenDecimals);
   const {
     sellUnshieldFee: sellFee,
     buyAmount,
