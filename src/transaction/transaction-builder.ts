@@ -515,13 +515,6 @@ export const runTransactionBuilder = async (
       : regularSelectText.yellow,
   });
 
-  if (hasSelectionInfo) {
-    choices.push({
-      name: "set-gas",
-      message: "Set Gas Fee".cyan,
-    });
-  }
-
   if (sendTransactionDisabled === false) {
     choices.push({
       message: ``.padEnd(50, "=*=").grey,
@@ -584,26 +577,6 @@ export const runTransactionBuilder = async (
 
       // just reset back to previous menu
       return runTransactionBuilder(chainName, transactionType, resultObj);
-    }
-    case "set-gas": {
-      await gasFeeMatrixPrompt(
-        chainName,
-        privateGasEstimate?.estimatedGasDetails?.gasEstimate,
-      );
-      // Gas price changed → any prior estimate/proof is stale. Reset to the confirm step so
-      // the estimate (and, for broadcaster flows, the fee quote) recompute at the new price
-      // before sending.
-      return runTransactionBuilder(chainName, transactionType, {
-        ...resultObj,
-        incomingHeader: header,
-        broadcasterSelection: undefined,
-        privateGasEstimate: undefined,
-        provedTransaction: undefined,
-        confirmAmountsDisabled: false,
-        selectFeesDisabled: true,
-        sendTransactionDisabled: undefined,
-        generateProofDisabled: undefined,
-      });
     }
     case "select-edit": {
       clearHashedPassword();

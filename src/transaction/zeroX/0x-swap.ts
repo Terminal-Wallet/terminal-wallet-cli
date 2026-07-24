@@ -185,11 +185,11 @@ export const getZer0XSwapInputs = async (
       erc20Amounts: relayAdaptUnshieldERC20Amounts,
       nfts: [],
     };
-    // hardcode min gas limit for now.
-    // const minGasLimit = 0n; //5_000_000n;
-    const minGasLimit = 0n; //5_000_000n;
-
-    // const { minGasLimit } = swap.config;
+    // The swap runs a variable external 0x call whose estimateGas under-shoots the real
+    // relay-adapt execution; it MUST use the recipe's minGasLimit floor (e.g. 2.7M for
+    // swap-and-shield) or it submits an under-gassed tx and reverts out-of-gas. (Only the
+    // deterministic recovery ops can safely use 0n.)
+    const { minGasLimit } = swap.config;
     const recipeOutput: RecipeOutput = await swap.getRecipeOutput(recipeInput);
     const { crossContractCalls, erc20AmountRecipients } = recipeOutput;
 
