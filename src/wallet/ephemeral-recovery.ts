@@ -74,9 +74,15 @@ const sanitizeSymbol = (symbol: string): string => {
   let cleaned = "";
   for (const ch of symbol) {
     const code = ch.codePointAt(0) ?? 0;
-    // Drop C0 controls (< 0x20), DEL (0x7f) and C1 controls (0x80-0x9f).
+    // Drop C0 controls (< 0x20), DEL (0x7f), C1 controls (0x80-0x9f), and Unicode bidi/RTL
+    // override codepoints (which can visually reorder the symbol to spoof the display).
+    const isBidi =
+      code === 0x200e ||
+      code === 0x200f ||
+      (code >= 0x202a && code <= 0x202e) ||
+      (code >= 0x2066 && code <= 0x2069);
     const printable =
-      code >= 0x20 && code !== 0x7f && !(code >= 0x80 && code <= 0x9f);
+      code >= 0x20 && code !== 0x7f && !(code >= 0x80 && code <= 0x9f) && !isBidi;
     if (printable) {
       cleaned += ch;
     }
@@ -281,6 +287,9 @@ const buildProved7702Batch = async (
 
   let progressBar: ProgressBar | undefined;
   try {
+    // The override is process-global for the whole proof window. INVARIANT: no other fund flow
+    // may run concurrently with a recovery build (the recover prompt is modal; only read-only
+    // balance pollers run alongside, which don't touch the ephemeral signer).
     await wallet.setCurrentEphemeralWallet(targetAccount.signer);
     progressBar = new ProgressBar("Starting 7702 Proof");
 

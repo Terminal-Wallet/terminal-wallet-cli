@@ -116,7 +116,14 @@ export const loadConfigForNetwork = async (): Promise<
 
 
   const raw = await contract.getConfig().catch((err: any) => {
-    console.error(`[remote-config] Failed to fetch config from ${remoteConfigUrl}. ${err.message}`);
+    // Log only the host — a user-supplied REMOTE_CONFIG_RPC may embed an API key.
+    let host = remoteConfigUrl;
+    try {
+      ({ host } = new URL(remoteConfigUrl));
+    } catch {
+      /* keep as-is if not a parseable URL */
+    }
+    console.error(`[remote-config] Failed to fetch config from ${host}. ${err.message}`);
     console.error(
       '[remote-config] Falling back to built-in defaults. Set REMOTE_CONFIG_RPC to a healthy Ethereum RPC to use remote config.',
     );

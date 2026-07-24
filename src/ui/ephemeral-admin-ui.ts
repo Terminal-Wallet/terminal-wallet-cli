@@ -240,8 +240,11 @@ const ephemeralAdminLoop = async (
         );
       } catch (err) {
         console.log(`Recovery failed: ${(err as Error).message}`.red);
+      } finally {
+        // Clear the picked gas tier on EVERY exit path (incl. a declined-confirm or
+        // nothing-selected break) so it can never leak into a later flow.
+        clearGasFeeSelection();
       }
-      clearGasFeeSelection();
       await confirmPromptCatchRetry("");
       break;
     }
