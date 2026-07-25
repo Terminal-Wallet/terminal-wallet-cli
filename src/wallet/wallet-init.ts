@@ -35,8 +35,8 @@ import {
   poiScanCallback,
   batchListCallback
 } from "./scan-callbacks";
-import { getSaltedPassword } from "./wallet-password";
-import { confirmGetPasswordPrompt } from "../ui/password-ui";
+import { getSaltedPassword, confirmPassword } from "./wallet-password";
+
 import { computePasswordHash, getIV } from "../platform/crypto";
 import configDefaults from "../config/config-defaults";
 import { createLogger } from "../platform/logger";
@@ -107,12 +107,7 @@ export const freshRailgunWallet = async (
       throw new Error("Hashed Password Timed Out");
     }
     if (isInitilization) {
-      const confirmed = await confirmGetPasswordPrompt(walletManager, {
-        validate: (value: string) => {
-          return value !== "" && value !== " " && value.length >= 8;
-        },
-      });
-
+      const confirmed = await confirmPassword();
       if (!confirmed) {
         throw new Error("Passwords Do Not Match.");
       }

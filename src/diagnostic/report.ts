@@ -18,6 +18,8 @@
  * stays the only boot check that needs no human.
  */
 import { NetworkName } from "@railgun-community/shared-models";
+import { setInputProvider } from "../core/input";
+import { headlessInputProvider } from "./headless-input";
 import configDefaults from "../config/config-defaults";
 import { overrideMainConfig } from "../config/config-overrides";
 import {
@@ -138,6 +140,10 @@ const runStatus = async (network: NetworkName): Promise<void> => {
 };
 
 export const runDiagnostic = async (argv: string[]): Promise<number> => {
+  // This host's answer to the input seam. Registered before any boot step, so
+  // core never reaches an unregistered provider.
+  setInputProvider(headlessInputProvider);
+
   const network = configDefaults.engine.defaultChain;
   const full = !argv.includes("--selftest");
 

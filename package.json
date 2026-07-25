@@ -20,7 +20,7 @@
     "lint": "npx eslint src",
     "installdeps": "npm install --legacy-peer-deps",
     "release": "release-it",
-    "boundary": "bash scripts/check-core-boundary.sh",
+    "boundary": "SCOPE=src/core bash scripts/check-core-boundary.sh",
     "typecheck": "tsc --noEmit",
     "typecheck:test": "tsc -p tsconfig.test.json --noEmit",
     "lint:test": "npx eslint test",
