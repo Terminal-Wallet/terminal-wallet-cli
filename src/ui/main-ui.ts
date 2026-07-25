@@ -30,12 +30,8 @@ import {
 import { runTransactionBuilder } from "../transaction/transaction-builder";
 
 import { runAddKnownAddress } from "./known-address-ui";
-import {
-  RAILGUN_HEADER,
-  clearConsoleBuffer,
-  processDestroyExit,
-  processSafeExit,
-} from "../util/error-util";
+import { RAILGUN_HEADER, clearConsoleBuffer } from "../platform/console";
+import { processDestroyExit, processSafeExit } from "../platform/lifecycle";
 import { runAddTokenPrompt } from "./token-ui";
 import {
   confirmPrompt,

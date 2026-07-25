@@ -1,5 +1,5 @@
 import path from "path";
-import { decryptObject } from "../util/crypto";
+import { decryptObject } from "../platform/crypto";
 import { KeychainFile, EncryptedCacheFile } from "../models/wallet-models";
 import * as fs from "fs";
 

@@ -28,6 +28,7 @@ import { getChainForName, remoteConfig } from "../network/network-util";
 import { getProviderObjectFromURL } from "../models/network-models";
 import { walletManager } from "../wallet/wallet-manager";
 import { saveKeychainFile } from "../wallet/wallet-cache";
+import { createLogger, isDebugEnabled } from "../platform/logger";
 
 const RAILGUN_DB_PATH = configDefaults.engine.databasePath;
 const RAILGUN_ARTIFACT_PATH = configDefaults.engine.artifactPath;
@@ -37,11 +38,15 @@ export const isEngineRunning = () => {
   return railgunEngineRunning;
 };
 
+// The SDK is chatty, so its info stream sits at debug: visible under
+// TW_LOG_LEVEL=debug, quiet otherwise. Its errors were previously reduced to
+// `err.message` on stdout, which lost the stack and the cause; they go through
+// the logger intact now.
+const engineLog = createLogger("engine");
+
 const interceptLog = {
-  log: (log: string) => { },
-  error: (err: any) => {
-    console.log(err.message);
-  },
+  log: (message: string) => engineLog.debug(message),
+  error: (err: unknown) => engineLog.error(err),
 };
 
 export const getCustomProviders = () => {
@@ -113,7 +118,9 @@ export const initRailgunEngine = async () => {
   }
   const engineDatabase = new LevelDOWN(RAILGUN_DB_PATH);
   const artifactStorage = createArtifactStore(RAILGUN_ARTIFACT_PATH);
-  const shouldDebug = true;
+  // Was hardcoded true, so the SDK produced debug output unconditionally and
+  // interceptLog then threw it away. Let the log level decide instead.
+  const shouldDebug = isDebugEnabled();
   const useNativeArtifacts = false;
   const skipMerkelTreeScans = false;
   const poiNodeURLs = remoteConfig.publicPoiAggregatorUrls ?? [];
@@ -282,7 +289,10 @@ export const loadProviderList = async (chainName: NetworkName) => {
   const availableProviders = await getAvailableProviderJSONs(
     chainId,
     [...combinedProviders],
-    console.error,
+    // Per-provider health-check failures. Expected — public RPCs rate-limit and
+    // the FallbackProvider routes around them — so this is a warning, not an
+    // error, and it stays visible rather than going to raw stderr.
+    (message: string) => engineLog.warn("provider health check", message),
   );
   const newRPCJsonConfig: FallbackProviderJsonConfig = {
     chainId,
@@ -337,9 +347,15 @@ export const stopEngine = async () => {
   if (!isEngineRunning()) {
     return;
   }
-  await stopRailgunEngine().catch((err) => {
-    console.log(err);
-    stopEngine();
-  });
-  return;
+  // Previously this retried by calling itself from its own .catch — with the
+  // running flag still set, so a persistently failing stop recursed without
+  // bound on the exit path. Clear the flag first, then report a failure and let
+  // the bounded shutdown in platform/lifecycle decide what to do about it.
+  railgunEngineRunning = false;
+  try {
+    await stopRailgunEngine();
+  } catch (err) {
+    engineLog.error("failed to stop the railgun engine", err);
+    throw err;
+  }
 };

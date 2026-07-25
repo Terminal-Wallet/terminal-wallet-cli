@@ -12,17 +12,24 @@
  * problem from a network problem without reading a rendered screen.
  */
 import { runDiagnostic } from "./diagnostic/report";
-import { clearConsoleBuffer, setConsoleTitle } from "./util/error-util";
+import { clearConsoleBuffer, setConsoleTitle } from "./platform/console";
+import { installProcessHandlers } from "./platform/lifecycle";
+import { errMessage } from "./platform/errors";
+import { createLogger } from "./platform/logger";
+
+const log = createLogger("main");
 
 const main = async () => {
+  // Before anything that can fail, so a crash during boot is reported and torn
+  // down rather than swallowed.
+  installProcessHandlers();
   setConsoleTitle();
   const code = await runDiagnostic(process.argv.slice(2));
   process.exit(code);
 };
 
 clearConsoleBuffer();
-main().catch((err: Error) => {
-  // Nothing below this point can report, so write plainly and fail loudly.
-  console.error(`fatal: ${err.message}`);
+main().catch((err: unknown) => {
+  log.error("fatal error during startup", err);
   process.exit(1);
 });

@@ -106,7 +106,7 @@ import {
 } from "../wallet/private-wallet";
 import { setStatusText } from "../ui/status-ui";
 import { getWrappedTokenBalance } from "../balance/balance-util";
-import { clearConsoleBuffer } from "../util/error-util";
+import { clearConsoleBuffer } from "../platform/console";
 import { getMemoTextPrompt } from "../ui/memo-ui";
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { Select, Input } = require("enquirer");

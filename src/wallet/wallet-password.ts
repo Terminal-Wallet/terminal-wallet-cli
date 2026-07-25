@@ -1,6 +1,6 @@
 import { getPasswordPrompt } from "../ui/password-ui";
 import { isDefined } from "@railgun-community/shared-models";
-import { hashString } from "../util/crypto";
+import { hashString } from "../platform/crypto";
 import { walletManager } from "./wallet-manager";
 
 export const clearHashedPassword = () => {

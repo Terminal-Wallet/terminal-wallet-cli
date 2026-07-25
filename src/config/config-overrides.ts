@@ -11,6 +11,9 @@ import {
 } from "../models/network-models";
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { version } = require("../../package.json");
+import { createLogger } from "../platform/logger";
+
+const log = createLogger("config");
 
 export const featureFlags: Record<string, any> = {};
 
@@ -71,7 +74,9 @@ export const overrideMainConfig = async (_version: string) => {
   const effective = overrides ?? fallbackRemoteConfig;
   if (!isDefined(overrides)) {
     setRemoteConfig(fallbackRemoteConfig);
-    console.log("[remote-config] Using built-in fallback config.".grey);
+    log.warn(
+      "remote config unavailable; running on the built-in fallback (baked-in public RPCs)",
+    );
   }
 
   if (isDefined(effective.apiKeys)) {
@@ -109,21 +114,20 @@ export const overrideMainConfig = async (_version: string) => {
 };
 
 export const versionCheck = (version: string) => {
-  console.log(("v" + version).grey);
+  log.debug(`version ${version}`);
 
   if (version < remoteConfig.minVersionNumber) {
-    console.log("This version is less than the minimum stable version.".bgRed);
-    console.log(
-      "DEPRECATED Version. Download @",
-      "https://www.terminal-wallet.com".bgBlue,
+    log.error(
+      `this build (${version}) is older than the minimum supported version ` +
+        `(${remoteConfig.minVersionNumber}). Download a current build from ` +
+        `https://www.terminal-wallet.com`,
     );
     process.exit(69);
   }
   if (version < remoteConfig.currentVersionNumber) {
-    console.log(
-      "Theres a new version available!!".rainbow,
-      "Download Links:".zebra,
-      "https://www.terminal-wallet.com".bgBlue,
+    log.warn(
+      `a newer version is available (${remoteConfig.currentVersionNumber}); ` +
+        `you are on ${version}. https://www.terminal-wallet.com`,
     );
   }
 };

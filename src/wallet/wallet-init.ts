@@ -26,7 +26,7 @@ import {
 } from "../engine/engine";
 import { initWakuClient, startWakuClient } from "../waku/connect-waku";
 import { importKnownAddressesFromWallet } from "../ui/known-address-ui";
-import { processSafeExit } from "../util/error-util";
+import { processSafeExit } from "../platform/lifecycle";
 import { getEthersWallet } from "../network/network-util";
 import { walletManager } from "./wallet-manager";
 import {
@@ -37,8 +37,11 @@ import {
 } from "./scan-callbacks";
 import { getSaltedPassword } from "./wallet-password";
 import { confirmGetPasswordPrompt } from "../ui/password-ui";
-import { computePasswordHash, getIV } from "../util/crypto";
+import { computePasswordHash, getIV } from "../platform/crypto";
 import configDefaults from "../config/config-defaults";
+import { createLogger } from "../platform/logger";
+
+const log = createLogger("wallet-init");
 
 export const generateKeychainPrompt = async (
   index: number = 0,
@@ -68,7 +71,12 @@ export const initializeKeychainSystem = async (): Promise<KeychainFile> => {
     }
     // run selection here.
     // will implement this after.
-    console.log("Multiple wallets found, returning first");
+    // Selecting between keychains needs the input seam; it lands with the
+    // keychain work. Until then this is at least visible instead of silent.
+    log.warn(
+      `${keychains.length} keychains found; using ${keychains[0].name}. ` +
+        "Selecting between them is not implemented yet.",
+    );
     return keychains[0];
   }
   try {
@@ -78,7 +86,7 @@ export const initializeKeychainSystem = async (): Promise<KeychainFile> => {
 
     return keychain;
   } catch (error) {
-    console.log((error as Error).message);
+    log.error("keychain initialization failed", error);
     const confirm = await confirmPrompt(`TRY AGAIN?`, {
       initial: false,
     });
@@ -109,14 +117,14 @@ export const freshRailgunWallet = async (
         throw new Error("Passwords Do Not Match.");
       }
     }
-    console.log("Generating Wallet... this may take a few moments.".yellow);
+    log.info("generating wallet; this may take a few moments");
 
     const wallet = await createRailgunWallet(
       walletManager.hashedPassword,
       mnemonic,
       undefined,
-    ).catch((err) => {
-      console.log(err.message);
+    ).catch((err: unknown) => {
+      log.error("createRailgunWallet failed", err);
       throw new Error("Failed to Initialize Railgun Wallet.");
     });
     return wallet;
@@ -210,21 +218,24 @@ export const initRailgunWallet = async (): Promise<
     );
     return wallet;
   } catch (error) {
-    console.log((error as Error).message);
+    log.error("failed to load the railgun wallet", error);
   }
 
-  await processSafeExit();
+  await processSafeExit(1);
 };
 
 export const initializeWalletSystems = async () => {
   try {
     await initRailgunEngine();
   } catch (err) {
-    console.log("engine init erro");
+    // Engine init failing used to clear the password and call this function
+    // again — unbounded recursion on a failure that is almost never transient
+    // (a held LevelDB lock, a missing artifact path). Fail fast instead: the
+    // wallet cannot do anything useful without an engine.
+    log.error("railgun engine failed to initialize", err);
     walletManager.hashedPassword = undefined;
     walletManager.comparisonRefHash = undefined;
-    initializeWalletSystems();
-    return;
+    throw err;
   }
 
   walletManager.keyChain = await initializeKeychainSystem();
@@ -271,8 +282,12 @@ export const initializeWalletSystems = async () => {
     .then(async () => {
       await startWakuClient(currentNetwork);
     })
-    .catch(async (err: Error) => {
-      throw new Error(`WAKU Failed to Initialize. ${err.message}`);
+    .catch((err: unknown) => {
+      // Deliberately not awaited, so waku never blocks the password prompt. But
+      // the previous `throw` here landed inside a detached promise: it became an
+      // unhandled rejection that boot's caller never saw, so a wallet with no
+      // broadcaster connection looked like a wallet that booted fine. Report it.
+      log.error("waku failed to initialize; broadcasters unavailable", err);
     });
   if (walletManager.keyChain.cachedTokenInfo) {
     loadTokenDBCache(walletManager.keyChain.cachedTokenInfo);

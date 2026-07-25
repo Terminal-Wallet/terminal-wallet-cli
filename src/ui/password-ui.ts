@@ -1,5 +1,5 @@
 import { isDefined } from "@railgun-community/shared-models";
-import { computePasswordHash, hashString } from "../util/crypto";
+import { computePasswordHash, hashString } from "../platform/crypto";
 import { WalletManager } from "../wallet/wallet-manager";
 import { confirmPrompt } from "./confirm-ui";
 const { Password } = require("enquirer");

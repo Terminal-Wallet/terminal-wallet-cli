@@ -9,6 +9,10 @@ import { ContractTransaction } from "ethers";
 import { getChainForName } from "../network/network-util";
 import { getCurrentRailgunID } from "./wallet-util";
 
+import { createLogger } from "../platform/logger";
+
+const log = createLogger("ephemeral");
+
 // EIP-7702 relay-adapt bundles (private swap, base-token shield/unshield) execute via a
 // per-wallet *ephemeral* EOA that the relay-adapt code is delegated onto. Each relay-adapt
 // call MUST use a fresh, never-funded ephemeral address: the relay-adapt wrap/shield steps
@@ -47,9 +51,7 @@ export const syncEphemeralIndexOnce = async (
     await keyManager.scanHistoryForEphemeralIndex(chain);
     syncedEphemeralIndex.add(key);
   } catch (err) {
-    console.log(
-      `Ephemeral index sync skipped: ${(err as Error).message}`.grey,
-    );
+    log.debug("ephemeral index sync skipped", err);
   }
 };
 
@@ -69,10 +71,9 @@ export const ratchetEphemeralIfRelayAdapt = async (
   try {
     await ratchetEphemeralAddress(getCurrentRailgunID(), chainName);
   } catch (err) {
-    console.log(
-      `WARNING: failed to ratchet ephemeral address (${
-        (err as Error).message
-      }). It will be re-synced from history on next load.`.yellow,
+    log.warn(
+      "failed to ratchet the ephemeral address; it will be re-synced from history on next load",
+      err,
     );
   }
 };
