@@ -29,6 +29,16 @@ export const toggleResponsiveMenu = () => {
   saveKeychainFile(walletManager.keyChain, keyChainPath);
 };
 
+/** Persisted default fee preference for new private sends. */
+export const getDefaultFeeModePref = (): string =>
+  walletManager.keyChain.defaultFeeMode ?? "broadcaster";
+
+export const setDefaultFeeModePref = (pref: string) => {
+  const { keyChainPath } = configDefaults.engine;
+  walletManager.keyChain.defaultFeeMode = pref;
+  saveKeychainFile(walletManager.keyChain, keyChainPath);
+};
+
 export const shouldDisplayPrivateBalances = () => {
   return walletManager.displayPrivate;
 };

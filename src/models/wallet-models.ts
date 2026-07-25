@@ -83,6 +83,12 @@ export type KeychainFile = {
    */
   broadcasterFavorites?: string[];
   broadcasterBlocklist?: string[];
+  /**
+   * Preferred way to pay for a new private send: "broadcaster", "self-signer",
+   * or "external:<label>". Only the signer choice is meaningfully persistable —
+   * a broadcaster is picked live per transaction.
+   */
+  defaultFeeMode?: string;
   /** Imported private keys that can pay gas, encrypted at rest. */
   externalSigners?: ExternalSignerRecord[];
 };
