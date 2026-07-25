@@ -82,6 +82,15 @@ export interface ShieldBaseSpec {
   type: RailgunTransaction.ShieldBase;
   chainName: NetworkName;
   recipient: RailgunERC20AmountRecipient;
+  /**
+   * Required even though shielding is self-signed and needs no proof: wrapping
+   * and shielding the base token runs through Relay-Adapt as an EIP-7702
+   * bundle, and the ephemeral account that executes it is derived from this
+   * key. The deps adapter resolves the ephemeral from it at estimate time — the
+   * address itself is deliberately not part of the spec, since it is derived,
+   * secret-adjacent, and must be the same one at estimate and at proof.
+   */
+  encryptionKey: string;
 }
 
 /** Private 0x swap (cross-contract via Relay-Adapt). `inputs` is the 0x quote. */

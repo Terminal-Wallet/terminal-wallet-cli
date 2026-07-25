@@ -1,19 +1,28 @@
 /**
- * Shared test support — deterministic fixtures, and later the stub factories,
- * event/console capture, and fakes. Import from here for terse, consistent
- * setup:
- *   import { TOKENS, transferRecipient } from "../_support";
+ * Shared test support — deterministic fixtures, stub factories, and event
+ * capture. Import from here for terse, consistent setup:
+ *   import { TOKENS, collectEvents, makeRunDeps } from "../_support";
  *
- * This barrel grows with the code it supports. Capture and fakes arrive with
- * the core seam; stubs and spec fixtures arrive with the flow layer. Each is
- * added here in the same commit as its subject, so the barrel never re-exports
- * something that does not exist yet.
+ * This barrel grows with the code it supports; each entry is added in the same
+ * commit as its subject, so it never re-exports something that does not exist.
  */
+
+// capture
+export * from "./capture/events";
+export * from "./capture/core-bus";
+
+// stubs
+export * from "./stubs/tx-run-deps";
+export * from "./stubs/send-private-deps";
+export * from "./stubs/send-public-deps";
+export * from "./stubs/cross-contract-pipeline";
 
 // fixtures
 export * from "./fixtures/tokens";
 export * from "./fixtures/networks";
 export * from "./fixtures/recipients";
 export * from "./fixtures/broadcasters";
+export * from "./fixtures/fees";
 export * from "./fixtures/gas";
 export * from "./fixtures/proved";
+export * from "./fixtures/specs";
