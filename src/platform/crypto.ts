@@ -12,14 +12,6 @@ export const saltedHashString = (input: string, salt: string) => {
   return hashString(`${salt}:${input}`);
 };
 
-export const generateSecretKeyFromString = (input: string): Buffer => {
-  const keyLength = 32; // 32 bytes = 256 bits for AES-256
-  const hash = crypto.createHash("sha256");
-  hash.update(input, "utf8");
-  const hashedData = hash.digest();
-  const key = hashedData.slice(0, keyLength);
-  return key;
-};
 
 export const computePasswordHash = async (
   password: string,

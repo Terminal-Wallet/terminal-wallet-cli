@@ -42,6 +42,29 @@ export type KnownAddressKey = {
 
 export type CustomProviderMap = NumMapType<NumMapType<MapType<boolean>>>;
 
+/** AES-256-GCM envelope. Versioned so the derivation can change later. */
+export type EncryptedSignerBlob = {
+  v: number;
+  kdf: string;
+  salt: string;
+  iv: string;
+  authTag: string;
+  ciphertext: string;
+};
+
+/**
+ * An imported signing key, stored encrypted under the wallet password.
+ *
+ * The address is kept in the clear so a signer can be listed and chosen without
+ * unlocking anything; only the key itself is sealed.
+ */
+export type ExternalSignerRecord = {
+  label: string;
+  address: string;
+  encrypted: EncryptedSignerBlob;
+};
+
+
 export type KeychainFile = {
   name: string;
   salt: string;
@@ -60,7 +83,10 @@ export type KeychainFile = {
    */
   broadcasterFavorites?: string[];
   broadcasterBlocklist?: string[];
+  /** Imported private keys that can pay gas, encrypted at rest. */
+  externalSigners?: ExternalSignerRecord[];
 };
+
 
 export type EncryptedCacheFile = {
   name: string;

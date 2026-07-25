@@ -19,6 +19,7 @@ import { SendOutcome } from "./run";
 import { emitCoreEvent } from "../core/events";
 import { getBroadcasterTranaction } from "../railgun/transaction/private/private-tx";
 import { getEthersWalletForSigner } from "../railgun/wallet/public-utils";
+import { getExternalSignerWallet } from "../railgun/wallet/external-signers";
 import { getTransactionURLForChain } from "../railgun/network/network-util";
 import { waitForRelayedTx, waitForTx } from "../railgun/transaction/public/public-tx";
 import { resetBalanceScan } from "../railgun/wallet/private-wallet";
@@ -54,15 +55,8 @@ const defaultDeps: SendPrivateDeps = {
     getBroadcasterTranaction(tx, chainName, relayAdapt),
   signerWallet: (signer, chainName) =>
     getEthersWalletForSigner(signer, chainName),
-  // External signers (an imported private key paying the gas) arrive with the
-  // encrypted signer store. The FeeMode contract already carries the variant so
-  // callers and tests can express it; only this default binding is absent, and
-  // it fails loudly rather than silently doing something else.
-  externalSignerWallet: () => {
-    throw new Error(
-      "External signers are not wired yet; use the self-signer or a broadcaster.",
-    );
-  },
+  externalSignerWallet: (label, chainName) =>
+    getExternalSignerWallet(label, chainName),
   txUrl: getTransactionURLForChain,
   resetScan: resetBalanceScan,
   watchRelayed: (chainName, hash) => waitForRelayedTx(chainName, hash),
