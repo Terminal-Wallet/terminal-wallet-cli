@@ -1,6 +1,6 @@
 /**
  * Renderer-agnostic transaction input collection — uses the input-provider seam
- * (select/input), so it works in blessed (native modals) AND legacy (enquirer)
+ * (select/input), so it works on any host that implements the seam
  * from one code path. The pure parsing (buildRecipient) is unit-tested.
  *
  * Every sub-prompt can be cancelled (Esc/empty); when that happens the collector

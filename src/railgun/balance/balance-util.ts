@@ -21,14 +21,12 @@ import {
 } from "../network/network-util";
 import { getTokenInfo } from "./token-util";
 import { formatUnits } from "ethers";
-import "colors";
 import {
   getCurrentRailgunID,
   getCurrentWalletGasBalance,
   shouldDisplayPrivateBalances,
 } from "../wallet/wallet-util";
 import { readablePrecision } from "../../util/util";
-import { stripColors } from "colors";
 import configDefaults from "../../config/config-defaults";
 import { walletManager } from "../wallet/wallet-manager";
 
