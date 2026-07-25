@@ -1,0 +1,14 @@
+#!/usr/bin/env sh
+# Pre-commit gate — runs the full composite check (lint + lint:test + typecheck +
+# typecheck:test + tests) before allowing a commit.
+# Wired via: git config core.hooksPath .githooks  (see npm run setup:hooks).
+# Bypass in a pinch with:  git commit --no-verify
+set -e
+
+ROOT="$(git rev-parse --show-toplevel)"
+cd "$ROOT"
+
+printf '\n[pre-commit] composite check (npm run check)…\n'
+npm run check
+
+printf '[pre-commit] \033[32m✓ passed\033[0m\n'

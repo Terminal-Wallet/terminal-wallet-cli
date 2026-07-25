@@ -11,3 +11,12 @@ build
 releases
 TODO*
 .DS_Store
+
+# vendored SDK tarballs — never commit; the published registry set is the contract
+local-deps
+# scratch / experiment trees
+custom-tmp
+.dev
+# wallet secrets and migration backups
+*.zSecret
+*.zKey.v1.bak

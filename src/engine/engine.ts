@@ -3,6 +3,7 @@ import {
   startRailgunEngine,
   stopRailgunEngine,
   getProver,
+  getEngine,
   SnarkJSGroth16 as Groth16,
   pauseAllPollingProviders,
   resumeIsolatedPollingProviderForNetwork,
@@ -13,6 +14,7 @@ import {
   FallbackProviderJsonConfig,
   FeesSerialized,
   NetworkName,
+  TXIDVersion,
   getAvailableProviderJSONs,
   isDefined,
   removeUndefineds,
@@ -43,7 +45,12 @@ const interceptLog = {
 };
 
 export const getCustomProviders = () => {
-  return walletManager.keyChain.customProviders;
+  // Providers can be loaded before (or without) a keychain — the diagnostic
+  // selftest brings the engine up with no wallet at all. Custom providers are a
+  // user preference stored on the keychain, so "no keychain" simply means "no
+  // overrides", not an error. Without the guard this throws and takes provider
+  // loading down with it.
+  return walletManager.keyChain?.customProviders;
 };
 
 export const removeCustomProvider = (
@@ -137,6 +144,40 @@ export const getCurrentNetwork = () => {
     return currentLoadedNetwork;
   }
   throw new Error("No Network Loaded.");
+};
+
+export type TreeHeight = {
+  /** Index of the tree currently being filled. */
+  tree: number;
+  /** Leaves committed in that tree. */
+  leaves: number;
+};
+
+/**
+ * Current merkletree height, read straight off the engine. Reported by the
+ * diagnostic entry and, later, the sync card — it is the only way to tell a
+ * stalled scan from a slow one.
+ *
+ * Returns undefined rather than throwing: the engine may not be started, or the
+ * tree for this chain may not exist yet, and neither is an error worth failing a
+ * status report over.
+ */
+export const getTreeHeight = async (
+  chainName: NetworkName,
+  tree: "utxo" | "txid",
+): Promise<TreeHeight | undefined> => {
+  try {
+    const chain = getChainForName(chainName);
+    const txidVersion = TXIDVersion.V2_PoseidonMerkle;
+    const merkletree =
+      tree === "utxo"
+        ? getEngine().getUTXOMerkletree(txidVersion, chain)
+        : getEngine().getTXIDMerkletree(txidVersion, chain);
+    const { tree: treeNumber, index } = await merkletree.getLatestTreeAndIndex();
+    return { tree: treeNumber, leaves: index + 1 > 0 ? index + 1 : 0 };
+  } catch {
+    return undefined;
+  }
 };
 
 export const rescanBalances = async (chainName: NetworkName) => {

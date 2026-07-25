@@ -15,5 +15,6 @@
     "typeRoots": ["node_modules/@types", "src/global.d.ts"],
     "declaration": true,
     "declarationMap": true
-  }
+  },
+  "exclude": ["node_modules", "dist", "test"]
 }

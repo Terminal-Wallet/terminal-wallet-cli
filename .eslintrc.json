@@ -74,5 +74,25 @@
     "ignorePatterns": [
         "src/**/*.test.ts",
         "src/frontend/generated/*"
+    ],
+    "overrides": [
+        {
+            // The build tsconfig excludes test/, so type-aware linting there needs
+            // the test project instead. Also allow node:test's assertion style.
+            "files": [
+                "test/**/*.ts"
+            ],
+            "parserOptions": {
+                "project": [
+                    "./tsconfig.test.json"
+                ]
+            },
+            "env": {
+                "node": true
+            },
+            "rules": {
+                "@typescript-eslint/no-non-null-assertion": 0
+            }
+        }
     ]
 }
