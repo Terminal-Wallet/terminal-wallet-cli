@@ -1,0 +1,175 @@
+/**
+ * Transaction specs — the data describing WHAT a transaction does.
+ *
+ * A spec is produced by input collection and consumed by the deps adapters.
+ * Pure: no SDK calls, no renderer, no IO. That is what makes the whole pipeline
+ * testable without a chain or a terminal attached.
+ *
+ * FeeMode answers "who pays the gas" — it is a FUNDING choice, deliberately
+ * kept separate from how a transaction executes. The two axes cross (a
+ * base-token unshield can be broadcast or self-signed), so folding them
+ * together would multiply out into variants instead of composing.
+ */
+import {
+  isDefined,
+  NetworkName,
+  RailgunERC20AmountRecipient,
+  SelectedBroadcaster,
+} from "@railgun-community/shared-models";
+import { ContractTransaction, parseUnits } from "ethers";
+import { RailgunSelectedAmount } from "../models/balance-models";
+import { RailgunTransaction } from "../models/transaction-models";
+import { Zer0XSwap } from "../models/0x-models";
+import { WalletCache } from "../models/wallet-models";
+
+/** How the transaction fee is paid. */
+export type FeeMode =
+  | { kind: "broadcaster"; broadcaster: SelectedBroadcaster }
+  | { kind: "self-signer"; signer: WalletCache } // your public wallet pays gas
+  | { kind: "external-signer"; label: string }; // an imported external key pays gas
+
+/** A private transfer specification. */
+export interface TransferSpec {
+  type: RailgunTransaction.Transfer;
+  chainName: NetworkName;
+  recipients: RailgunERC20AmountRecipient[];
+  encryptionKey: string;
+  memo?: string;
+  fee: FeeMode;
+}
+
+/** Unshield ERC20s to a public address. */
+export interface UnshieldSpec {
+  type: RailgunTransaction.Unshield;
+  chainName: NetworkName;
+  recipients: RailgunERC20AmountRecipient[];
+  encryptionKey: string;
+  fee: FeeMode;
+}
+
+/** Unshield the wrapped base token (uses Relay-Adapt). */
+export interface UnshieldBaseSpec {
+  type: RailgunTransaction.UnshieldBase;
+  chainName: NetworkName;
+  recipient: RailgunERC20AmountRecipient;
+  encryptionKey: string;
+  fee: FeeMode;
+}
+
+/** Public ERC20 transfer (plain ethers tx from the current wallet — no proof). */
+export interface PublicTransferSpec {
+  type: RailgunTransaction.PublicTransfer;
+  chainName: NetworkName;
+  recipient: RailgunERC20AmountRecipient;
+}
+
+/** Public base-token transfer (no proof). */
+export interface PublicBaseSpec {
+  type: RailgunTransaction.PublicBaseTransfer;
+  chainName: NetworkName;
+  recipient: RailgunERC20AmountRecipient;
+}
+
+/** Shield ERC20s (public→private). Signed from the public wallet; needs approvals first. */
+export interface ShieldSpec {
+  type: RailgunTransaction.Shield;
+  chainName: NetworkName;
+  recipients: RailgunERC20AmountRecipient[];
+}
+
+/** Shield the base token (wrap + shield). */
+export interface ShieldBaseSpec {
+  type: RailgunTransaction.ShieldBase;
+  chainName: NetworkName;
+  recipient: RailgunERC20AmountRecipient;
+}
+
+/** Private 0x swap (cross-contract via Relay-Adapt). `inputs` is the 0x quote. */
+export interface PrivateSwapSpec {
+  type: RailgunTransaction.Private0XSwap;
+  chainName: NetworkName;
+  inputs: Zer0XSwap;
+  encryptionKey: string;
+  fee: FeeMode;
+}
+
+/**
+ * Public 0x swap — a plain ethers swap (no proof), signed from the public wallet
+ * after the sell-token approval pre-step. `swapTransaction` is the 0x call.
+ */
+export interface PublicSwapSpec {
+  type: RailgunTransaction.Public0XSwap;
+  chainName: NetworkName;
+  swapTransaction: ContractTransaction;
+}
+
+/**
+ * Consolidate selected amounts into recipients, summing amounts that share the
+ * same token + recipient. (Moved verbatim from transaction-builder.)
+ */
+export const getERC20AmountRecipients = (
+  amountSelections: RailgunSelectedAmount[],
+): RailgunERC20AmountRecipient[] => {
+  const amountRecipients = amountSelections.map((info) => {
+    const { tokenAddress, selectedAmount: amount, recipientAddress } = info;
+    return { tokenAddress, amount, recipientAddress };
+  });
+
+  const consolidatedAmounts: RailgunERC20AmountRecipient[] = [];
+  const recipientMap: MapType<MapType<RailgunERC20AmountRecipient>> = {};
+
+  amountRecipients.forEach((info) => {
+    const { tokenAddress, recipientAddress } = info;
+    if (!isDefined(recipientMap[tokenAddress])) {
+      recipientMap[tokenAddress] = {};
+    }
+    if (!isDefined(recipientMap[tokenAddress][recipientAddress])) {
+      recipientMap[tokenAddress][recipientAddress] = info;
+    } else {
+      recipientMap[tokenAddress][recipientAddress].amount += info.amount;
+    }
+  });
+
+  for (const tokenAddress in recipientMap) {
+    for (const recipientAddress in recipientMap[tokenAddress]) {
+      consolidatedAmounts.push(recipientMap[tokenAddress][recipientAddress]);
+    }
+  }
+
+  return consolidatedAmounts;
+};
+
+/** Relay-Adapt is required for base-token unshields and private 0x swaps. */
+export const useRelayAdapt = (type: RailgunTransaction): boolean =>
+  type === RailgunTransaction.UnshieldBase ||
+  type === RailgunTransaction.Private0XSwap;
+
+/**
+ * Build one recipient from a token, a typed amount string, and an address.
+ * Returns undefined for anything unusable — an unparseable amount, zero or
+ * negative, or a blank address — so callers get a single validity check rather
+ * than having to pre-validate each field.
+ */
+export const buildRecipient = (
+  token: { tokenAddress: string; decimals: number },
+  amountStr: string,
+  recipientAddress: string,
+): RailgunERC20AmountRecipient | undefined => {
+  if (!recipientAddress.trim()) {
+    return undefined;
+  }
+  let amount: bigint;
+  try {
+    amount = parseUnits(amountStr, token.decimals);
+  } catch {
+    return undefined;
+  }
+  if (amount <= 0n) {
+    return undefined;
+  }
+  return {
+    tokenAddress: token.tokenAddress,
+    amount,
+    recipientAddress: recipientAddress.trim(),
+  };
+};
