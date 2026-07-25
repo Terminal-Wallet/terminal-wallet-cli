@@ -55,25 +55,6 @@ export const getWrappedTokenBalance = async (
   return wrappedReadableAmount;
 };
 
-export const getMaxBalanceLength = (
-  balances: RailgunDisplayBalance[],
-): number => {
-  const maxBalanceLengthItem =
-    balances.length > 0
-      ? balances.reduce((a, c) => {
-          return formatUnits(a.amount, a.decimals).length >
-            formatUnits(c.amount, c.decimals).length
-            ? a
-            : c;
-        })
-      : undefined;
-
-  const maxBalanceLength = isDefined(maxBalanceLengthItem)
-    ? formatUnits(maxBalanceLengthItem.amount, maxBalanceLengthItem.decimals)
-        .length
-    : 0;
-  return maxBalanceLength;
-};
 
 export const getPublicERC20BalancesForChain = async (
   chainName: NetworkName,
@@ -162,76 +143,5 @@ export const getPrivateERC20BalancesForChain = (
   return balances;
 };
 
-export const getMaxSymbolLengthFromBalances = (
-  balances: RailgunDisplayBalance[],
-) => {
-  return balances.length > 0
-    ? balances.reduce((a, c) => {
-        return a.symbol.length > c.symbol.length ? a : c;
-      }).symbol.length
-    : 0;
-};
-
-export const getDisplayStringFromBalance = (
-  balance: RailgunDisplayBalance,
-  maxBalanceLength: number,
-  maxSymbolLength: number,
-) => {
-  const balanceString = formatUnits(balance.amount, balance.decimals);
-
-  const balanceDisplayString = `${
-    balanceString.padEnd(maxBalanceLength, "0").bold
-  } | [${balance.symbol.padEnd(maxSymbolLength, " ").cyan}] ${balance.name}`;
-  return balanceDisplayString;
-};
-
-export const getPrivateDisplayBalances = async (chainName: NetworkName, bucketType: RailgunWalletBalanceBucket) => {
-
-  const CHAIN_NAME = configDefaults.networkConfig[chainName].name.toUpperCase();
-  const display: string[] = [];
-
-  const isPrivate = shouldDisplayPrivateBalances();
-  const balances = isPrivate
-    ? await getPrivateERC20BalancesForChain(chainName, bucketType)
-    : await getPublicERC20BalancesForChain(chainName, true);
 
 
-  if(bucketType !== RailgunWalletBalanceBucket.Spendable){
-    if(balances.length === 0){
-      return ""
-    }
-    if(!isPrivate){
-      // if not private, only show set of balances once. dont add header.
-      return ""
-    }
-  }
-  const balanceType = isPrivate ? "PRIVATE" : "PUBLIC";
-  const header = `${CHAIN_NAME.green} ${ isPrivate ? bucketType.green : ''} ${balanceType} BALANCES`;
-  const headLen = stripColors(header).length;
-  display.push("");
-  const headerLine = `${header}`;
-  const headerPad = "".padEnd(70 - headLen, "=");
-  display.push(`${headerLine} ${headerPad.grey}`);
-
-  if (balances.length === 0) {
-    const balanceHeader = walletManager.menuLoaded ? "NO" : "LOADING";
-    display.push(`${balanceHeader} Balances...`.grey);
-    display.push("".padEnd(70, "=").grey);
-    return display.join("\n");
-  }
-
-  const maxSymbolLength = getMaxSymbolLengthFromBalances(balances);
-  const maxBalanceLength = getMaxBalanceLength(balances);
-  for (const bal of balances) {
-    const balanceDisplayString = getDisplayStringFromBalance(
-      bal,
-      maxBalanceLength,
-      maxSymbolLength,
-    );
-    display.push(balanceDisplayString);
-  }
-
-  const footer = "".padEnd(70, "=");
-  display.push(`${footer.grey}`);
-  return display.join("\n");
-};

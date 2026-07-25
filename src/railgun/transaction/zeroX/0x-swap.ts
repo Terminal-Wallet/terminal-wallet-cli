@@ -39,12 +39,11 @@ import {
   PrivateGasDetails,
   PrivateGasEstimate,
 } from "../../../models/transaction-models";
-import { ProgressBar } from "../../../ui/progressBar-ui";
 import { calculatePublicTransactionGasDetais } from "../public/public-tx";
 import { getCurrentNetwork } from "../../engine/engine";
 import { ContractTransaction } from "ethers";
 import { getTokenInfo } from "../../balance/token-util";
-import { getReadablePricesFromQuote } from "../../../ui/zer0x-ui";
+import { getReadablePricesFromQuote } from "./swap-format";
 import {
   Zer0XSwap,
   Zer0XSwapOutput,
@@ -52,6 +51,7 @@ import {
 } from "../../../models/0x-models";
 import { getTransactionGasDetails } from "../private/private-tx";
 import { getCurrentEthersWallet } from "../../wallet/public-utils";
+import { emitCoreEvent } from "../../../core/events";
 
 export const updateApiKey = () => {
   const zeroXApiKey = configDefaults.apiKeys.zeroXApi;
@@ -328,16 +328,19 @@ export const getProvedZer0XSwapTransaction = async (
   const railgunWalletID = getCurrentRailgunID();
   const txIDVersion = TXIDVersion.V2_PoseidonMerkle;
 
-  const progressBar = new ProgressBar("Starting Proof Generation");
+  // Proof progress goes out on the core bus: the wallet reports how far along it
+  // is, and whatever is attached decides how to show it. Previously this drove a
+  // terminal progress bar directly, which is why proof generation could not run
+  // without a TTY.
   const progressCallback = (progress: number, progressStats: string) => {
-    if (isDefined(progressStats)) {
-      progressBar.updateProgress(
-        `Transaction Proof Generation | [${progressStats}]`,
-        progress,
-      );
-    } else {
-      progressBar.updateProgress(`Transaction Proof Generation`, progress);
-    }
+    emitCoreEvent({
+      type: "tx:progress",
+      phase: "prove",
+      pct: progress,
+      message: isDefined(progressStats)
+        ? `Generating proof — ${progressStats}`
+        : "Generating proof",
+    });
   };
 
   const {
@@ -373,7 +376,6 @@ export const getProvedZer0XSwapTransaction = async (
       minGasLimit,
       progressCallback,
     ).finally(() => {
-      progressBar.complete();
     });
 
     const { transaction, nullifiers, preTransactionPOIsPerTxidLeafPerList } =

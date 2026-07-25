@@ -1,5 +1,4 @@
-import { generateNewWalletPrompt } from "../../ui/wallet-info-ui";
-import { confirmPrompt } from "../../ui/confirm-ui";
+import { getInputProvider } from "../../core/input";
 import {
   createRailgunWallet,
   getWalletMnemonic,
@@ -87,9 +86,7 @@ export const initializeKeychainSystem = async (): Promise<KeychainFile> => {
     return keychain;
   } catch (error) {
     log.error("keychain initialization failed", error);
-    const confirm = await confirmPrompt(`TRY AGAIN?`, {
-      initial: false,
-    });
+    const confirm = await getInputProvider().confirm("Try again?");
     if (!confirm) {
       await processSafeExit();
     }
@@ -124,9 +121,7 @@ export const freshRailgunWallet = async (
     });
     return wallet;
   } catch (error) {
-    const confirm = await confirmPrompt(`TRY AGAIN?`, {
-      initial: false,
-    });
+    const confirm = await getInputProvider().confirm("Try again?");
     if (!confirm) {
       return undefined;
     }
@@ -135,7 +130,8 @@ export const freshRailgunWallet = async (
 };
 
 export const initilizeFreshWallet = async (isInit = false) => {
-  const walletInfo: TMPWalletInfo | undefined = await generateNewWalletPrompt();
+  const walletInfo: TMPWalletInfo | undefined =
+    await getInputProvider().promptNewWallet();
   if (!walletInfo) {
     return undefined;
   }

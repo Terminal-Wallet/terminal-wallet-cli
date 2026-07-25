@@ -1,6 +1,6 @@
 import {
   getCustomProviderEnabledStatus,
-  getProviderPromptOptions,
+  getProviderOptions,
   isDefaultProvider,
   setCustomProviderStatus,
   removeCustomProvider,
@@ -108,7 +108,12 @@ export const runProviderEditorPrompt = async (
 export const runRPCEditorPrompt = async (
   chainName: NetworkName,
 ): Promise<void> => {
-  const rpcSelections = getProviderPromptOptions(chainName);
+  const rpcSelections = getProviderOptions(chainName).map(
+    ({ provider, enabled }) => ({
+      name: provider,
+      message: `[${enabled ? "Enabled ".green.dim : "Disabled".yellow.dim}] ${provider}`,
+    }),
+  );
   const editRPCPrompt = new Select({
     header: ` `,
     message: "Add/Edit RPC Providers",

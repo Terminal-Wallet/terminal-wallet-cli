@@ -222,44 +222,37 @@ export const getCustomProviderEnabledStatus = (
   return true;
 };
 
-export const getProviderPromptOptions = (chainName: NetworkName) => {
+/** One RPC endpoint and whether it is currently enabled for a chain. */
+export type ProviderOption = { provider: string; enabled: boolean };
+
+/**
+ * The RPC endpoints for a chain and their enabled state — as DATA. This used to
+ * return enquirer choice objects with styled labels baked in, which put terminal
+ * formatting inside the engine and meant only one renderer could ever consume
+ * it. Presentation belongs to whoever is drawing.
+ */
+export const getProviderOptions = (
+  chainName: NetworkName,
+): ProviderOption[] => {
   const customProviders = getCustomProvidersForChain(chainName);
-
   const { providers } = configDefaults.networkConfig[chainName];
-  if (isDefined(customProviders)) {
-    const filteredDefaults = providers.filter(({ provider }) => {
-      if (isDefined(customProviders[provider])) {
-        return false;
-      }
-      return true;
-    });
 
-    const unsetDefaultPrompts = filteredDefaults.map(({ provider }) => {
-      return {
-        name: provider,
-        message: `[${"Enabled ".green.dim}] ${provider}`,
-      };
-    });
-
-    const customPrompts = Object.keys(customProviders).map((provider) => {
-      const providerEnabled = customProviders[provider];
-      return {
-        name: provider,
-        message: `[${providerEnabled ? "Enabled ".green.dim : "Disabled".yellow.dim
-          }] ${provider}`,
-      };
-    });
-
-    return [...unsetDefaultPrompts, ...customPrompts];
-  } else {
-    const defaultProviders = providers.map(({ provider }) => {
-      return {
-        name: provider,
-        message: `[${"Enabled ".green.dim}] ${provider}`,
-      };
-    });
-    return defaultProviders;
+  if (!isDefined(customProviders)) {
+    return providers.map(({ provider }) => ({ provider, enabled: true }));
   }
+
+  // A default the user has an explicit setting for is reported from that
+  // setting, not twice.
+  const untouchedDefaults = providers
+    .filter(({ provider }) => !isDefined(customProviders[provider]))
+    .map(({ provider }) => ({ provider, enabled: true }));
+
+  const configured = Object.keys(customProviders).map((provider) => ({
+    provider,
+    enabled: customProviders[provider],
+  }));
+
+  return [...untouchedDefaults, ...configured];
 };
 export const loadProviderList = async (chainName: NetworkName) => {
   if (!isDefined(chainName)) {

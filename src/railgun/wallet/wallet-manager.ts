@@ -1,4 +1,3 @@
-import { ProgressBar } from "../../ui/progressBar-ui";
 import { KeychainFile, WalletCache } from "../../models/wallet-models";
 import { Wallet } from "ethers";
 import { RailgunReadableAmount } from "../../models/balance-models";
@@ -10,7 +9,6 @@ import Web3 from "web3";
 
 export type WalletManager = {
   poiProgressEvent: POIProofProgressEvent;
-  progressBar: ProgressBar;
   web3: Web3;
   balanceScanProgress: number;
   merkelScanComplete: boolean;

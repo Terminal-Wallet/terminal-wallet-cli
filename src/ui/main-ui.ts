@@ -1,5 +1,5 @@
 import { RailgunTransaction } from "../models/transaction-models";
-import { getPrivateDisplayBalances } from "../railgun/balance/balance-util";
+import { getPrivateDisplayBalances } from "./balance-display";
 import { getCurrentNetwork } from "../railgun/engine/engine";
 import {
   getChainForName,

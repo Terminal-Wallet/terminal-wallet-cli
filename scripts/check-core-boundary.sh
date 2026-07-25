@@ -6,10 +6,9 @@
 # toolkit, or a terminal-styling library. Core emits events and asks through the
 # input seam; it never imports the things that draw.
 #
-# SCOPE widens as the boundary is established:
-#   C03  src/core                     the seam + bus only
-#   C07  everything except src/tui    the real boundary
-# Override for a one-off check with:  SCOPE=src/flows bash scripts/check-core-boundary.sh
+# Everything outside the renderer is in scope. Narrow it for a one-off check
+# with e.g. SCOPE=src/flows.
+
 #
 # NOTE on `colors`: this library works by augmenting String.prototype, and the
 # TypeScript augmentation is program-global once ANY file imports it. So a guard
@@ -21,7 +20,10 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
-SCOPE="${SCOPE:-src/core}"
+# Default scope is now EVERYTHING except the renderer. It started at src/core
+# while the boundary was being established; the tree satisfies the strict rule
+# now, so this enforces it rather than documenting an intention.
+SCOPE="${SCOPE:-src}"
 
 if [ ! -e "$SCOPE" ]; then
   echo "core-boundary: SKIP — $SCOPE does not exist yet (nothing to check)"
@@ -30,7 +32,7 @@ fi
 
 # Directories never subject to the guard: the renderer itself, and (later) the
 # network layer, which is allowed the raw transports everything else is denied.
-EXCLUDES=(--exclude-dir=tui --exclude-dir=net)
+EXCLUDES=(--exclude-dir=ui --exclude-dir=tui --exclude-dir=net)
 
 fail=0
 

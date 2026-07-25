@@ -14,7 +14,7 @@ import {
 import { ChainIDToNameMap } from "../../models/network-models";
 import { getCurrentNetwork, rescanBalances } from "../engine/engine";
 import { walletManager } from "./wallet-manager";
-import { setStatusText } from "../../ui/status-ui";
+import { emitCoreEvent } from "../../core/events";
 
 export const merkelTreeScanCallback = async (
   callbackInfo: MerkletreeScanUpdateEvent,
@@ -70,7 +70,7 @@ export const scanBalancesCallback = async (
 
 export const latestBalancePoller = async (pollingInterval: number) => {
   await formatLatestBalancesEvent().catch((err) => {
-    setStatusText(err.message);
+    emitCoreEvent({ type: "status:message", text: err.message });
   });
   await delay(pollingInterval);
   latestBalancePoller(pollingInterval);
@@ -90,16 +90,29 @@ export const poiScanCallback = async (poiProgressEvent: POIProofProgressEvent) =
 
   if (poiProgressEvent.status === POIProofEventStatus.InProgress) {
     const poiStatus = getPOIStatusString();
-    setStatusText(poiStatus, 15000, true);
+    emitCoreEvent({
+      type: "status:message",
+      text: poiStatus,
+      durationMs: 15000,
+      replace: true,
+    });
   }
 };
 
 export const batchListCallback = async (batchListProgressEvent: BatchListUpdateEvent) =>{
   const status = `${batchListProgressEvent.status}`
   if(status.includes('100%')){
-    setStatusText(status, 15000, false);
+    emitCoreEvent({
+      type: "status:message",
+      text: status,
+      durationMs: 15000,
+    });
   } else {
-    setStatusText(status, 15000, false);
+    emitCoreEvent({
+      type: "status:message",
+      text: status,
+      durationMs: 15000,
+    });
 
   }
 }

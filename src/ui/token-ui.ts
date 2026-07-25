@@ -12,12 +12,14 @@ import {
   resetBroadcasterFilters,
 } from "../railgun/waku/broadcaster-util";
 import {
-  getDisplayStringFromBalance,
-  getMaxBalanceLength,
-  getMaxSymbolLengthFromBalances,
   getPrivateERC20BalancesForChain,
   getPublicERC20BalancesForChain,
 } from "../railgun/balance/balance-util";
+import {
+  getDisplayStringFromBalance,
+  getMaxBalanceLength,
+  getMaxSymbolLengthFromBalances,
+} from "./balance-display";
 import {
   RailgunDisplayBalance,
   RailgunReadableAmount,

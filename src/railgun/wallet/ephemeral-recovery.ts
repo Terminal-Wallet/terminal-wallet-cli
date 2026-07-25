@@ -39,7 +39,7 @@ import {
 } from "../transaction/private/private-tx";
 import { getOutputGasEstimate } from "../transaction/private/unshield-tx";
 import { PrivateGasDetails } from "../../models/transaction-models";
-import { ProgressBar } from "../../ui/progressBar-ui";
+import { emitCoreEvent } from "../../core/events";
 
 // EIP-7702 ephemeral accounts are per-op and never intended to hold a balance, but a partial
 // or failed relay-adapt (or a swap whose bought token wasn't shielded) can strand assets at a
@@ -284,14 +284,11 @@ const buildProved7702Batch = async (
   const wallet = fullWalletForID(railgunWalletID);
   const keyManager = new EphemeralKeyManager(wallet, encryptionKey);
   const targetAccount = await keyManager.getAccount(chainId, targetIndex);
-
-  let progressBar: ProgressBar | undefined;
   try {
     // The override is process-global for the whole proof window. INVARIANT: no other fund flow
     // may run concurrently with a recovery build (the recover prompt is modal; only read-only
     // balance pollers run alongside, which don't touch the ephemeral signer).
     await wallet.setCurrentEphemeralWallet(targetAccount.signer);
-    progressBar = new ProgressBar("Starting 7702 Proof");
 
     const { gasEstimate } = await gasEstimateForUnprovenCrossContractCalls7702(
       txIDVersion,
@@ -340,8 +337,13 @@ const buildProved7702Batch = async (
       batchMinGasPrice,
       recoveryMinGasLimit,
       (progress: number) =>
-        progressBar?.updateProgress("7702 Proof", progress),
-    ).finally(() => progressBar?.complete());
+        emitCoreEvent({
+          type: "tx:progress",
+          phase: "prove",
+          pct: progress,
+          message: "Generating 7702 recovery proof",
+        }),
+    );
 
     const { transaction, nullifiers, preTransactionPOIsPerTxidLeafPerList } =
       await populateProvedCrossContractCalls(

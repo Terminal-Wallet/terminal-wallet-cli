@@ -19,7 +19,6 @@ import {
   populateProvedTransfer,
 } from "@railgun-community/wallet";
 import { parseUnits, formatUnits } from "ethers";
-import { ProgressBar } from "../../../ui/progressBar-ui";
 import { getTokenInfo } from "../../balance/token-util";
 import { getCurrentRailgunID, shouldShowSender } from "../../wallet/wallet-util";
 import { getCurrentNetwork } from "../../engine/engine";
@@ -34,6 +33,7 @@ import {
   getWrappedTokenInfoForChain,
 } from "../../network/network-util";
 import { getFeeDetailsForChain } from "../../gas/gas-util";
+import { emitCoreEvent } from "../../../core/events";
 
 export const getOriginalGasDetailsForPrivateTransaction = async (
   chainName: NetworkName,
@@ -259,16 +259,19 @@ export const getProvedPrivateTransaction = async (
   const railgunWalletID = getCurrentRailgunID();
   const txIDVersion = TXIDVersion.V2_PoseidonMerkle;
 
-  const progressBar = new ProgressBar("Starting Proof Generation");
+  // Proof progress goes out on the core bus: the wallet reports how far along it
+  // is, and whatever is attached decides how to show it. Previously this drove a
+  // terminal progress bar directly, which is why proof generation could not run
+  // without a TTY.
   const progressCallback = (progress: number, progressStats: string) => {
-    if (isDefined(progressStats)) {
-      progressBar.updateProgress(
-        `Transaction Proof Generation | [${progressStats}]`,
-        progress,
-      );
-    } else {
-      progressBar.updateProgress(`Transaction Proof Generation`, progress);
-    }
+    emitCoreEvent({
+      type: "tx:progress",
+      phase: "prove",
+      pct: progress,
+      message: isDefined(progressStats)
+        ? `Generating proof — ${progressStats}`
+        : "Generating proof",
+    });
   };
 
   const {
@@ -301,7 +304,6 @@ export const getProvedPrivateTransaction = async (
         console.log("We errored out");
       })
       .finally(() => {
-        progressBar.complete();
       });
     const proofEndTime = Date.now();
     const proofTimeElapsed = (proofEndTime - proofStartTime) / 1000;

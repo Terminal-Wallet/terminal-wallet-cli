@@ -20,7 +20,6 @@ import { getChainForName } from "../network/network-util";
 import { getCurrentEthersWallet } from "../wallet/public-utils";
 import { ChainIDToNameMap } from "../../models/network-models";
 import { getCurrentRailgunID } from "../wallet/wallet-util";
-import { setStatusText } from "../../ui/status-ui";
 
 const CACHE_TIMEOUT = 10 * 1000; // 5 minutes;
 

@@ -15,7 +15,6 @@ import {
   populateProvedUnshield,
 } from "@railgun-community/wallet";
 import { formatUnits } from "ethers";
-import { ProgressBar } from "../../../ui/progressBar-ui";
 import { getCurrentRailgunID } from "../../wallet/wallet-util";
 import {
   calculateSelfSignedGasEstimate,
@@ -24,6 +23,7 @@ import {
 import { PrivateGasEstimate } from "../../../models/transaction-models";
 import { getCurrentNetwork } from "../../engine/engine";
 import { ERC20Token } from "../../../models/token-models";
+import { emitCoreEvent } from "../../../core/events";
 
 export const getOutputGasEstimate = async (
   originalGasDetails: TransactionGasDetails,
@@ -130,16 +130,19 @@ export const getProvedUnshieldERC20Transaction = async (
   const railgunWalletID = getCurrentRailgunID();
   const txIDVersion = TXIDVersion.V2_PoseidonMerkle;
 
-  const progressBar = new ProgressBar("Starting Proof Generation");
+  // Proof progress goes out on the core bus: the wallet reports how far along it
+  // is, and whatever is attached decides how to show it. Previously this drove a
+  // terminal progress bar directly, which is why proof generation could not run
+  // without a TTY.
   const progressCallback = (progress: number, progressStats: string) => {
-    if (isDefined(progressStats)) {
-      progressBar.updateProgress(
-        `Transaction Proof Generation | [${progressStats}]`,
-        progress,
-      );
-    } else {
-      progressBar.updateProgress(`Transaction Proof Generation`, progress);
-    }
+    emitCoreEvent({
+      type: "tx:progress",
+      phase: "prove",
+      pct: progress,
+      message: isDefined(progressStats)
+        ? `Generating proof — ${progressStats}`
+        : "Generating proof",
+    });
   };
 
   const {
@@ -163,7 +166,6 @@ export const getProvedUnshieldERC20Transaction = async (
       overallBatchMinGasPrice,
       progressCallback,
     ).finally(() => {
-      progressBar.complete();
     });
 
     const { transaction, nullifiers, preTransactionPOIsPerTxidLeafPerList } =
