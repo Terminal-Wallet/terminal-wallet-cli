@@ -33,7 +33,6 @@ import {
   syncEphemeralIndexOnce,
   getCurrentEphemeralInfo,
 } from "../../wallet/ephemeral-util";
-import { getSaltedPassword } from "../../wallet/wallet-password";
 import { getOutputGasEstimate } from "../private/unshield-tx";
 import {
   PrivateGasDetails,
@@ -132,6 +131,15 @@ export const getZer0XSwapInputs = async (
   amount: bigint,
   slippageBasisPoints = 500,
   isPublic = false,
+  /**
+   * Required for a private swap: the 7702 relay-adapt executes from an
+   * ephemeral account derived from this key, and the quote must be built with
+   * that address as taker. Supplied by the caller rather than prompted for here
+   * — a transaction primitive that stops to ask the user for a password is
+   * hidden control flow, and it is why this module could not be driven by
+   * anything but the interactive builder.
+   */
+  encryptionKey?: string,
 ): Promise<Zer0XSwap> => {
   const { decimals: sellTokenDecimals } = await getTokenInfo(
     chainName,
@@ -162,9 +170,10 @@ export const getZer0XSwapInputs = async (
     // Derive the ephemeral EOA that the 7702 relay-adapt will execute as, so the swap quote
     // is built with that address as taker/recipient (not the relay-adapt contract). Sync the
     // ephemeral index first so this address matches the one the proof/submission derive.
-    const encryptionKey = await getSaltedPassword();
     if (!isDefined(encryptionKey)) {
-      throw new Error("Cannot build private swap: wallet is locked.");
+      throw new Error(
+        "A private swap needs the wallet encryption key; none was supplied.",
+      );
     }
     await syncEphemeralIndexOnce(chainName, encryptionKey);
     const { address: ephemeralAddress } = await getCurrentEphemeralInfo(

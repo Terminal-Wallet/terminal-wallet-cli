@@ -22,6 +22,7 @@ import { getEthersWalletForSigner } from "../railgun/wallet/public-utils";
 import { getTransactionURLForChain } from "../railgun/network/network-util";
 import { waitForRelayedTx, waitForTx } from "../railgun/transaction/public/public-tx";
 import { resetBalanceScan } from "../railgun/wallet/private-wallet";
+import { ratchetEphemeralIfRelayAdapt } from "../railgun/wallet/ephemeral-util";
 
 export interface SendPrivateDeps {
   broadcast: (
@@ -75,6 +76,18 @@ const defaultDeps: SendPrivateDeps = {
     }),
 };
 
+/**
+ * Advance the ephemeral index after a successful submission.
+ *
+ * Relay-adapt bundles execute from a per-call ephemeral account. Reusing one
+ * would invalidate the next bundle's authorization nonce and can sweep residual
+ * balance left at that address, so the index must move exactly once per
+ * successful send.
+ *
+ * The helper no-ops on anything that is not a type-4 transaction, so calling it
+ * on every send path is correct and keeps the rule in one place instead of at
+ * each of the three call sites it used to be spread across.
+ */
 export const sendPrivateTransaction = async (
   proved: RailgunPopulateTransactionResponse,
   fee: FeeMode,
@@ -93,6 +106,7 @@ export const sendPrivateTransaction = async (
       useRelayAdapt(type),
     );
     const hash = await finalTx.send();
+    await ratchetEphemeralIfRelayAdapt(chainName, proved.transaction);
     deps.resetScan();
     void deps.watchRelayed(chainName, hash).then(() => deps.notifyMined(chainName, hash));
     return { hash, url: deps.txUrl(chainName, hash) };
@@ -104,6 +118,7 @@ export const sendPrivateTransaction = async (
       ? await deps.externalSignerWallet(fee.label, chainName)
       : await deps.signerWallet(fee.signer, chainName);
   const txResult = await wallet.sendTransaction(proved.transaction);
+  await ratchetEphemeralIfRelayAdapt(chainName, proved.transaction);
   deps.resetScan();
   void deps.watchSelf(txResult).then(() => deps.notifyMined(chainName, txResult.hash));
   return { hash: txResult.hash, url: deps.txUrl(chainName, txResult.hash) };

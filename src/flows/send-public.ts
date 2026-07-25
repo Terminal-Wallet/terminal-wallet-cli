@@ -11,6 +11,7 @@ import { getCurrentEthersWallet } from "../railgun/wallet/public-utils";
 import { getTransactionURLForChain } from "../railgun/network/network-util";
 import { waitForTx } from "../railgun/transaction/public/public-tx";
 import { resetBalanceScan } from "../railgun/wallet/private-wallet";
+import { ratchetEphemeralIfRelayAdapt } from "../railgun/wallet/ephemeral-util";
 
 export interface SendPublicDeps {
   currentWallet: () => {
@@ -43,6 +44,10 @@ export const sendPublicTransaction = async (
 ): Promise<SendOutcome> => {
   const wallet = deps.currentWallet();
   const txResult = await wallet.sendTransaction(populatedTransaction);
+  // Self-signed base-token shields are type-4 bundles too — they wrap and
+  // shield through Relay-Adapt from an ephemeral account, without a broadcaster.
+  // The helper no-ops on everything else.
+  await ratchetEphemeralIfRelayAdapt(chainName, populatedTransaction);
   deps.resetScan();
   void deps.watchSelf(txResult).then(() => deps.notifyMined(chainName, txResult.hash));
   return { hash: txResult.hash, url: deps.txUrl(chainName, txResult.hash) };

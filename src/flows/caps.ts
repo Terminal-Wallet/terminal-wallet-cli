@@ -14,7 +14,13 @@
  */
 import { RailgunERC20AmountRecipient } from "@railgun-community/shared-models";
 import { RailgunDisplayBalance } from "../models/balance-models";
-import { buildRecipient } from "./spec";
+import {
+  buildRecipient,
+  isEphemeral7702,
+  useRelayAdapt,
+  FeeMode,
+} from "./spec";
+import { RailgunTransaction } from "../models/transaction-models";
 
 /** Which address family a flow's recipient must belong to. */
 export type AddressKind = "0x" | "0zk";
@@ -209,3 +215,45 @@ export const summarizeLegs = (state: LegsState): string => {
   if (!tokens) return "no tokens yet";
   return `${tokens} token${tokens > 1 ? "s" : ""} · ${recips} recipient${recips === 1 ? "" : "s"}`;
 };
+
+// --- fee/execution policy -------------------------------------------------
+
+/**
+ * Whether a broadcaster must advertise EIP-7702 support to carry this flow.
+ *
+ * A relay-adapt flow produces a type-4 bundle with a signed authorization
+ * tuple. A broadcaster without 7702 support drops the authorization and submits
+ * a legacy request, so the bundle can never be mined — and the user only finds
+ * out after paying for a proof. Offering such a broadcaster at all is the bug.
+ *
+ * This is the crossing of the two axes: 7702 execution AND a broadcaster in the
+ * path. ShieldBase is 7702 but self-signed, so no broadcaster is involved and
+ * this is false for it.
+ */
+export const requires7702Broadcaster = (type: RailgunTransaction): boolean =>
+  isEphemeral7702(type) && useRelayAdapt(type);
+
+/** Which fee modes a flow can actually offer. */
+export const allowedFeeKinds = (
+  type: RailgunTransaction,
+): Array<FeeMode["kind"]> => {
+  switch (type) {
+    case RailgunTransaction.Transfer:
+    case RailgunTransaction.Unshield:
+    case RailgunTransaction.UnshieldBase:
+    case RailgunTransaction.Private0XSwap:
+      // A private spend can be relayed or paid for from a public wallet.
+      return ["broadcaster", "self-signer", "external-signer"];
+    default:
+      // Shields and public transactions are signed by the wallet that holds the
+      // funds; there is nothing for a broadcaster to relay.
+      return ["self-signer", "external-signer"];
+  }
+};
+
+/** Whether a flow produces a zero-knowledge proof before it can be sent. */
+export const requiresProof = (type: RailgunTransaction): boolean =>
+  type === RailgunTransaction.Transfer ||
+  type === RailgunTransaction.Unshield ||
+  type === RailgunTransaction.UnshieldBase ||
+  type === RailgunTransaction.Private0XSwap;

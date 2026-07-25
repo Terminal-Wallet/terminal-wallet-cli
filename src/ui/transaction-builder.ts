@@ -753,13 +753,22 @@ export const runTransactionBuilder = async (
                   isBaseToken: wrappedInfo.symbol === buySymbol,
                 };
 
+                const isPublicSwap =
+                  transactionType === RailgunTransaction.Public0XSwap;
+                // A private swap quote is built against the 7702 ephemeral
+                // address, which is derived from the encryption key. The swap
+                // primitive no longer prompts for it itself, so collect it here.
+                const swapEncryptionKey = isPublicSwap
+                  ? undefined
+                  : await getSaltedPassword();
                 const zer0XInputs = await getZer0XSwapInputs(
                   chainName,
                   sellTokenInput,
                   buyTokenInput,
                   amount,
                   320,
-                  transactionType === RailgunTransaction.Public0XSwap,
+                  isPublicSwap,
+                  swapEncryptionKey,
                 );
                 if (!isDefined(zer0XInputs) || !isDefined(zer0XInputs.quote)) {
                   break;
@@ -1030,13 +1039,22 @@ export const runTransactionBuilder = async (
                   isBaseToken: wrappedInfo.symbol === buySymbol,
                 };
 
+                const isPublicSwap =
+                  transactionType === RailgunTransaction.Public0XSwap;
+                // A private swap quote is built against the 7702 ephemeral
+                // address, which is derived from the encryption key. The swap
+                // primitive no longer prompts for it itself, so collect it here.
+                const swapEncryptionKey = isPublicSwap
+                  ? undefined
+                  : await getSaltedPassword();
                 const zer0XInputs = await getZer0XSwapInputs(
                   chainName,
                   sellTokenInput,
                   buyTokenInput,
                   amount,
                   320,
-                  transactionType === RailgunTransaction.Public0XSwap,
+                  isPublicSwap,
+                  swapEncryptionKey,
                 );
                 if (!isDefined(zer0XInputs) || !isDefined(zer0XInputs.quote)) {
                   break;

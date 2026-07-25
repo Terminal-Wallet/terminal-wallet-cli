@@ -154,6 +154,42 @@ export const useRelayAdapt = (type: RailgunTransaction): boolean =>
   type === RailgunTransaction.Private0XSwap;
 
 /**
+ * HOW a transaction executes — the second axis, orthogonal to FeeMode.
+ *
+ * FeeMode answers "who pays the gas". This answers "what account executes it".
+ * They cross rather than nest: a base-token unshield is a 7702 bundle that can
+ * be broadcast OR self-signed, while a base-token shield is a 7702 bundle that
+ * is ALWAYS self-signed. Folding the two together would produce
+ * broadcaster-7702 / self-7702 variants and multiply out — which is exactly
+ * what made the old builder's switches duplicate.
+ *
+ * Master's own transaction layer already separates them: the private-tx gas
+ * helper takes `broadcasterSelection` and `is7702Transaction` as independent
+ * parameters, and pins Type4 "regardless of broadcaster routing".
+ */
+export type ExecutionMode = { kind: "direct" } | { kind: "ephemeral-7702" };
+
+/**
+ * Derived from the transaction type, never chosen at a call site — whether a
+ * flow needs an ephemeral account is a property of the flow, not a preference.
+ *
+ * Note ShieldBase: wrapping and shielding the base token runs through
+ * Relay-Adapt as a type-4 bundle and derives an ephemeral account, but it is
+ * signed from the public wallet rather than relayed. So it is 7702 WITHOUT
+ * being a `useRelayAdapt` flow, which is precisely why one predicate cannot
+ * serve both questions.
+ */
+export const executionMode = (type: RailgunTransaction): ExecutionMode =>
+  type === RailgunTransaction.UnshieldBase ||
+  type === RailgunTransaction.Private0XSwap ||
+  type === RailgunTransaction.ShieldBase
+    ? { kind: "ephemeral-7702" }
+    : { kind: "direct" };
+
+export const isEphemeral7702 = (type: RailgunTransaction): boolean =>
+  executionMode(type).kind === "ephemeral-7702";
+
+/**
  * Build one recipient from a token, a typed amount string, and an address.
  * Returns undefined for anything unusable — an unparseable amount, zero or
  * negative, or a blank address — so callers get a single validity check rather
