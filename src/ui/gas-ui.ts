@@ -5,7 +5,7 @@ import {
   getGasFeeTiers,
   setGasFeeSelection,
   GasTierKey,
-} from "../gas/gas-fee";
+} from "../railgun/gas/gas-fee";
 import { confirmPromptCatch } from "./confirm-ui";
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires

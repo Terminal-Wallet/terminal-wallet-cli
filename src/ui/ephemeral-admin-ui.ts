@@ -7,17 +7,17 @@ import {
   getEphemeralHistory,
   setEphemeralIndex,
   syncEphemeralIndexFromHistory,
-} from "../wallet/ephemeral-util";
+} from "../railgun/wallet/ephemeral-util";
 import {
   getProvedEphemeralRecoveryTransaction,
   scanEphemeralAssets,
   submitRecoveryTransaction,
-} from "../wallet/ephemeral-recovery";
+} from "../railgun/wallet/ephemeral-recovery";
 import { runFeeTokenSelector } from "./token-ui";
 import { gasFeeMatrixPrompt } from "./gas-ui";
-import { clearGasFeeSelection } from "../gas/gas-fee";
-import { getTransactionURLForChain } from "../network/network-util";
-import { getSaltedPassword } from "../wallet/wallet-password";
+import { clearGasFeeSelection } from "../railgun/gas/gas-fee";
+import { getTransactionURLForChain } from "../railgun/network/network-util";
+import { getSaltedPassword } from "../railgun/wallet/wallet-password";
 import { formatUnits } from "ethers";
 import {
   confirmPrompt,

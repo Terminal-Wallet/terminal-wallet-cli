@@ -3,10 +3,10 @@ import { isDefined } from "@railgun-community/shared-models";
 import { KnownAddressKey, WalletCache } from "../models/wallet-models";
 import { getPrivateAddressPrompt, getPublicAddressPrompt } from "./address-ui";
 import { confirmPromptCatch } from "./confirm-ui";
-import { saveKeychainFile } from "../wallet/wallet-cache";
-import { walletManager } from "../wallet/wallet-manager";
+import { saveKeychainFile } from "../railgun/wallet/wallet-cache";
+import { walletManager } from "../railgun/wallet/wallet-manager";
 import configDefaults from "../config/config-defaults";
-import { getCurrentWalletName } from "../wallet/wallet-util";
+import { getCurrentWalletName } from "../railgun/wallet/wallet-util";
 
 export type KnownAddress = {
   publicAddress?: string;

@@ -5,7 +5,7 @@ import {
   setCustomProviderStatus,
   removeCustomProvider,
   loadProviderList,
-} from "../engine/engine";
+} from "../railgun/engine/engine";
 import { confirmPromptCatch, confirmPromptCatchRetry } from "./confirm-ui";
 import {
   NETWORK_CONFIG,
@@ -14,7 +14,7 @@ import {
   promiseTimeout,
 } from "@railgun-community/shared-models";
 import { setStatusText } from "./status-ui";
-import { getProviderForURL } from "../network/network-util";
+import { getProviderForURL } from "../railgun/network/network-util";
 const { Select, Input } = require("enquirer");
 
 export const addProviderPrompt = async (

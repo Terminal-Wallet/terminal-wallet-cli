@@ -7,10 +7,10 @@ import {
   TokenChainInfo,
   getERC20TokenInfosForChain,
   getTokenInfo,
-} from "../balance/token-util";
+} from "../railgun/balance/token-util";
 import { SwapQuoteData } from "@railgun-community/cookbook";
 import { Zer0XSwapOutput, Zer0XSwapSelection } from "../models/0x-models";
-import { getWrappedTokenInfoForChain } from "../network/network-util";
+import { getWrappedTokenInfoForChain } from "../railgun/network/network-util";
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { Select } = require("enquirer");

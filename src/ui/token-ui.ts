@@ -6,25 +6,25 @@ import {
 } from "@railgun-community/shared-models";
 import { delay } from "../util/util";
 import { formatUnits, parseUnits } from "ethers";
-import { getWakuClient } from "../waku/connect-waku";
+import { getWakuClient } from "../railgun/waku/connect-waku";
 import {
   addRemovedBroadcaster,
   resetBroadcasterFilters,
-} from "../waku/broadcaster-util";
+} from "../railgun/waku/broadcaster-util";
 import {
   getDisplayStringFromBalance,
   getMaxBalanceLength,
   getMaxSymbolLengthFromBalances,
   getPrivateERC20BalancesForChain,
   getPublicERC20BalancesForChain,
-} from "../balance/balance-util";
+} from "../railgun/balance/balance-util";
 import {
   RailgunDisplayBalance,
   RailgunReadableAmount,
   RailgunSelectedAmount,
 } from "../models/balance-models";
-import { getChainForName } from "../network/network-util";
-import { getTokenInfo } from "../balance/token-util";
+import { getChainForName } from "../railgun/network/network-util";
+import { getTokenInfo } from "../railgun/balance/token-util";
 
 const { Select, Input, NumberPrompt } = require("enquirer");
 import {
@@ -34,7 +34,7 @@ import {
   confirmPromptCatchMessage,
 } from "./confirm-ui";
 import { validateEthAddress } from "@railgun-community/wallet";
-import { updatePublicBalancesForChain } from "../balance/balance-cache";
+import { updatePublicBalancesForChain } from "../railgun/balance/balance-cache";
 import {
   runInputPublicAddress,
   runInputRailgunAddress,

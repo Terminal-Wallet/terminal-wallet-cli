@@ -3,7 +3,7 @@ import {
   loadConfigForNetwork,
   remoteConfig,
   setRemoteConfig,
-} from "../network/network-util";
+} from "../railgun/network/network-util";
 import configDefaults from "./config-defaults";
 import {
   getProviderObjectFromURL,

@@ -27,18 +27,18 @@ import {
   loadEngineProvidersForNetwork,
   getTreeHeight,
   isEngineRunning,
-} from "../engine/engine";
-import { initializeWalletSystems } from "../wallet/wallet-init";
+} from "../railgun/engine/engine";
+import { initializeWalletSystems } from "../railgun/wallet/wallet-init";
 import {
   getCurrentWalletName,
   getCurrentRailgunAddress,
   getCurrentWalletPublicAddress,
-} from "../wallet/wallet-util";
+} from "../railgun/wallet/wallet-util";
 import {
   getPrivateERC20BalancesForChain,
   getPublicERC20BalancesForChain,
-} from "../balance/balance-util";
-import { isWakuConnected, isWakuLoaded } from "../waku/connect-waku";
+} from "../railgun/balance/balance-util";
+import { isWakuConnected, isWakuLoaded } from "../railgun/waku/connect-waku";
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { version } = require("../../package.json");

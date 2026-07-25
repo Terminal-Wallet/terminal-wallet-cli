@@ -20,8 +20,8 @@
 import path from "path";
 import { rimrafSync } from "rimraf";
 import configDefaults from "../config/config-defaults";
-import { stopEngine } from "../engine/engine";
-import { stopWakuClient } from "../waku/connect-waku";
+import { stopEngine } from "../railgun/engine/engine";
+import { stopWakuClient } from "../railgun/waku/connect-waku";
 import { clearConsoleBuffer } from "./console";
 import { errMessage, withTimeout } from "./errors";
 import { createLogger } from "./logger";

@@ -4,7 +4,7 @@ import {
 } from "@railgun-community/shared-models";
 
 import { formatUnits } from "ethers";
-import { getTokenInfo } from "../balance/token-util";
+import { getTokenInfo } from "../railgun/balance/token-util";
 import { RailgunReadableAmount } from "../models/balance-models";
 
 const convertReadable = (tokenAmount: bigint, decimals: number) => {

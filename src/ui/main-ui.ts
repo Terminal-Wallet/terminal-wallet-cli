@@ -1,19 +1,19 @@
 import { RailgunTransaction } from "../models/transaction-models";
-import { getPrivateDisplayBalances } from "../balance/balance-util";
-import { getCurrentNetwork } from "../engine/engine";
+import { getPrivateDisplayBalances } from "../railgun/balance/balance-util";
+import { getCurrentNetwork } from "../railgun/engine/engine";
 import {
   getChainForName,
   getWrappedTokenInfoForChain,
   remoteConfig,
-} from "../network/network-util";
+} from "../railgun/network/network-util";
 import {
   resetMenuForScan,
   runFreshWalletPrompt,
   switchRailgunNetwork,
   switchRailgunWallet,
-} from "../wallet/private-wallet";
+} from "../railgun/wallet/private-wallet";
 
-import { getCurrentWalletMnemonicAndIndex } from "../wallet/public-utils";
+import { getCurrentWalletMnemonicAndIndex } from "../railgun/wallet/public-utils";
 import {
   shouldDisplayPrivateBalances,
   getCurrentRailgunAddress,
@@ -26,8 +26,8 @@ import {
   toggleResponsiveMenu,
   shouldShowSender,
   toggleShouldShowSender,
-} from "../wallet/wallet-util";
-import { runTransactionBuilder } from "../transaction/transaction-builder";
+} from "../railgun/wallet/wallet-util";
+import { runTransactionBuilder } from "./transaction-builder";
 
 import { runAddKnownAddress } from "./known-address-ui";
 import { RAILGUN_HEADER, clearConsoleBuffer } from "../platform/console";
@@ -57,9 +57,9 @@ import {
 import {
   clearHashedPassword,
   getSaltedPassword,
-} from "../wallet/wallet-password";
-import { isWakuConnected, resetWakuClient } from "../waku/connect-waku";
-import { getScanProgressString, walletManager } from "../wallet/wallet-manager";
+} from "../railgun/wallet/wallet-password";
+import { isWakuConnected, resetWakuClient } from "../railgun/waku/connect-waku";
+import { getScanProgressString, walletManager } from "../railgun/wallet/wallet-manager";
 import "colors";
 import { getStatusText, setStatusText } from "./status-ui";
 import { runRPCEditorPrompt } from "./provider-ui";
