@@ -1,86 +1,31 @@
+import {
+  KnownAddress,
+  getKnownAddressNames,
+  getKnownAddresses,
+  getKnownAddressInfoForName,
+  updateKnownAddress,
+  updateKnownAddresses,
+} from "../railgun/wallet/address-book";
+
+// Re-exported so the existing prompt call sites keep working; the state and
+// persistence live in the wallet layer now, not here.
+export {
+  getKnownAddressNames,
+  getKnownAddresses,
+  getKnownAddressInfoForName,
+  updateKnownAddress,
+  updateKnownAddresses,
+  importKnownAddressesFromWallet,
+} from "../railgun/wallet/address-book";
+
 const { Input, Select, AutoComplete } = require("enquirer");
 import { isDefined } from "@railgun-community/shared-models";
 import { KnownAddressKey, WalletCache } from "../models/wallet-models";
 import { getPrivateAddressPrompt, getPublicAddressPrompt } from "./address-ui";
 import { confirmPromptCatch } from "./confirm-ui";
-import { saveKeychainFile } from "../railgun/wallet/wallet-cache";
 import { walletManager } from "../railgun/wallet/wallet-manager";
 import configDefaults from "../config/config-defaults";
 import { getCurrentWalletName } from "../railgun/wallet/wallet-util";
-
-export type KnownAddress = {
-  publicAddress?: string;
-  privateAddress?: string;
-  allowEdit: boolean;
-};
-const knownAddresses: MapType<KnownAddress> = {};
-
-export const getKnownAddressNames = () => {
-  const currentWalletName = getCurrentWalletName();
-  const nameList = Object.keys(knownAddresses).filter(
-    (name) => currentWalletName !== name,
-  );
-
-  return [currentWalletName, ...nameList];
-};
-
-export const getKnownAddresses = () => {
-  return knownAddresses;
-};
-
-export const updateKnownAddresses = async () => {
-  const knownNames = getKnownAddressNames();
-  const currentKnownAddresses = getKnownAddresses();
-  const newKnownAddresses: KnownAddressKey[] = [];
-  for (const name of knownNames) {
-    const { allowEdit, publicAddress, privateAddress } =
-      currentKnownAddresses[name];
-    if (allowEdit) {
-      newKnownAddresses.push({
-        name,
-        privateAddress,
-        publicAddress,
-      });
-    }
-  }
-  walletManager.keyChain.knownAddresses = newKnownAddresses;
-  const { keyChainPath } = configDefaults.engine;
-  saveKeychainFile(walletManager.keyChain, keyChainPath);
-};
-
-export const getKnownAddressInfoForName = (keyName: string) => {
-  return knownAddresses[keyName];
-};
-
-export const updateKnownAddress = (
-  nickName: string,
-  publicAddress?: string,
-  privateAddress?: string,
-  allowEdit = true,
-) => {
-  knownAddresses[nickName] = {
-    publicAddress,
-    privateAddress,
-    allowEdit,
-  };
-};
-
-export const importKnownAddressesFromWallet = (
-  wallets: MapType<WalletCache>,
-  knownAddresses?: KnownAddressKey[],
-) => {
-  const walletNames = Object.keys(wallets);
-  for (const walletName of walletNames) {
-    const { publicAddress, railgunWalletAddress } = wallets[walletName];
-    updateKnownAddress(walletName, publicAddress, railgunWalletAddress, false);
-  }
-  if (isDefined(knownAddresses)) {
-    for (const knownAddress of knownAddresses) {
-      const { name, publicAddress, privateAddress } = knownAddress;
-      updateKnownAddress(name, publicAddress, privateAddress);
-    }
-  }
-};
 
 export const getKnownAddressNamePrompt = async (
   nickName?: string,
@@ -139,7 +84,7 @@ export const runAddKnownAddress = async () => {
     selectedName = knownAddressOption;
   }
   const { publicAddress: currentPublic, privateAddress: currentPrivate } =
-    knownAddresses[selectedName] ?? {};
+    getKnownAddresses()[selectedName] ?? {};
 
   const publicAddress = await getPublicAddressPrompt(
     currentPublic ? `Current: [${currentPublic}] | ` : "",

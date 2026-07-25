@@ -25,7 +25,7 @@ import {
   loadEngineProvidersForNetwork,
 } from "../engine/engine";
 import { initWakuClient, startWakuClient } from "../waku/connect-waku";
-import { importKnownAddressesFromWallet } from "../../ui/known-address-ui";
+import { importKnownAddressesFromWallet } from "./address-book";
 import { processSafeExit } from "../../platform/lifecycle";
 import { getEthersWallet } from "../network/network-util";
 import { walletManager } from "./wallet-manager";

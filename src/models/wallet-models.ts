@@ -54,6 +54,12 @@ export type KeychainFile = {
   responsiveMenu?: boolean;
   customProviders?: CustomProviderMap;
   showSenderAddress?: boolean;
+  /**
+   * Broadcaster addresses the user has pinned or rejected. Persisted so a
+   * broadcaster that behaved badly stays out of the way across restarts.
+   */
+  broadcasterFavorites?: string[];
+  broadcasterBlocklist?: string[];
 };
 
 export type EncryptedCacheFile = {
