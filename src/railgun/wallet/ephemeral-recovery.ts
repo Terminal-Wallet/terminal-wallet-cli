@@ -273,12 +273,12 @@ const buildProved7702Batch = async (
     }
   }
 
-  // minGasLimit = 0n: the SDK's default cross-contract floor (3.2M) is baked into the action
-  // data's on-chain `require(gasleft() > minGasLimit)`, which forces the tx to CARRY that much
-  // gas into the call even though these deterministic relay-adapt ops (unshield/shield + at most
-  // a wrap/unwrap) only use ~1.7M — over-provisioning the limit the broadcaster charges on.
-  // Pinning 0n lets the estimate reflect actual execution. Safe here (unlike the swap, whose
-  // variable external call under-estimates and needs a real floor).
+  // minGasLimit = 0n, as every cross-contract call uses. The SDK's default
+  // floor is baked into the action data's on-chain
+  // `require(gasleft() > minGasLimit)`, which forces the tx to CARRY that much
+  // gas into the call and over-provisions the limit the broadcaster charges on.
+  // Pinning 0n lets the estimate reflect actual execution; the populated limit
+  // is that estimate x1.2.
   const recoveryMinGasLimit = 0n;
 
   const wallet = fullWalletForID(railgunWalletID);

@@ -37,7 +37,14 @@ export interface CrossContractInputs {
   relayAdaptUnshieldERC20Amounts: RecipeERC20Amount[];
   relayAdaptShieldERC20Addresses: RailgunERC20Recipient[];
   crossContractCalls: ContractTransaction[];
-  minGasLimit?: bigint;
+  /**
+   * Always 0n. Required rather than optional because undefined is not "no
+   * floor" — the SDK substitutes its own default, which is baked into the
+   * action data as an on-chain `require(gasleft() > minGasLimit)` and forces
+   * the transaction to carry that much gas. 0n leaves the estimate free to
+   * reflect actual execution; the populated limit is that estimate x1.2.
+   */
+  minGasLimit: bigint;
 }
 
 export const getCrossContractGasEstimate = async (

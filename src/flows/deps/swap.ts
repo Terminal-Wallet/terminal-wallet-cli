@@ -30,7 +30,8 @@ export const swapToCrossContractInputs = (
   relayAdaptUnshieldERC20Amounts: swap.relayAdaptUnshieldERC20Amounts,
   relayAdaptShieldERC20Addresses: swap.relayAdaptShieldERC20Addresses,
   crossContractCalls: swap.crossContractCalls,
-  minGasLimit: swap.minGasLimit ?? undefined,
+  // 0n, never undefined — see CrossContractInputs.minGasLimit.
+  minGasLimit: swap.minGasLimit ?? 0n,
 });
 
 export const runPrivateSwapTransaction = (

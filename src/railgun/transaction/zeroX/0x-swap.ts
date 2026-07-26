@@ -202,11 +202,20 @@ export const getZer0XSwapInputs = async (
       erc20Amounts: relayAdaptUnshieldERC20Amounts,
       nfts: [],
     };
-    // The swap runs a variable external 0x call whose estimateGas under-shoots the real
-    // relay-adapt execution; it MUST use the recipe's minGasLimit floor (e.g. 2.7M for
-    // swap-and-shield) or it submits an under-gassed tx and reverts out-of-gas. (Only the
-    // deterministic recovery ops can safely use 0n.)
-    const { minGasLimit } = swap.config;
+    // 0n, like every other cross-contract call.
+    //
+    // minGasLimit is baked into the action data as an on-chain
+    // `require(gasleft() > minGasLimit)`, so a non-zero floor forces the
+    // transaction to CARRY that much gas into the call. The recipe's figure
+    // comes from the cookbook's non-7702 assumptions and is large enough that
+    // the gas estimate reverts on the floor check itself — which reports no
+    // sub-call index, and surfaces as "RelayAdapt multicall failed at index
+    // UNKNOWN."
+    //
+    // With no floor the estimate reflects actual execution, and the populated
+    // limit is that estimate x1.2 (see getTransactionGasDetails' type-4
+    // overrides), which is what the broadcaster is handed and charges on.
+    const minGasLimit = 0n;
     const recipeOutput: RecipeOutput = await swap.getRecipeOutput(recipeInput);
     const { crossContractCalls, erc20AmountRecipients } = recipeOutput;
 

@@ -42,7 +42,7 @@ export const crossContractInputs = (
   relayAdaptUnshieldERC20Amounts: [],
   relayAdaptShieldERC20Addresses: [],
   crossContractCalls: [],
-  minGasLimit: undefined,
+  minGasLimit: 0n,
   ...over,
 });
 
