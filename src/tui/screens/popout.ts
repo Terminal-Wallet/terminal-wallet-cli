@@ -24,23 +24,39 @@ interface ScrollModalOptions {
   /** Whether the content carries blessed markup. Raw text must say false. */
   tags?: boolean;
   copy?: { label: string; run: () => void };
+  /**
+   * Render as a list of selectable lines rather than a block of text, so a
+   * single line can be read against a cursor and copied on its own.
+   */
+  selectable?: boolean;
 }
 
 const openScrollModal = (
   ctx: DeckContext,
-  { title, getContent, accent, live, tags = false, copy }: ScrollModalOptions,
+  {
+    title,
+    getContent,
+    accent,
+    live,
+    tags = false,
+    copy,
+    selectable = false,
+  }: ScrollModalOptions,
 ): void => {
   let done: () => void = () => undefined;
+  const footer = selectable
+    ? "↑/↓ select · c copy line · a copy all · Esc close"
+    : `↑/↓ · PgUp/PgDn scroll${copy ? ` · c copy ${copy.label}` : ""} · Esc close`;
   const { box, guardFocus, close } = createModal(blessed, ctx.screen, {
     title,
     widthPct: 88,
     height: Math.max(8, ((ctx.screen.height as number) || 24) - 4),
     accent,
-    footer: `↑/↓ · PgUp/PgDn scroll${copy ? ` · c copy ${copy.label}` : ""} · Esc close`,
+    footer,
     onDismiss: () => done(),
   });
 
-  const body = blessed.box({
+  const shared = {
     parent: box,
     top: 0,
     left: 0,
@@ -53,18 +69,49 @@ const openScrollModal = (
     mouse: true,
     vi: true,
     scrollbar: { ch: " ", style: { bg: "green" } },
-  });
+  } as const;
 
-  const refresh = () => body.setContent(getContent());
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const body: any = selectable
+    ? blessed.list({
+        ...shared,
+        items: [],
+        style: { selected: { bg: accent, fg: "black" } },
+      })
+    : blessed.box(shared);
+
+  const lines = (): string[] => getContent().split("\n");
+
+  /**
+   * Follow the tail only while the cursor is already on the last line. Once
+   * someone has scrolled up to read something, dragging them back to the
+   * bottom on every arriving line is what made this pane unusable.
+   */
+  const atTail = (): boolean =>
+    body.items === undefined || body.selected >= body.items.length - 1;
+
+  const refresh = () => {
+    if (!selectable) {
+      body.setContent(getContent());
+      return;
+    }
+    const follow = atTail();
+    const previous = body.selected ?? 0;
+    const next = lines();
+    body.setItems(next);
+    body.select(follow ? next.length - 1 : Math.min(previous, next.length - 1));
+  };
+
   refresh();
-  if (live) {
+  if (live && !selectable) {
     body.setScrollPerc(100);
   }
 
   const unsubscribe = live
     ? subscribe(() => {
+        const follow = atTail();
         refresh();
-        body.setScrollPerc(100);
+        if (!selectable && follow) body.setScrollPerc(100);
         ctx.screen.render();
       })
     : undefined;
@@ -76,12 +123,27 @@ const openScrollModal = (
     close();
   };
 
-  if (copy) {
+  if (selectable) {
+    const copyLine = () => {
+      const line = lines()[body.selected ?? 0];
+      if (line === undefined) return;
+      copyToClipboard(line);
+      getInputProvider().notify("Copied line");
+    };
+    const copyAll = () => {
+      copyToClipboard(getContent());
+      getInputProvider().notify(`Copied ${lines().length} lines`);
+    };
+    // Bound on both, because focus may sit on either after a scroll.
+    for (const target of [body, box]) {
+      target.key(["c"], copyLine);
+      target.key(["a"], copyAll);
+    }
+  } else if (copy) {
     const doCopy = () => {
       copy.run();
       getInputProvider().notify(`Copied ${copy.label}`);
     };
-    // Bound on both, because focus may sit on either after a scroll.
     body.key(["c"], doCopy);
     box.key(["c"], doCopy);
   }
@@ -111,10 +173,11 @@ export const showText = (
 /** The engine and SDK log stream, live. */
 export const showLogs = (ctx: DeckContext): void =>
   openScrollModal(ctx, {
-    title: "logs · engine + SDK (live)",
+    title: "logs · engine + SDK + status (live)",
     getContent: () => getState().logs.join("\n") || "…",
     accent: "yellow",
     live: true,
+    selectable: true,
   });
 
 /** Everything known about one transaction. */

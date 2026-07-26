@@ -106,6 +106,37 @@ export const tiersFromRewards = (
   };
 };
 
+/**
+ * Base-fee headroom in the max fee, as a percentage.
+ *
+ * `maxFeePerGas` is a ceiling, not a price: a self-signed transaction pays
+ * `baseFee + tip` whatever the ceiling is. Set to exactly `tip + baseFee` it
+ * covers only the base fee at the moment it was read, and the base fee moves —
+ * up to 12.5% per block. By the time a proof is generated and the transaction
+ * submitted, a ceiling with no headroom no longer covers the base fee, and a
+ * broadcaster rejects it outright: "must cover the current base fee plus a
+ * minimum priority fee".
+ *
+ * 2x is the usual convention (ethers' own getFeeData uses it) and absorbs
+ * roughly six consecutive full blocks.
+ *
+ * It is not free for a broadcaster send, which is why this is a named constant
+ * rather than a multiplier inline. A broadcaster charges
+ * `feePerUnitGas x calculateGasLimit(estimate) x maxFeePerGas` — its fee scales
+ * with the CEILING, not with what the transaction ends up paying — and that fee
+ * is committed inside the proof, so it cannot be recomputed later against a
+ * fresher base fee. Headroom therefore buys reliability with real money, and
+ * the number is a trade rather than a default.
+ */
+const BASE_FEE_HEADROOM_PCT = 200n;
+
+/**
+ * The ceiling to submit for a given tip: the tip plus room for the base fee to
+ * rise. Every tier and preset goes through here so they cannot drift apart.
+ */
+export const maxFeeFor = (priorityFee: bigint, baseFee: bigint): bigint =>
+  priorityFee + (baseFee * BASE_FEE_HEADROOM_PCT) / 100n;
+
 export const getGasEstimates = async (
   chainName: NetworkName,
 ): Promise<CustomGasEstimate> => {
@@ -166,7 +197,7 @@ export const getGasEstimates = async (
 
   // The auto-default is the middle tier: the tip a normal transaction pays.
   const maxPriorityFeePerGas = average;
-  const maxFeePerGas = maxPriorityFeePerGas + baseFeePerGas;
+  const maxFeePerGas = maxFeeFor(maxPriorityFeePerGas, baseFeePerGas);
 
   return {
     gasPrice,
@@ -202,17 +233,17 @@ export const getGasEstimateMatrix = (gasEstimate: CustomGasEstimate) => {
     },
     slow: {
       gasPrice,
-      maxFeePerGas: formatUnits(slow + baseFeePerGas, "gwei"),
+      maxFeePerGas: formatUnits(maxFeeFor(slow, baseFeePerGas), "gwei"),
       maxPriorityFeePerGas: formatUnits(slow, "gwei"),
     },
     average: {
       gasPrice,
-      maxFeePerGas: formatUnits(average + baseFeePerGas, "gwei"),
+      maxFeePerGas: formatUnits(maxFeeFor(average, baseFeePerGas), "gwei"),
       maxPriorityFeePerGas: formatUnits(average, "gwei"),
     },
     fast: {
       gasPrice,
-      maxFeePerGas: formatUnits(fast + baseFeePerGas, "gwei"),
+      maxFeePerGas: formatUnits(maxFeeFor(fast, baseFeePerGas), "gwei"),
       maxPriorityFeePerGas: formatUnits(fast, "gwei"),
     },
   };
@@ -245,7 +276,7 @@ export const getGasFeeTiers = async (
   const tier = (key: GasTierKey, priority: bigint): GasTier => ({
     key,
     maxPriorityFeePerGas: priority,
-    maxFeePerGas: priority + baseFeePerGas,
+    maxFeePerGas: maxFeeFor(priority, baseFeePerGas),
   });
   return {
     chainName,

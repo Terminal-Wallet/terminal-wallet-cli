@@ -11,6 +11,7 @@ import {
   TransactionGasDetails,
 } from "@railgun-community/shared-models";
 import { CustomGasEstimate } from "../../models/gas-models";
+import { maxFeeFor } from "./gas-fee";
 
 /** A concrete gas override in wei, tagged by EVM gas type. */
 export type GasOverride =
@@ -48,7 +49,7 @@ export const presetsFromEstimate = (
           key,
           override: {
             evmGasType: EVMGasType.Type2,
-            maxFeePerGas: priority + est.baseFeePerGas,
+            maxFeePerGas: maxFeeFor(priority, est.baseFeePerGas),
             maxPriorityFeePerGas: priority,
           },
         }

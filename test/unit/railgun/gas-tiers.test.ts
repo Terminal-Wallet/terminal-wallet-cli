@@ -19,6 +19,7 @@ import { parseUnits } from "ethers";
 import {
   MIN_PRIORITY_FEE,
   REWARD_PERCENTILES,
+  maxFeeFor,
   tiersFromRewards,
 } from "../../../src/railgun/gas/gas-fee";
 
@@ -97,4 +98,43 @@ test("the median across blocks, not the mean", () => {
   ];
   const { fast } = tiersFromRewards(blocks);
   assert.equal(fast, gwei("0.03"), "a single spike block moved the tier");
+});
+
+// --- the ceiling ------------------------------------------------------------
+
+test("the max fee leaves room for the base fee to rise", () => {
+  // Set to exactly tip + base it covers only the base fee at the moment it was
+  // read. A proof takes long enough for that to stop being true, and the
+  // broadcaster rejects what no longer covers the current base fee.
+  const base = gwei("0.088");
+  const tip = gwei("0.02");
+  const ceiling = maxFeeFor(tip, base);
+  assert.ok(ceiling > tip + base, "no headroom at all");
+  assert.equal(ceiling, tip + base * 2n);
+});
+
+test("headroom survives several full blocks", () => {
+  // Base fee rises at most 12.5% per block. The ceiling should still cover it
+  // after a realistic proof-generation delay.
+  const base = gwei("0.088");
+  const ceiling = maxFeeFor(gwei("0.02"), base);
+  let risen = base;
+  for (let block = 0; block < 5; block += 1) risen = (risen * 1125n) / 1000n;
+  assert.ok(
+    ceiling > risen,
+    `ceiling ${ceiling} does not cover a base fee of ${risen} five full blocks later`,
+  );
+});
+
+test("the ceiling is not a price", () => {
+  // What a self-signed transaction actually pays is base + tip, whatever the
+  // ceiling is — the headroom costs nothing there. It is not free for a
+  // broadcaster send, whose fee scales with the ceiling, which is why the
+  // multiplier is deliberate rather than generous.
+  const base = gwei("0.088");
+  const tip = gwei("0.02");
+  const paid = base + tip;
+  assert.ok(maxFeeFor(tip, base) > paid);
+  // Still far below what the old p80 default cost: 0.765 tip on a 0.057 base.
+  assert.ok(maxFeeFor(tip, base) < gwei("0.822"));
 });

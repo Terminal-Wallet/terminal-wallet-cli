@@ -31,6 +31,13 @@ const BROADCASTER_FEE_CHATTER = /Broadcaster Fee (?:STALE|receipt)/i;
 export const isLogNoise = (text: string): boolean =>
   BROADCASTER_FEE_CHATTER.test(text);
 
+/** Append one line to the log stream, stamped with elapsed runtime. */
+const recordLog = (prefix: string, text: string): void => {
+  setState({
+    logs: appendLog(getState().logs, `${prefix} [${runtimeStamp()}] ${text}`),
+  });
+};
+
 const fold = (e: CoreEvent): void => {
   switch (e.type) {
     case "wallet:changed":
@@ -130,12 +137,16 @@ const fold = (e: CoreEvent): void => {
     case "log": {
       if (isLogNoise(e.text)) break;
       const prefix = e.level === "error" ? "✖" : e.level === "warn" ? "▲" : "·";
-      // Elapsed-runtime counter so intervals between events are readable.
-      setState({ logs: appendLog(getState().logs, `${prefix} [${runtimeStamp()}] ${e.text}`) });
+      recordLog(prefix, e.text);
       break;
     }
     case "status:message":
+      // Also recorded, not just displayed. The status line is one line that the
+      // next message overwrites, and it is where errors and transaction hashes
+      // surface — so anything worth reading there is worth being able to scroll
+      // back to and copy out.
       setState({ status: e.text });
+      recordLog("›", e.text);
       break;
     case "tx:progress":
       setState({
@@ -143,14 +154,21 @@ const fold = (e: CoreEvent): void => {
         scanLabel: e.message ?? `Transaction: ${e.phase}`,
       });
       break;
-    case "tx:result":
+    case "tx:result": {
+      // The full hash and the full error, not the status line's truncation:
+      // this is the record someone goes looking for afterwards.
+      const detail = e.ok
+        ? `Transaction sent${e.hash ? ` · ${e.hash}` : ""}${e.url ? ` · ${e.url}` : ""}`
+        : `Transaction failed: ${e.error ?? "unknown error"}`;
       setState({
         scanProgress: -1,
         status: e.ok
           ? `Transaction sent${e.hash ? ` · ${e.hash.slice(0, 10)}…` : ""}`
           : `Transaction failed: ${e.error ?? "unknown error"}`,
       });
+      recordLog(e.ok ? "›" : "✖", detail);
       break;
+    }
     default: {
       // Exhaustiveness guard: a new CoreEvent without a fold case is a type error.
       const _never: never = e;
