@@ -23,6 +23,9 @@ import {
 import { RecipeERC20Amount } from "@railgun-community/cookbook";
 import { ContractTransaction } from "ethers";
 import { emitCoreEvent } from "../../core/events";
+import { createLogger } from "../../platform/logger";
+
+const log = createLogger("cross-contract");
 import { getCurrentRailgunID } from "../wallet/wallet-util";
 import { getCurrentNetwork } from "../engine/engine";
 import {
@@ -99,6 +102,16 @@ export const getCrossContractGasEstimate = async (
     crossContractCalls,
     minGasLimit,
   } = inputs;
+
+  log.debug(
+    `cross-contract estimate: unshield=${relayAdaptUnshieldERC20Amounts.length} ` +
+      `shield=${relayAdaptShieldERC20Addresses.length} calls=${crossContractCalls.length} ` +
+      `minGasLimit=${minGasLimit} evmGasType=${originalGasDetails.evmGasType} ` +
+      `sendWithPublicWallet=${sendWithPublicWallet} feeToken=${feeTokenDetails ? "yes" : "none"}`,
+  );
+  crossContractCalls.forEach((c, i) =>
+    log.debug(`  call[${i}] to=${c.to ?? "MISSING"} data=${c.data ? `${c.data.length}b` : "MISSING"} value=${c.value ?? 0n}`),
+  );
 
   const { gasEstimate } = await gasEstimateForUnprovenCrossContractCalls7702(
     txIDVersion,
@@ -197,7 +210,7 @@ export const getProvedCrossContractTransaction = async (
       );
     return { transaction, nullifiers, preTransactionPOIsPerTxidLeafPerList };
   } catch (err) {
-    console.log("ERROR getting proved cross-contract tx:", (err as Error).message);
+    log.error("proved cross-contract tx failed", err);
     return undefined;
   }
 };
