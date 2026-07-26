@@ -121,7 +121,7 @@ export const createBlessedInputProvider = (
       });
       blessed.text({
         parent: box, top: 0, left: 1, right: 1, tags: true,
-        content: "{gray-fg}🔒 Enter your wallet password.{/}",
+        content: "{gray-fg}Enter your wallet password.{/}",
       });
       const input = blessed.textbox({
         parent: box, top: 2, left: 1, right: 1, height: 1,

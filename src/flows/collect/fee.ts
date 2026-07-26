@@ -219,10 +219,10 @@ const manageBroadcasterPrefs = async (computed: BroadcasterRow[]): Promise<void>
       const rank = favoriteRank(favorites, r.address);
       const mark =
         pref === "blocked"
-          ? "🚫"
+          ? "x "
           : rank === Number.POSITIVE_INFINITY
             ? "  "
-            : `⭐${rank + 1}`;
+            : `#${rank + 1}`;
       return {
         label: `${mark} ${short(r.address)}`,
         value: r.address,
@@ -239,17 +239,17 @@ const manageBroadcasterPrefs = async (computed: BroadcasterRow[]): Promise<void>
     const actions = [
       ...(isFavorite
         ? []
-        : [{ label: "⭐ Favorite", value: "favorite", hint: "adds to the end" }]),
+        : [{ label: "Favorite", value: "favorite", hint: "adds to the end" }]),
       ...(isFavorite && rank > 0
-        ? [{ label: "▲ Move up", value: "up", hint: `to #${rank}` }]
+        ? [{ label: "Move up", value: "up", hint: `to #${rank}` }]
         : []),
       ...(isFavorite && rank < favorites.length - 1
-        ? [{ label: "▼ Move down", value: "down", hint: `to #${rank + 2}` }]
+        ? [{ label: "Move down", value: "down", hint: `to #${rank + 2}` }]
         : []),
       ...(isFavorite && rank > 0
-        ? [{ label: "⭐ Make default", value: "top", hint: "to #1" }]
+        ? [{ label: "Make default", value: "top", hint: "to #1" }]
         : []),
-      { label: "🚫 Block", value: "blocked", hint: "hide it" },
+      { label: "Block", value: "blocked", hint: "hide it" },
       { label: "Clear", value: "none" },
     ];
     const action = await provider.select(short(pick), actions);
@@ -279,7 +279,7 @@ export const collectFeeMode = async (
   if (mode === "self") return selfSignFee();
   if (mode === "external") {
     if (!hasExternalSigners()) {
-      provider.notify("No external signers — import one in ⚙ Signers.");
+      provider.notify("No external signers — import one in Signers.");
       return undefined;
     }
     const label = await provider.select(
@@ -358,7 +358,7 @@ export const collectFeeMode = async (
   const options = [];
   if (favorite) {
     options.push({
-      label: `⭐ Use favorite — ${short(favorite.railgunAddress)}`,
+      label: `Use favorite (#1) — ${short(favorite.railgunAddress)}`,
       value: "favorite",
       hint: await broadcasterHint(favorite, token.symbol, token.decimals, gasDetails),
     });
@@ -381,7 +381,7 @@ export const collectFeeMode = async (
   }
   if (choice === "best") return { kind: "broadcaster", broadcaster: best };
 
-  // Comparison modal — broadcasters for THIS fee token: blocked hidden, ⭐
+  // Comparison modal — broadcasters for THIS fee token: blocked hidden,
   // favorites first, then cheapest. Loops so managing prefs refreshes the list.
   const all =
     waku.findBroadcastersForToken(chain, tokenAddr.toLowerCase(), relayAdapt) ??
@@ -414,17 +414,17 @@ export const collectFeeMode = async (
       const bonusText = r.feeAmount === undefined ? "  —  " : bonus === 0 ? " best " : `+${bonus.toFixed(1)}%`;
       const rel = Math.round(r.reliability * 100);
       const rank = favoriteRank(favorites, r.address);
-      // The precedence number is the point: "⭐1" is the one that gets used.
-      const star = rank === Number.POSITIVE_INFINITY ? "  " : `⭐${rank + 1}`;
+      // The precedence number is the point: "#1" is the one that gets used.
+      const star = rank === Number.POSITIVE_INFINITY ? "  " : `#${rank + 1}`;
       const label =
         `${star} ${short(r.address).padEnd(15)}` +
         `${r.feeReadable.padStart(11)} ${token.symbol.padEnd(5)}` +
         `${bonusText.padStart(7)}  rel ${String(rel).padStart(3)}%  ${r.wallets}w`;
       return { label, value: r.address };
     });
-    rows.push({ label: "⚙ Favorites, order & blocklist…", value: "__manage" });
+    rows.push({ label: "Favorites, order & blocklist…", value: "__manage" });
     const picked = await provider.select(
-      `Broadcasters · ${token.symbol} · ⭐ by precedence, then cheapest`,
+      `Broadcasters · ${token.symbol} · by precedence, then cheapest`,
       rows,
     );
     if (!picked) return undefined;

@@ -89,7 +89,17 @@ const fold = (e: CoreEvent): void => {
             : { txidProgress: 100, txidSynced: true, txidReady: true };
         const next = { ...getState(), ...patch };
         // Overall idle only once BOTH trees have finished their historical scan.
-        setState(next.utxoSynced && next.txidSynced ? { ...patch, scanProgress: -1 } : patch);
+        //
+        // The status line is cleared here too. "Scan kicked — balances will
+        // populate as it completes" was written before anything emitted this
+        // event, so it announced a completion that never arrived and sat on the
+        // footer forever. Now the completion reports itself.
+        const done = next.utxoSynced && next.txidSynced;
+        setState(
+          done
+            ? { ...patch, scanProgress: -1, status: "Balances synced." }
+            : { ...patch, status: `${e.tree} tree synced…` },
+        );
       } else {
         setState({ scanProgress: -1 }); // legacy untagged complete
       }

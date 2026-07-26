@@ -92,9 +92,10 @@ export const refreshNow = async (ctx: DeckContext): Promise<void> => {
     refreshBalances(getChainForName(network()), [getCurrentRailgunID()]);
     await ctx.refreshBalances();
     await ctx.refreshChainStats();
-    setState({
-      status: "Scan kicked — balances will populate as it completes.",
-    });
+    // Deliberately not a terminal message: the scan reports its own completion
+    // (adapter, scan:complete) and replaces this. Claiming "will populate as it
+    // completes" and then never updating is what made the footer look frozen.
+    setState({ status: "Scanning…" });
   } catch (err) {
     setState({ status: `Refresh failed: ${(err as Error).message}` });
   } finally {
@@ -105,7 +106,7 @@ export const refreshNow = async (ctx: DeckContext): Promise<void> => {
 /**
  * Broadcaster allow/blocklist, and the order favourites are tried in.
  *
- * Favourites are ranked: ⭐1 is the broadcaster new sends default to, and the
+ * Favourites are ranked: #1 is the broadcaster new sends default to, and the
  * rest are fallbacks in order. Selecting a row opens its actions rather than
  * cycling in place, because promote/demote needs somewhere to live and having
  * this disagree with the same editor in the fee flow would be worse. Edits
@@ -121,7 +122,7 @@ export const showBroadcasterList = async (): Promise<void> => {
     const choices: InputChoice[] = buildBroadcasterRows(lists).map((row) => ({
       label:
         row.pref === "favorite"
-          ? `${tag(`⭐${row.rank + 1}`, "yellow")} ${tag(short(row.address), "green")}`
+          ? `${tag(`#${row.rank + 1}`, "yellow")} ${tag(short(row.address), "green")}`
           : `   ${tag(short(row.address), "red")}`,
       value: row.address,
       hint:
@@ -132,7 +133,7 @@ export const showBroadcasterList = async (): Promise<void> => {
             : "blocked",
     }));
     choices.push({
-      label: tag("＋ Add broadcaster…", "yellow"),
+      label: tag("+ Add broadcaster…", "yellow"),
       value: "__add",
       hint: "0zk address",
     });
@@ -156,7 +157,7 @@ export const showBroadcasterList = async (): Promise<void> => {
     const action = await provider.select(short(picked), [
       ...(isFavorite && rank > 0
         ? [
-            { label: "⭐ Make default", value: "top", hint: "to #1" },
+            { label: "Make default", value: "top", hint: "to #1" },
             { label: "▲ Move up", value: "up", hint: `to #${rank}` },
           ]
         : []),
@@ -165,8 +166,8 @@ export const showBroadcasterList = async (): Promise<void> => {
         : []),
       ...(isFavorite
         ? []
-        : [{ label: "⭐ Favorite", value: "favorite", hint: "adds to the end" }]),
-      { label: "🚫 Block", value: "blocked", hint: "hide it" },
+        : [{ label: "Favorite", value: "favorite", hint: "adds to the end" }]),
+      { label: "Block", value: "blocked", hint: "hide it" },
       { label: "Remove", value: "none" },
     ]);
     if (!action) continue;
@@ -181,7 +182,7 @@ export const showBroadcasterList = async (): Promise<void> => {
  * The default fee mode for new private sends.
  *
  * This is the signer choice only. Which broadcaster relays a send is decided
- * separately, by the favourites order: ⭐1 if it is reachable, otherwise the
+ * separately, by the favourites order: #1 if it is reachable, otherwise the
  * next favourite, otherwise whoever is cheapest.
  */
 export const showDefaultFeeSetting = async (): Promise<void> => {
@@ -372,10 +373,10 @@ const openCardMenu = async (
 };
 
 export const openWalletMenu = (ctx: DeckContext) =>
-  openCardMenu(ctx, "👤 Wallet", walletMenu());
+  openCardMenu(ctx, "Wallet", walletMenu());
 export const openNetworkMenu = (ctx: DeckContext) =>
-  openCardMenu(ctx, "⬢ Network", networkMenu());
+  openCardMenu(ctx, "Network", networkMenu());
 export const openStatusMenu = (ctx: DeckContext) =>
-  openCardMenu(ctx, "📡 Sync & maintenance", statusMenu());
+  openCardMenu(ctx, "Sync & maintenance", statusMenu());
 export const openUtilitiesMenu = (ctx: DeckContext) =>
-  openCardMenu(ctx, "⚙ Utilities", utilitiesMenu(shouldShowSender()));
+  openCardMenu(ctx, "Utilities", utilitiesMenu(shouldShowSender()));

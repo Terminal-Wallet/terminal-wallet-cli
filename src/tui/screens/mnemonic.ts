@@ -34,7 +34,7 @@ export const showMnemonic = async (
   );
 
   const { box, guardFocus, close } = createModal(blessed, ctx.screen, {
-    title: "🔑 Recovery phrase — keep it secret",
+    title: "Recovery phrase — keep it secret",
     widthPct,
     height: lines.length + 6,
     accent: "red",

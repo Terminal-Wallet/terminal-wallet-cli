@@ -210,7 +210,7 @@ export const createBuilder = (host: BuilderHost): Builder => {
   const rowDisplay = (row: string): string => {
     if (row === "__send") return tag("▶ Build & Send  (S)", "green");
     if (row === "__cancel") return tag("✕ Cancel  (Esc)", "gray");
-    if (row === "__addleg") return tag("＋ Add token", "yellow");
+    if (row === "__addleg") return tag("+ Add token", "yellow");
     if (row.startsWith("__legsep:")) return tag("─".repeat(28), "gray");
     if (row.startsWith("__lt:")) {
       const leg = findLeg(row.slice(5));

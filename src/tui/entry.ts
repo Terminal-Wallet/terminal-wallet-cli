@@ -154,14 +154,14 @@ export const runDeck = async (): Promise<void> => {
   const cardDefs: CardDef[] = [
     {
       key: "wallet",
-      label: " 👤 wallet ",
+      label: " wallet ",
       render: (s) =>
         [tag(s.walletName, "white"), tag(short(s.publicAddress), "gray"), tag("click → wallet", "gray")].join("\n"),
       click: () => void openWalletMenu(ctx),
     },
     {
       key: "network",
-      label: " ⬢ network ",
+      label: " network ",
       render: (s) =>
         [
           tag(s.network, "cyan"),
@@ -174,7 +174,7 @@ export const runDeck = async (): Promise<void> => {
     },
     {
       key: "status",
-      label: " 📡 sync ",
+      label: " sync ",
       render: (s) =>
         [
           syncTreeLine("utxo", s.utxoTree, s.utxoLeaves, s.utxoProgress, s.utxoReady, tag),
@@ -185,7 +185,7 @@ export const runDeck = async (): Promise<void> => {
     },
     {
       key: "gas",
-      label: " ⛽ gas ",
+      label: " gas ",
       render: () => {
         const estimate = feeders.gasEstimate();
         return [
@@ -198,7 +198,7 @@ export const runDeck = async (): Promise<void> => {
     },
     {
       key: "utilities",
-      label: " ⚙ utilities ",
+      label: " utilities ",
       render: () =>
         [tag("sender privacy", "gray"), tag("wipe data", "gray"), tag("click → open (u)", "yellow")].join("\n"),
       click: () => void openUtilitiesMenu(ctx),

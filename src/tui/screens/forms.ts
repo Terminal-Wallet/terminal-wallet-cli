@@ -51,7 +51,7 @@ export const showAddContact = async (ctx: DeckContext): Promise<void> => {
 export const showSigners = async (ctx: DeckContext): Promise<void> => {
   const signers = listExternalSigners();
   const picked = await getInputProvider().select(
-    "⚙ External signers (pay public gas)",
+    "External signers (pay public gas)",
     [
       ...signers.map((s) => ({
         label: s.label,

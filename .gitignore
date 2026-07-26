@@ -2,6 +2,7 @@ node_modules
 .wallets
 .walletsV2
 .railgun.db
+.railgun.db.*
 .artifacts*
 .zKeyChains
 .yarn
