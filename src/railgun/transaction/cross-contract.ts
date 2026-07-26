@@ -32,17 +32,37 @@ import {
 import { getTransactionGasDetails } from "./private/private-tx";
 import { getOutputGasEstimate } from "./private/unshield-tx";
 
+/**
+ * The `minGasLimit` that results in no on-chain gas floor at all.
+ *
+ * The SDK does not pass this value to the contract directly. Every relay-adapt
+ * contract — V2, V3 and the 7702 one — computes
+ * `minGasLimitForContract = minGasLimit - 150000n` and bakes THAT into the
+ * action data as `require(gasleft() > minGasLimitForContract)`. So the offset
+ * is what "no floor" costs: 150_000n in gives exactly 0 out.
+ *
+ * Passing a literal `0n` yields -150_000n, which is not encodable as the
+ * contract's unsigned parameter and fails before it reaches the chain:
+ * `value out-of-bounds (argument="minGasLimit", value=-150000)`.
+ *
+ * Passing `undefined` is worse in the other direction — the SDK substitutes its
+ * own multi-million default, which forces the transaction to CARRY that much
+ * gas and reverts the estimate on the floor check itself.
+ *
+ * With the floor at zero the estimate reflects real execution, and the
+ * submitted limit is `calculateGasLimit(estimate)` — estimate x1.2 — which
+ * `setGasDetailsForTransaction` writes over whatever populate had set.
+ */
+export const NO_CROSS_CONTRACT_GAS_FLOOR = 150_000n;
+
 /** The output every recipe (0x swap, LP, Beefy, combo) reduces to. */
 export interface CrossContractInputs {
   relayAdaptUnshieldERC20Amounts: RecipeERC20Amount[];
   relayAdaptShieldERC20Addresses: RailgunERC20Recipient[];
   crossContractCalls: ContractTransaction[];
   /**
-   * Always 0n. Required rather than optional because undefined is not "no
-   * floor" — the SDK substitutes its own default, which is baked into the
-   * action data as an on-chain `require(gasleft() > minGasLimit)` and forces
-   * the transaction to carry that much gas. 0n leaves the estimate free to
-   * reflect actual execution; the populated limit is that estimate x1.2.
+   * Always NO_CROSS_CONTRACT_GAS_FLOOR. Required rather than optional because
+   * undefined is not "no floor" — the SDK substitutes its own default.
    */
   minGasLimit: bigint;
 }

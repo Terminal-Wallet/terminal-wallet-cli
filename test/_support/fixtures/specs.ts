@@ -8,6 +8,7 @@ import {
 } from "../../../src/flows/spec";
 import { CrossContractSpec } from "../../../src/flows/deps/cross-contract";
 import { CrossContractInputs } from "../../../src/railgun/transaction/cross-contract";
+import { NO_CROSS_CONTRACT_GAS_FLOOR } from "../../../src/railgun/transaction/cross-contract";
 import { erc20Recipient } from "./recipients";
 import { selfSignerFee } from "./fees";
 
@@ -42,7 +43,7 @@ export const crossContractInputs = (
   relayAdaptUnshieldERC20Amounts: [],
   relayAdaptShieldERC20Addresses: [],
   crossContractCalls: [],
-  minGasLimit: 0n,
+  minGasLimit: NO_CROSS_CONTRACT_GAS_FLOOR,
   ...over,
 });
 

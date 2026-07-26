@@ -1,68 +1,87 @@
 /**
- * Cross-contract calls carry no gas floor.
+ * Cross-contract calls carry no on-chain gas floor.
  *
- * `minGasLimit` is baked into the relay-adapt action data as an on-chain
- * `require(gasleft() > minGasLimit)`, so a non-zero value forces the
- * transaction to CARRY that much gas into the call. The private swap was
- * passing the cookbook recipe's figure, which comes from non-7702 assumptions
- * and is large enough that the gas estimate reverts on the floor check itself —
- * a revert with no sub-call index, which is why it surfaced as "RelayAdapt
- * multicall failed at index UNKNOWN."
+ * `minGasLimit` is not passed to the contract as given. Every relay-adapt
+ * contract computes `minGasLimit - 150000n` and bakes THAT into the action data
+ * as `require(gasleft() > ...)`, so the offset is what "no floor" costs.
  *
- * 0n lets the estimate reflect real execution, and the populated limit is that
- * estimate x1.2 — the figure handed to the broadcaster and charged on.
+ * Both ends of the range fail, in opposite ways:
  *
- * Asserted by reading the source: the values reach an SDK call this suite
- * cannot make, so what matters is that nothing reintroduces a floor.
+ *  - a literal `0n` yields -150_000n, unencodable as the contract's unsigned
+ *    parameter: `value out-of-bounds (argument="minGasLimit", value=-150000)`
+ *  - `undefined` makes the SDK substitute its own multi-million default, which
+ *    forces the transaction to carry that much gas and reverts the estimate on
+ *    the floor check — "multicall failed at index UNKNOWN", no sub-call index
+ *
+ * With the floor at zero the estimate reflects real execution and the submitted
+ * limit is estimate x1.2.
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { NO_CROSS_CONTRACT_GAS_FLOOR } from "../../../src/railgun/transaction/cross-contract";
 
 const SRC = resolve(process.cwd(), "src");
 const read = (rel: string) => readFileSync(join(SRC, rel), "utf-8");
 
-test("the private swap passes no gas floor", () => {
+/** What every relay-adapt contract subtracts before baking the floor in. */
+const SDK_CONTRACT_OFFSET = 150_000n;
+
+test("the constant lands the on-chain floor exactly at zero", () => {
+  assert.equal(NO_CROSS_CONTRACT_GAS_FLOOR - SDK_CONTRACT_OFFSET, 0n);
+});
+
+test("it is not negative after the subtraction", () => {
+  // The regression: 0n - 150000n is rejected before it reaches the chain.
+  assert.ok(NO_CROSS_CONTRACT_GAS_FLOOR - SDK_CONTRACT_OFFSET >= 0n);
+});
+
+test("the offset still matches the SDK on all three contracts", () => {
+  // If a dependency bump changes it, the constant is silently wrong and the
+  // floor stops being zero — so read it back rather than trusting the number.
+  const base = resolve(
+    process.cwd(),
+    "node_modules/@railgun-community/engine/dist/contracts/relay-adapt",
+  );
+  for (const rel of [
+    "V2/relay-adapt-v2.js",
+    "V2/relay-adapt-7702.js",
+    "V3/relay-adapt-v3.js",
+  ]) {
+    const source = readFileSync(join(base, rel), "utf-8");
+    const match = source.match(/return minimumGasLimit - (\d+)n;/);
+    assert.ok(match, `${rel}: could not read the offset`);
+    assert.equal(
+      BigInt(match[1]),
+      SDK_CONTRACT_OFFSET,
+      `${rel} now subtracts ${match[1]}, so the no-floor constant is wrong`,
+    );
+  }
+});
+
+test("the private swap uses it rather than the recipe's floor", () => {
   const swap = read("railgun/transaction/zeroX/0x-swap.ts");
-  assert.match(swap, /const minGasLimit = 0n;/);
+  assert.match(swap, /const minGasLimit = NO_CROSS_CONTRACT_GAS_FLOOR;/);
   assert.ok(
     !/minGasLimit\s*\}\s*=\s*swap\.config/.test(swap),
     "back to the recipe's floor, which reverts the estimate",
   );
 });
 
-test("recovery passes no gas floor either", () => {
+test("recovery uses it too", () => {
   const recovery = read("railgun/wallet/ephemeral-recovery.ts");
-  assert.match(recovery, /const recoveryMinGasLimit = 0n;/);
+  assert.match(recovery, /const recoveryMinGasLimit = NO_CROSS_CONTRACT_GAS_FLOOR;/);
 });
 
-test("the shared input type requires a value, so undefined cannot mean no floor", () => {
-  // undefined is the dangerous case: the SDK substitutes its own default
-  // rather than omitting the check.
+test("the shared input type requires a value", () => {
+  // undefined is the dangerous case: the SDK substitutes its own default.
   const contract = read("railgun/transaction/cross-contract.ts");
   assert.match(contract, /minGasLimit: bigint;/);
-  assert.ok(
-    !/minGasLimit\?: bigint/.test(contract),
-    "optional again — undefined would restore the SDK's floor",
-  );
+  assert.ok(!/minGasLimit\?: bigint/.test(contract), "optional again");
 });
 
-test("the swap adapter defaults to 0n rather than undefined", () => {
+test("the swap adapter never falls back to undefined", () => {
   const deps = read("flows/deps/swap.ts");
-  assert.match(deps, /minGasLimit: swap\.minGasLimit \?\? 0n/);
-});
-
-test("no cross-contract path reintroduces a non-zero floor", () => {
-  for (const file of [
-    "railgun/transaction/zeroX/0x-swap.ts",
-    "railgun/wallet/ephemeral-recovery.ts",
-    "flows/deps/swap.ts",
-  ]) {
-    const source = read(file);
-    const assignments = [...source.matchAll(/minGasLimit\w*\s*=\s*([^;,\n]+)/g)]
-      .map((m) => m[1].trim())
-      .filter((v) => !v.startsWith("0n") && !v.includes("bigint"));
-    assert.deepEqual(assignments, [], `${file} sets a gas floor: ${assignments.join(", ")}`);
-  }
+  assert.match(deps, /minGasLimit: swap\.minGasLimit \?\? NO_CROSS_CONTRACT_GAS_FLOOR/);
 });

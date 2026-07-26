@@ -52,6 +52,7 @@ import { getTransactionGasDetails } from "../private/private-tx";
 import { getCurrentEthersWallet } from "../../wallet/public-utils";
 import { emitCoreEvent } from "../../../core/events";
 import { createLogger } from "../../../platform/logger";
+import { NO_CROSS_CONTRACT_GAS_FLOOR } from "../cross-contract";
 
 const swapLog = createLogger("swap");
 
@@ -202,20 +203,12 @@ export const getZer0XSwapInputs = async (
       erc20Amounts: relayAdaptUnshieldERC20Amounts,
       nfts: [],
     };
-    // 0n, like every other cross-contract call.
-    //
-    // minGasLimit is baked into the action data as an on-chain
-    // `require(gasleft() > minGasLimit)`, so a non-zero floor forces the
-    // transaction to CARRY that much gas into the call. The recipe's figure
-    // comes from the cookbook's non-7702 assumptions and is large enough that
-    // the gas estimate reverts on the floor check itself — which reports no
-    // sub-call index, and surfaces as "RelayAdapt multicall failed at index
-    // UNKNOWN."
-    //
-    // With no floor the estimate reflects actual execution, and the populated
-    // limit is that estimate x1.2 (see getTransactionGasDetails' type-4
-    // overrides), which is what the broadcaster is handed and charges on.
-    const minGasLimit = 0n;
+    // No on-chain gas floor, like every other cross-contract call. The recipe's
+    // figure comes from the cookbook's non-7702 assumptions and is large enough
+    // that the estimate reverts on the floor check itself — a revert with no
+    // sub-call index, reported as "multicall failed at index UNKNOWN".
+    // See NO_CROSS_CONTRACT_GAS_FLOOR for why this is not literally zero.
+    const minGasLimit = NO_CROSS_CONTRACT_GAS_FLOOR;
     const recipeOutput: RecipeOutput = await swap.getRecipeOutput(recipeInput);
     const { crossContractCalls, erc20AmountRecipients } = recipeOutput;
 

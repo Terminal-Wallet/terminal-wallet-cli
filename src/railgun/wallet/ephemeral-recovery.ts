@@ -40,6 +40,7 @@ import {
 import { getOutputGasEstimate } from "../transaction/private/unshield-tx";
 import { PrivateGasDetails } from "../../models/transaction-models";
 import { emitCoreEvent } from "../../core/events";
+import { NO_CROSS_CONTRACT_GAS_FLOOR } from "../transaction/cross-contract";
 
 // EIP-7702 ephemeral accounts are per-op and never intended to hold a balance, but a partial
 // or failed relay-adapt (or a swap whose bought token wasn't shielded) can strand assets at a
@@ -273,13 +274,12 @@ const buildProved7702Batch = async (
     }
   }
 
-  // minGasLimit = 0n, as every cross-contract call uses. The SDK's default
-  // floor is baked into the action data's on-chain
-  // `require(gasleft() > minGasLimit)`, which forces the tx to CARRY that much
-  // gas into the call and over-provisions the limit the broadcaster charges on.
-  // Pinning 0n lets the estimate reflect actual execution; the populated limit
-  // is that estimate x1.2.
-  const recoveryMinGasLimit = 0n;
+  // No on-chain gas floor, as every cross-contract call uses. The SDK's default
+  // is baked into the action data as `require(gasleft() > minGasLimit)`, which
+  // forces the tx to CARRY that much gas and over-provisions the limit the
+  // broadcaster charges on. Without it the estimate reflects actual execution
+  // and the submitted limit is that estimate x1.2.
+  const recoveryMinGasLimit = NO_CROSS_CONTRACT_GAS_FLOOR;
 
   const wallet = fullWalletForID(railgunWalletID);
   const keyManager = new EphemeralKeyManager(wallet, encryptionKey);

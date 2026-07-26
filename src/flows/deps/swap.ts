@@ -14,7 +14,7 @@ import {
   RunResult,
 } from "../run";
 import { FeeMode, PrivateSwapSpec, PublicSwapSpec } from "../spec";
-import { CrossContractInputs } from "../../railgun/transaction/cross-contract";
+import { NO_CROSS_CONTRACT_GAS_FLOOR, CrossContractInputs } from "../../railgun/transaction/cross-contract";
 import {
   CrossContractSpec,
   runCrossContractTransaction,
@@ -30,8 +30,8 @@ export const swapToCrossContractInputs = (
   relayAdaptUnshieldERC20Amounts: swap.relayAdaptUnshieldERC20Amounts,
   relayAdaptShieldERC20Addresses: swap.relayAdaptShieldERC20Addresses,
   crossContractCalls: swap.crossContractCalls,
-  // 0n, never undefined — see CrossContractInputs.minGasLimit.
-  minGasLimit: swap.minGasLimit ?? 0n,
+  // Never undefined — see NO_CROSS_CONTRACT_GAS_FLOOR.
+  minGasLimit: swap.minGasLimit ?? NO_CROSS_CONTRACT_GAS_FLOOR,
 });
 
 export const runPrivateSwapTransaction = (
