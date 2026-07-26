@@ -299,9 +299,6 @@ export const initializeWalletSystems = async () => {
   if (isDefined(walletManager.keyChain.displayPrivate)) {
     walletManager.displayPrivate = walletManager.keyChain.displayPrivate;
   }
-  if (isDefined(walletManager.keyChain.responsiveMenu)) {
-    walletManager.responsiveMenu = walletManager.keyChain.responsiveMenu;
-  }
 
   if (wallet) {
     await loadEngineProvidersForNetwork(currentNetwork);

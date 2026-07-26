@@ -26,7 +26,6 @@ export type WalletManager = {
   hashedPassword: Optional<string | undefined>;
   menuCallback: () => Promise<void>;
   displayPrivate: boolean;
-  responsiveMenu: boolean;
   showSenderAddress: boolean;
 };
 export const walletManager: WalletManager = {
@@ -35,7 +34,6 @@ export const walletManager: WalletManager = {
   // privateBalanceCache: [],
   menuLoaded: false,
   displayPrivate: true,
-  responsiveMenu: true,
   showSenderAddress: true,
 } as any;
 

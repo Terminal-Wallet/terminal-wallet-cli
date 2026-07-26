@@ -16,6 +16,7 @@ export * from "./stubs/tx-run-deps";
 export * from "./stubs/send-private-deps";
 export * from "./stubs/send-public-deps";
 export * from "./stubs/cross-contract-pipeline";
+export * from "./stubs/approval-deps";
 
 // fixtures
 export * from "./fixtures/tokens";

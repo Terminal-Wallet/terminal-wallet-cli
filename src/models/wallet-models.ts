@@ -58,6 +58,11 @@ export type KeychainFile = {
   selectedWallet?: string;
   cachedTokenInfo?: TokenDatabaseMap;
   displayPrivate?: boolean;
+  /**
+   * Legacy: throttled the old prompt loop's redraw pulse. Nothing reads it —
+   * the terminal UI redraws on state change — but it is kept on the type so an
+   * existing keychain round-trips unchanged instead of silently losing a field.
+   */
   responsiveMenu?: boolean;
   customProviders?: CustomProviderMap;
   showSenderAddress?: boolean;

@@ -7,9 +7,6 @@ import { saveKeychainFile } from "./wallet-cache";
 import configDefaults from "../../config/config-defaults";
 
 
-export const isMenuResponsive = () => {
-  return walletManager.responsiveMenu;
-};
 
 export const shouldShowSender = () => {
   return walletManager.showSenderAddress;
@@ -22,12 +19,6 @@ export const toggleShouldShowSender = () =>{
   saveKeychainFile(walletManager.keyChain, keyChainPath);
 }
 
-export const toggleResponsiveMenu = () => {
-  walletManager.responsiveMenu = !walletManager.responsiveMenu;
-  const { keyChainPath } = configDefaults.engine;
-  walletManager.keyChain.responsiveMenu = walletManager.responsiveMenu;
-  saveKeychainFile(walletManager.keyChain, keyChainPath);
-};
 
 /** Persisted default fee preference for new private sends. */
 export const getDefaultFeeModePref = (): string =>
