@@ -72,7 +72,6 @@ import {
 import { getCurrentNetwork } from "../railgun/engine/engine";
 import { getWrappedTokenInfoForChain } from "../railgun/network/network-util";
 import { initializeWalletSystems } from "../railgun/wallet/wallet-init";
-import { latestBalancePoller } from "../railgun/wallet/scan-callbacks";
 import { overrideMainConfig } from "../config/config-overrides";
 import { configuredDefaultNetwork } from "../config/config-manager";
 import { installProcessHandlers } from "../platform/lifecycle";
@@ -596,7 +595,6 @@ export const runDeck = async (): Promise<void> => {
   feeders.refreshIdentity();
   setInterval(feeders.refreshIdentity, 5000);
   void feeders.refreshHistory();
-  latestBalancePoller(10 * 1000); // drains engine balance events into the cache
   await feeders.refreshBalances();
   void refreshNow(ctx); // one scan on load so balances populate unprompted
   feeders.startPolling();

@@ -16,6 +16,7 @@ import { NetworkName } from "@railgun-community/shared-models";
 import { getCurrentNetwork, rescanBalances, getTreeHeight } from "../engine/engine";
 import { walletManager } from "./wallet-manager";
 import { emitCoreEvent } from "../../core/events";
+import { createDrainLoop } from "../../platform/drain";
 
 const currentChain = (): NetworkName | undefined => {
   try {
@@ -103,9 +104,6 @@ const makeMerkletreeScanCallback =
 export const utxoMerkletreeScanCallback = makeMerkletreeScanCallback("utxo");
 export const txidMerkletreeScanCallback = makeMerkletreeScanCallback("txid");
 
-/** Guards against the poller and an immediate drain running at the same time. */
-let draining = false;
-
 const drainBalanceQueue = async (queued: RailgunBalancesEvent[]) => {
   // Dedupe to the latest event per bucket.
   const buckets: MapType<RailgunBalancesEvent> = {};
@@ -135,38 +133,35 @@ const drainBalanceQueue = async (queued: RailgunBalancesEvent[]) => {
     }
   }
 
-  // The queue is snapshotted and cleared by the caller BEFORE this await-heavy
-  // drain, so events arriving mid-drain accumulate in the fresh queue and the
-  // caller's next round picks them up. Do NOT clear it here.
+  // The cache moved — whoever derives balances from it should re-read.
   if (updated) emitCoreEvent({ type: "balances:refreshed", chain: currentChain() });
+};
+
+/** Take the queued events and clear the queue, in one synchronous step. */
+const takeQueuedBalances = (): RailgunBalancesEvent[] => {
+  const queued = walletManager.latestPrivateBalanceEvents;
+  walletManager.latestPrivateBalanceEvents = [];
+  return isDefined(queued) ? queued : [];
 };
 
 /**
  * Drain the queued balance events into the cache.
  *
- * Each round snapshots and clears the queue before awaiting. The previous
- * version built its bucket map once, awaited, and cleared the queue at the end
- * — so any event that landed during the drain was wiped unread. In practice
- * that lost the non-Spendable buckets (ShieldPending, POI) and left the
- * portfolio showing spendable balances only.
+ * There is no timer behind this. Balance events are pushed by the engine and
+ * drained the moment they land; an event that arrives mid-drain is collected by
+ * the loop's next round rather than by a poll. A ten-second poller used to sit
+ * here, which is simply how long balances took to appear after boot.
+ *
+ * The previous version also built its bucket map from the queue, awaited the
+ * cache writes, and cleared the queue at the end — so anything that arrived
+ * during those awaits was wiped unread. That is how the non-Spendable buckets
+ * went missing: ShieldPending and POI land while the Spendable write is still
+ * awaiting, and the final clear dropped them.
  */
-export const formatLatestBalancesEvent = async () => {
-  if (draining) return;
-  draining = true;
-  try {
-    for (;;) {
-      const queued = walletManager.latestPrivateBalanceEvents;
-      if (!isDefined(queued) || queued.length === 0) {
-        walletManager.latestPrivateBalanceEvents = [];
-        return;
-      }
-      walletManager.latestPrivateBalanceEvents = []; // swap before awaiting
-      await drainBalanceQueue(queued);
-    }
-  } finally {
-    draining = false;
-  }
-};
+export const formatLatestBalancesEvent = createDrainLoop(
+  takeQueuedBalances,
+  drainBalanceQueue,
+);
 
 export const scanBalancesCallback = async (
   tokenBalances: RailgunBalancesEvent,
@@ -179,13 +174,6 @@ export const scanBalancesCallback = async (
   void formatLatestBalancesEvent();
 };
 
-export const latestBalancePoller = async (pollingInterval: number) => {
-  await formatLatestBalancesEvent().catch((err) => {
-    emitCoreEvent({ type: "status:message", text: err.message });
-  });
-  await delay(pollingInterval);
-  latestBalancePoller(pollingInterval);
-};
 
 export const getPOIStatusString = () => {
   const event = walletManager.poiProgressEvent;
