@@ -39,8 +39,9 @@ export const presetsFromEstimate = (
   evmGasType: EVMGasType,
   est: CustomGasEstimate,
 ): GasPreset[] => {
+  // Type4 prices like Type2 — both are 1559.
   const mk = (key: GasPreset["key"], priority: bigint): GasPreset =>
-    evmGasType === EVMGasType.Type2
+    evmGasType === EVMGasType.Type2 || evmGasType === EVMGasType.Type4
       ? {
           key,
           override: {
@@ -70,7 +71,8 @@ export const customOverride = (
     maxPriorityFeePerGas?: bigint;
   },
 ): GasOverride | undefined => {
-  if (evmGasType === EVMGasType.Type2) {
+  // Type4 takes the same 1559 fields as Type2.
+  if (evmGasType === EVMGasType.Type2 || evmGasType === EVMGasType.Type4) {
     if (fields.maxFeePerGas === undefined || fields.maxPriorityFeePerGas === undefined)
       return undefined;
     return {
@@ -87,16 +89,34 @@ export const customOverride = (
 };
 
 /** Apply an override to a TransactionGasDetails (private/shield), keeping gasEstimate. */
+/**
+ * Apply a chosen gas price to existing gas details.
+ *
+ * An override sets a PRICE; it does not decide the transaction type. The
+ * override is built from the chain's default EVM gas type, which is never
+ * Type4 — so taking the type from it downgrades a 7702 relay-adapt transaction
+ * that is about to be submitted as type 4, and the estimate and proof no longer
+ * describe what gets sent.
+ *
+ * Type4 is therefore preserved from `details`, and a legacy-shaped override is
+ * mapped onto the 1559 fields it needs.
+ */
 export const applyOverrideToDetails = (
   details: TransactionGasDetails,
   o: GasOverride,
 ): TransactionGasDetails => {
-  const base = { evmGasType: o.evmGasType, gasEstimate: details.gasEstimate };
-  return (
-    o.evmGasType === EVMGasType.Type2
-      ? { ...base, maxFeePerGas: o.maxFeePerGas, maxPriorityFeePerGas: o.maxPriorityFeePerGas }
-      : { ...base, gasPrice: o.gasPrice }
-  ) as TransactionGasDetails;
+  const evmGasType =
+    details.evmGasType === EVMGasType.Type4 ? EVMGasType.Type4 : o.evmGasType;
+  const base = { evmGasType, gasEstimate: details.gasEstimate };
+
+  if (evmGasType === EVMGasType.Type2 || evmGasType === EVMGasType.Type4) {
+    return (
+      o.evmGasType === EVMGasType.Type2
+        ? { ...base, maxFeePerGas: o.maxFeePerGas, maxPriorityFeePerGas: o.maxPriorityFeePerGas }
+        : { ...base, maxFeePerGas: priceField(o), maxPriorityFeePerGas: 0n }
+    ) as TransactionGasDetails;
+  }
+  return { ...base, gasPrice: priceField(o) } as TransactionGasDetails;
 };
 
 /** Apply an override to a populated ethers tx (public), keeping gasLimit. */

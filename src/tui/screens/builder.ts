@@ -90,6 +90,7 @@ import {
   getCachedEncryptionKey,
 } from "../../railgun/wallet/wallet-password";
 import { evmGasTypeForChain } from "../../railgun/gas/gas-selection";
+import { EVMGasType } from "@railgun-community/shared-models";
 
 export interface BuilderHost {
   ctx: DeckContext;
@@ -737,9 +738,12 @@ export const createBuilder = (host: BuilderHost): Builder => {
       const memo = await provider.input("Memo (optional)");
       if (memo !== undefined) state.memo = memo;
     } else if (key === "gas") {
+      // A relay-adapt flow is submitted as type 4, which is 1559-priced
+      // whatever the chain's default is. Offering legacy presets on a legacy
+      // chain would give it a gasPrice it cannot carry.
       const gas = await collectGasSelection(
         cfg.chainName,
-        evmGasTypeForChain(cfg.chainName),
+        cfg.relayAdapt ? EVMGasType.Type4 : evmGasTypeForChain(cfg.chainName),
         cfg.gasUnitsHint,
         cfg.gasSymbol,
         cfg.gasDecimals,

@@ -58,7 +58,8 @@ export const collectGasSelection = async (
 
   // Custom entry — EIP-1559 (maxFee + priority) or legacy (gasPrice).
   try {
-    if (evmGasType === EVMGasType.Type2) {
+    // Type4 is 1559-priced, so it collects the same two fields.
+    if (evmGasType === EVMGasType.Type2 || evmGasType === EVMGasType.Type4) {
       const mf = await provider.input("Max fee per gas (gwei)");
       if (!mf) return undefined;
       const mp = await provider.input("Max priority fee per gas (gwei)");
