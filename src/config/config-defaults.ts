@@ -110,8 +110,9 @@ export default {
       providers: [
         getProviderObjectFromURL("https://ethereum-rpc.publicnode.com"),
         getProviderObjectFromURL("https://eth.drpc.org"),
-        getProviderObjectFromURL("https://eth.merkle.io"),
-        getProviderObjectFromURL("https://cloudflare-eth.com"),
+        getProviderObjectFromURL("https://1rpc.io/eth"),
+        getProviderObjectFromURL("https://rpc.flashbots.net"),
+        getProviderObjectFromURL("https://eth.meowrpc.com"),
       ],
     },
     [NetworkName.Polygon]: {

@@ -70,9 +70,6 @@ const buildFallbackRemoteConfig = (): RemoteConfig => {
 export const fallbackRemoteConfig: RemoteConfig = buildFallbackRemoteConfig();
 
 export const overrideMainConfig = async (_version: string) => {
-  // Must precede anything that reads a provider list.
-  applyProviderOverrides();
-
   const overrides = await loadConfigForNetwork();
   // If the remote config is unavailable, run on the built-in fallback rather than exiting.
   const effective = overrides ?? fallbackRemoteConfig;
@@ -115,6 +112,11 @@ export const overrideMainConfig = async (_version: string) => {
       }
     }
   }
+
+  // Last, so an explicitly configured provider list wins over both the baked-in
+  // defaults and whatever the remote config supplies. Dropping a dead endpoint
+  // is otherwise only possible by editing the defaults.
+  applyProviderOverrides();
 };
 
 export type VersionVerdict =

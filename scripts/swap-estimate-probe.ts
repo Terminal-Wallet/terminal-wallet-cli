@@ -51,7 +51,19 @@ const main = async () => {
   const encryptionKey = await getSaltedPassword();
   if (!encryptionKey) throw new Error("no encryption key");
 
-  const balances = await getPrivateERC20BalancesForChain(chainName);
+  // Balances arrive from engine events after boot, so the first read is empty.
+  // Wait for the cache to fill rather than reporting "not in spendable".
+  let balances = await getPrivateERC20BalancesForChain(chainName);
+  for (let i = 0; i < 60 && balances.length === 0; i += 1) {
+    await new Promise((r) => setTimeout(r, 1000));
+    balances = await getPrivateERC20BalancesForChain(chainName);
+    if (i % 5 === 0) console.log(`  waiting for balances… ${i}s`);
+  }
+  if (balances.length === 0) {
+    console.log("no spendable balances after 60s — is the wallet synced?");
+    process.exit(1);
+  }
+
   const sell = balances.find((b) => b.symbol === sellSymbol);
   if (!sell) {
     console.log(`sell token ${sellSymbol} not in spendable balances:`);

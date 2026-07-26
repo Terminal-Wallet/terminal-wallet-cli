@@ -116,11 +116,13 @@ test("provider overrides are applied during config boot", () => {
   assert.match(overrides, /applyProviderOverrides\(\)/);
 });
 
-test("they are applied before anything reads a provider list", () => {
+test("an explicit provider list wins over the remote config", () => {
+  // The remote config assigns networkConfig.providers wholesale. Applying the
+  // user's overrides before that would discard them, leaving no way to drop a
+  // dead endpoint short of editing the baked-in defaults.
   const overrides = read("config/config-overrides.ts");
-  const body = overrides.slice(overrides.indexOf("export const overrideMainConfig"));
-  const applied = body.indexOf("applyProviderOverrides()");
-  const read_ = body.indexOf("await loadConfigForNetwork()");
-  assert.ok(applied >= 0 && read_ > 0);
-  assert.ok(applied < read_, "config is read before the overrides are installed");
+  const remoteAssign = overrides.lastIndexOf("networkConfig.providers = _providers");
+  const applied = overrides.lastIndexOf("applyProviderOverrides()");
+  assert.ok(remoteAssign > 0 && applied > 0);
+  assert.ok(applied > remoteAssign, "the remote config overwrites the user's providers");
 });
