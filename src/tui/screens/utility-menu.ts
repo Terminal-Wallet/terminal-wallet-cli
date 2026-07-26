@@ -63,7 +63,7 @@ import { getChainForName } from "../../railgun/network/network-util";
 import { loadTransactionHistory } from "../../railgun/transaction-history";
 import { confirmPassword } from "../../railgun/wallet/wallet-password";
 import { processDestroyExit } from "../../platform/lifecycle";
-import { openEphemeralAdmin } from "./ephemeral-admin";
+import { openEphemeralConsole } from "./ephemeral-console";
 
 const network = (): NetworkName => getState().network as NetworkName;
 
@@ -353,7 +353,7 @@ export const dispatchUtility = async (
       });
       break;
     case "ephemeral-accounts":
-      await openEphemeralAdmin(ctx);
+      await openEphemeralConsole(ctx);
       break;
     case "destruct":
       await showDestruct();

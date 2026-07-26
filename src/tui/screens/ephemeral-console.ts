@@ -1,0 +1,288 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+/**
+ * The 7702 ephemeral console.
+ *
+ * Relay-adapt sends (unshield-to-base, private swaps, base shields) execute
+ * from a throwaway account whose index the wallet ratchets forward after each
+ * success. That is invisible until a send half-fails and leaves assets at an
+ * address the wallet has already moved past.
+ *
+ * Which is why this is a list rather than a menu. The console it replaces asked
+ * you to type the index to recover from — knowledge you do not have, since the
+ * wallet moved past it without saying so, and the one index you do know (the
+ * current one) is the case guaranteed to hold nothing. Here the accounts are
+ * on screen with what is at each of them, and every action hangs off the row
+ * you have selected.
+ *
+ * Password-gated on entry: three actions mutate the persisted index and one
+ * moves funds.
+ */
+import blessed from "blessed";
+import { NetworkName, isDefined } from "@railgun-community/shared-models";
+import { DeckContext } from "../context";
+import { getInputProvider } from "../../core/input";
+import { setState } from "../store";
+import { tag } from "../format/tags";
+import { createModal } from "../widgets/modal";
+import { showText } from "./popout";
+import {
+  IndexRow,
+  buildIndexRows,
+  holdsAssets,
+  rowLabel,
+  scanVerdict,
+  unscanned,
+} from "../format/ephemeral-rows";
+import {
+  balanceLines,
+  rewindsIndex,
+  rewindWarning,
+  advanceWarning,
+} from "../format/ephemeral";
+import {
+  advanceEphemeralIndex,
+  getCurrentEphemeralInfo,
+  getEphemeralHistory,
+  setEphemeralIndex,
+  syncEphemeralIndexFromHistory,
+} from "../../railgun/wallet/ephemeral-util";
+import {
+  scanEphemeralAssets,
+  EphemeralAssetScan,
+} from "../../railgun/wallet/ephemeral-recovery";
+import { getSaltedPassword } from "../../railgun/wallet/wallet-password";
+import { getCurrentNetwork } from "../../railgun/engine/engine";
+import { runRecovery } from "./ephemeral-recover";
+
+const FOOTER =
+  "↑/↓ row · Enter scan · r recover · m make current · S scan all · s sync · a advance · Esc close";
+
+export const openEphemeralConsole = async (ctx: DeckContext): Promise<void> => {
+  const encryptionKey = await getSaltedPassword();
+  if (!isDefined(encryptionKey)) return;
+  const chainName: NetworkName = getCurrentNetwork();
+  const provider = getInputProvider();
+
+  const scans = new Map<number, EphemeralAssetScan>();
+  let rows: IndexRow[] = [];
+  let currentIndex = -1;
+  let busy = false;
+
+  return new Promise<void>((resolveClosed) => {
+    let done: () => void = () => undefined;
+    const { box, close } = createModal(blessed, ctx.screen, {
+      title: `7702 ephemeral accounts · ${chainName}`,
+      widthPct: 88,
+      height: Math.max(12, ((ctx.screen.height as number) || 24) - 4),
+      accent: "magenta",
+      footer: FOOTER,
+      onDismiss: () => done(),
+    });
+
+    const header = blessed.box({
+      parent: box,
+      top: 0,
+      left: 0,
+      right: 0,
+      height: 3,
+      tags: true,
+    });
+    const list: any = blessed.list({
+      parent: box,
+      top: 3,
+      left: 0,
+      right: 0,
+      bottom: 1,
+      tags: true,
+      keys: true,
+      mouse: true,
+      vi: true,
+      items: [],
+      style: { selected: { bg: "magenta", fg: "black" } },
+      scrollbar: { ch: " ", style: { bg: "magenta" } },
+    });
+
+    const selected = (): IndexRow | undefined => rows[list.selected ?? 0];
+
+    const draw = () => {
+      header.setContent(
+        [
+          `${tag("current index", "gray")} ${tag(`${currentIndex}`, "cyan")}   ` +
+            `${tag(scanVerdict(rows), "gray")}`,
+          rows.length
+            ? tag(
+                "an account below the current index still holding funds is stranded — recover it",
+                "gray",
+              )
+            : tag("no ephemeral history on this chain yet", "gray"),
+        ].join("\n"),
+      );
+      const keep = list.selected ?? 0;
+      list.setItems(
+        rows.map((row) => {
+          const label = rowLabel(row);
+          return holdsAssets(row) ? `{yellow-fg}${label}{/}` : label;
+        }),
+      );
+      list.select(Math.min(keep, Math.max(0, rows.length - 1)));
+      ctx.screen.render();
+    };
+
+    /** Re-read the index and history; keeps whatever has already been scanned. */
+    const reload = async () => {
+      const info = await getCurrentEphemeralInfo(chainName, encryptionKey);
+      currentIndex = info.index;
+      const history = await getEphemeralHistory(chainName, encryptionKey);
+      rows = buildIndexRows(currentIndex, history.entries, scans);
+      draw();
+    };
+
+    /**
+     * Serialises the actions. Every one of them awaits the chain or a modal,
+     * and a second keypress part-way through would interleave two of them on
+     * the same shared row state.
+     */
+    const run = async (label: string, work: () => Promise<void>) => {
+      if (busy) return;
+      busy = true;
+      try {
+        await work();
+      } catch (err) {
+        provider.notify(`${label} failed: ${(err as Error).message}`);
+      } finally {
+        busy = false;
+        ctx.screen.render();
+      }
+    };
+
+    const scanRow = (row: IndexRow) =>
+      run("Scan", async () => {
+        setState({ status: `Scanning ephemeral [${row.index}]…` });
+        scans.set(row.index, await scanEphemeralAssets(chainName, row.address));
+        await reload();
+        provider.notify(
+          holdsAssets(rows.find((r) => r.index === row.index) as IndexRow)
+            ? `[${row.index}] is holding funds — press r to recover`
+            : `[${row.index}] is empty.`,
+        );
+      });
+
+    const scanAll = () =>
+      run("Scan all", async () => {
+        const pending = unscanned(rows);
+        if (!pending.length) {
+          provider.notify("Every account is already scanned.");
+          return;
+        }
+        for (const [n, row] of pending.entries()) {
+          setState({
+            status: `Scanning ephemeral accounts… ${n + 1}/${pending.length}`,
+          });
+          // Sequential on purpose: this is several RPC calls per account, and
+          // firing them all at once is how a public endpoint rate-limits us.
+          // eslint-disable-next-line no-await-in-loop
+          scans.set(row.index, await scanEphemeralAssets(chainName, row.address));
+          // eslint-disable-next-line no-await-in-loop
+          await reload();
+        }
+        provider.notify(scanVerdict(rows));
+      });
+
+    const showBalances = (row: IndexRow) =>
+      run("Balances", async () => {
+        const scan =
+          scans.get(row.index) ??
+          (await scanEphemeralAssets(chainName, row.address));
+        scans.set(row.index, scan);
+        await reload();
+        await showText(
+          ctx,
+          `7702 ephemeral · [${row.index}]`,
+          balanceLines(row.index, row.address, scan).join("\n"),
+        );
+      });
+
+    const recover = (row: IndexRow) =>
+      run("Recovery", async () => {
+        const scan =
+          scans.get(row.index) ??
+          (await scanEphemeralAssets(chainName, row.address));
+        scans.set(row.index, scan);
+        await runRecovery(ctx, chainName, encryptionKey, row.index, scan);
+        // The recovery moves funds out, so what is left here has changed.
+        scans.delete(row.index);
+        await reload();
+      });
+
+    const makeCurrent = (row: IndexRow) =>
+      run("Set index", async () => {
+        if (row.index === currentIndex) {
+          provider.notify(`[${row.index}] is already the current index.`);
+          return;
+        }
+        // Rewinding can point the wallet at an already-spent account, whose
+        // nonce-0 7702 authorization the network will reject.
+        if (
+          rewindsIndex(currentIndex, row.index) &&
+          !(await provider.confirm(rewindWarning(currentIndex)))
+        ) {
+          return;
+        }
+        await setEphemeralIndex(chainName, row.index);
+        await reload();
+        provider.notify(`Ephemeral index set to ${row.index}.`);
+      });
+
+    const sync = () =>
+      run("Sync", async () => {
+        const { before, after } = await syncEphemeralIndexFromHistory(
+          chainName,
+          encryptionKey,
+        );
+        await reload();
+        provider.notify(
+          before === after
+            ? `Index already in sync at ${after}.`
+            : `Index realigned ${before} → ${after}.`,
+        );
+      });
+
+    const advance = () =>
+      run("Advance", async () => {
+        const current = rows.find((row) => row.isCurrent);
+        if (
+          !(await provider.confirm(
+            advanceWarning(currentIndex, current?.address ?? ""),
+          ))
+        ) {
+          return;
+        }
+        const { before, after } = await advanceEphemeralIndex(chainName);
+        await reload();
+        provider.notify(`Ephemeral index ${before} → ${after}.`);
+      });
+
+    const onRow = (act: (row: IndexRow) => Promise<void>) => () => {
+      const row = selected();
+      if (row) void act(row);
+    };
+
+    list.key(["enter"], onRow(scanRow));
+    list.key(["b"], onRow(showBalances));
+    list.key(["r"], onRow(recover));
+    list.key(["m"], onRow(makeCurrent));
+    list.key(["S"], () => void scanAll());
+    list.key(["s"], () => void sync());
+    list.key(["a"], () => void advance());
+
+    done = () => {
+      close();
+      resolveClosed();
+    };
+    list.key(["escape", "q"], done);
+    box.key(["escape", "q"], done);
+
+    list.focus();
+    void run("Load", reload);
+  });
+};
