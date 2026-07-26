@@ -84,7 +84,10 @@ import {
   shouldShowSender,
   toggleShouldShowSender,
 } from "../../railgun/wallet/wallet-util";
-import { confirmPassword } from "../../railgun/wallet/wallet-password";
+import {
+  confirmPassword,
+  getCachedEncryptionKey,
+} from "../../railgun/wallet/wallet-password";
 import { evmGasTypeForChain } from "../../railgun/gas/gas-selection";
 
 export interface BuilderHost {
@@ -395,13 +398,17 @@ export const createBuilder = (host: BuilderHost): Builder => {
     if (!state.token || !state.buyToken || !state.amount) return;
     try {
       const isPublic = !cfg.fields.includes("fee");
+      // The cached key, never a prompt: a private swap's quote needs it to
+      // derive the 7702 taker address, but stopping to ask for a password while
+      // someone is typing an amount is not acceptable. Locked wallet, no
+      // preview — which is what the placeholder is for.
       const { inputs } = await buildSwapInputs(
         cfg.chainName,
         state.token,
         state.buyToken,
         state.amount,
         isPublic,
-        state.address,
+        getCachedEncryptionKey(),
       );
       if (inputs?.readableSwapPrices) {
         swapPreview = toSwapPreview(inputs.readableSwapPrices);

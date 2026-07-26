@@ -71,14 +71,27 @@ const loadBuyTokens = async (chainName: NetworkName): Promise<RailgunDisplayBala
   }));
 };
 
-/** Fetch the live 0x quote/recipe for a sell→buy pair (privateDest = 0zk for private). */
+/**
+ * Quote a swap.
+ *
+ * The last argument is the wallet ENCRYPTION KEY, and only a private swap needs
+ * it: the 7702 relay-adapt executes from an ephemeral account derived from it,
+ * and the quote has to name that account as taker.
+ *
+ * It used to be passed a 0zk destination address instead. Both are strings, so
+ * nothing complained — and the ephemeral derivation then tried to decrypt the
+ * wallet record with an address as its key, which is where "Unable to decrypt
+ * ciphertext." came from. The recipe forces the wallet's own address as the
+ * recipient regardless, so the destination it was passing had no effect even
+ * when it worked.
+ */
 export const buildSwapInputs = async (
   chainName: NetworkName,
   sell: RailgunDisplayBalance,
   buy: RailgunDisplayBalance,
   amountStr: string,
   isPublic: boolean,
-  privateDest?: string,
+  encryptionKey?: string,
 ) => {
   const amount = parseUnits(amountStr, sell.decimals);
   const wrapped = getWrappedTokenInfoForChain(chainName);
@@ -89,7 +102,7 @@ export const buildSwapInputs = async (
     amount,
     SWAP_SLIPPAGE_BPS,
     isPublic,
-    privateDest,
+    encryptionKey,
   );
   return { inputs, amount, sellIsBase: wrapped.symbol === sell.symbol };
 };
@@ -438,9 +451,11 @@ export const txBuilderConfigs: Record<
     title: "Swap ERC20 — Privately (0x)",
     chainName,
     verb: "Swap",
-    fields: ["token", "buyToken", "amount", "address", "fee", "showSender", "gas"],
-    addressLabel: "Destination private (0zk) address",
-    defaultAddress: getCurrentRailgunAddress(), // default own 0zk; editable to any 0zk
+    // No destination field: the relay-adapt recipe forces the wallet's own 0zk
+    // address as the recipient, so an editable destination was a control that
+    // did nothing — and the value it collected was being passed as the
+    // encryption key, which is what broke the send.
+    fields: ["token", "buyToken", "amount", "fee", "showSender", "gas"],
     // Spend flow: Spendable-bucket only (see private-transfer).
     loadTokens: () => getPrivateERC20BalancesForChain(chainName),
     loadBuyTokens: () => loadBuyTokens(chainName),
@@ -457,7 +472,7 @@ export const txBuilderConfigs: Record<
       // had already approved.
       const { token: sell, buyToken: buy, amount: amountStr } = s;
       const inputs = await quoteForSubmit(s, () =>
-        buildSwapInputs(chainName, sell, buy, amountStr, false, s.address),
+        buildSwapInputs(chainName, sell, buy, amountStr, false, encryptionKey),
       );
       if (!inputs?.quote) return { ok: false, error: "no swap quote for that pair" };
       const spec: PrivateSwapSpec = {

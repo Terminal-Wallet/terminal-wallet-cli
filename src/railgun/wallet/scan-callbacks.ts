@@ -166,7 +166,12 @@ export const formatLatestBalancesEvent = createDrainLoop(
 export const scanBalancesCallback = async (
   tokenBalances: RailgunBalancesEvent,
 ) => {
-  walletManager.latestPrivateBalanceEvents?.push(tokenBalances);
+  // Not `?.push` — on an unset queue that silently discards the event, and the
+  // first balance event after boot is the one that fills an empty portfolio.
+  if (!isDefined(walletManager.latestPrivateBalanceEvents)) {
+    walletManager.latestPrivateBalanceEvents = [];
+  }
+  walletManager.latestPrivateBalanceEvents.push(tokenBalances);
   // Drained now rather than up to a full poll interval later — balances that
   // the engine already has should not wait on a timer to be shown. The poller
   // stays as a backstop for anything queued while a drain was in flight, and

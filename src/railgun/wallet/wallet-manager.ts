@@ -35,6 +35,10 @@ export const walletManager: WalletManager = {
   menuLoaded: false,
   displayPrivate: true,
   showSenderAddress: true,
+  // Present from the start. The engine can deliver a balance event before
+  // anything has drained one, and a producer that has to wait for a consumer to
+  // create its queue drops whatever arrives first.
+  latestPrivateBalanceEvents: [],
 } as any;
 
 export const getScanProgressString = () => {

@@ -22,6 +22,17 @@ import { getInputProvider } from "../../core/input";
 import { computePasswordHash, hashString } from "../../platform/crypto";
 import { walletManager } from "./wallet-manager";
 
+/**
+ * The derived engine key if the wallet is already unlocked, otherwise
+ * undefined. Never prompts.
+ *
+ * For work that should happen quietly or not at all — a live quote preview
+ * needs the key to derive the 7702 ephemeral taker address, but stopping to ask
+ * for a password while someone types an amount is not acceptable.
+ */
+export const getCachedEncryptionKey = (): string | undefined =>
+  walletManager.hashedPassword;
+
 export const clearHashedPassword = () => {
   walletManager.hashedPassword = undefined;
 };
