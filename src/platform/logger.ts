@@ -10,8 +10,9 @@
  *   - TW_LOG_LEVEL = debug | info | warn | error   (default: info)
  *   - TW_VERBOSE   = 1 | true                       (alias for debug)
  *
- * Sinks: info -> stdout; debug/warn/error -> stderr (so diagnostics never
- * corrupt piped stdout). No file sink (deferred).
+ * Sinks: by default info -> stdout; debug/warn/error -> stderr (so diagnostics
+ * never corrupt piped stdout). A renderer can install its own sink with
+ * setLogSink to keep lines off a screen it is drawing. No file sink (deferred).
  *
  * Redaction: every argument is scrubbed before it is written. Secret-named
  * object keys are masked, and mnemonic/private-key shaped strings are masked,
@@ -124,6 +125,35 @@ export interface Logger {
   error: (...args: unknown[]) => void;
 }
 
+export interface LogRecord {
+  level: LogLevel;
+  namespace: string;
+  /** Already redacted and flattened; safe to display verbatim. */
+  text: string;
+}
+
+export type LogSink = (record: LogRecord) => void;
+
+/**
+ * Where log lines go.
+ *
+ * Writing to stdout/stderr is correct for a CLI and catastrophic under a
+ * full-screen terminal UI: the SDK's provider health checks are chatty enough
+ * to paint whole HTML error bodies over a rendered screen, and blessed has no
+ * idea it happened. A renderer installs a sink to divert every line into its
+ * own log pane, and clears it on teardown so a crash after the screen is gone
+ * still reaches the terminal.
+ *
+ * Kept as an injected function so this module still imports nothing.
+ */
+let sink: LogSink | undefined;
+/** Guards against a sink whose own work logs — that would recurse forever. */
+let inSink = false;
+
+export const setLogSink = (next: LogSink | undefined): void => {
+  sink = next;
+};
+
 const write = (
   level: LogLevel,
   namespace: string,
@@ -132,9 +162,21 @@ const write = (
   if (LEVEL_ORDER[level] < LEVEL_ORDER[threshold]) {
     return;
   }
-  const line = `terminal-wallet:${level}:${namespace} ${args
-    .map(format)
-    .join(" ")}\n`;
+  const text = args.map(format).join(" ");
+
+  if (sink && !inSink) {
+    inSink = true;
+    try {
+      sink({ level, namespace, text });
+      return;
+    } catch {
+      // A broken sink must not swallow the line: fall through and write it.
+    } finally {
+      inSink = false;
+    }
+  }
+
+  const line = `terminal-wallet:${level}:${namespace} ${text}\n`;
   if (level === "info") {
     process.stdout.write(line);
   } else {

@@ -21,6 +21,7 @@ import { attachCoreAdapter } from "./adapter";
 import { createBlessedInputProvider } from "./input-provider";
 import { setInputProvider } from "../core/input";
 import { onCoreEvent } from "../core/events";
+import { installDeckLogSink, releaseDeckLogSink } from "./log-sink";
 import { tag, short } from "./format/tags";
 import {
   pctDelta,
@@ -494,6 +495,9 @@ export const runDeck = async (): Promise<void> => {
   // --- keys ------------------------------------------------------------------
   const quit = () => {
     feeders.stopPolling();
+    // Released before the screen goes: anything logged during teardown belongs
+    // on the terminal, and there is no pane left to hold it.
+    releaseDeckLogSink();
     screen.destroy();
     process.exit(0);
   };
@@ -550,6 +554,10 @@ export const runDeck = async (): Promise<void> => {
   setInputProvider(createBlessedInputProvider(blessed, screen));
   attachCoreAdapter();
   subscribe(render);
+
+  // Before anything boots: the engine's provider health checks fire during
+  // initializeWalletSystems, and unclaimed they land on top of the screen.
+  installDeckLogSink();
 
   const seedNetwork = configuredDefaultNetwork();
   if (seedNetwork) {

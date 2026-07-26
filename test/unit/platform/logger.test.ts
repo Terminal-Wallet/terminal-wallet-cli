@@ -7,7 +7,11 @@
  */
 import { test, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
-import { createLogger } from "../../../src/platform/logger";
+import {
+  createLogger,
+  setLogSink,
+  LogRecord,
+} from "../../../src/platform/logger";
 
 const MNEMONIC =
   "legal winner thank year wave sausage worth useful legal winner thank yellow";
@@ -138,4 +142,78 @@ test("info goes to stdout and error to stderr", () => {
   }
   // Diagnostics must not corrupt piped stdout.
   assert.deepEqual(seen, ["stdout", "stderr"]);
+});
+
+/**
+ * Sink diversion.
+ *
+ * A full-screen terminal UI and a logger that writes to stdout cannot coexist:
+ * the SDK's provider health checks are chatty enough to paint whole HTML error
+ * bodies over a rendered screen, and blessed never learns it was overwritten.
+ * These assert that a renderer can take the stream and give it back.
+ */
+
+test("an installed sink receives the line and the terminal does not", () => {
+  const records: LogRecord[] = [];
+  setLogSink((r) => records.push(r));
+  try {
+    createLogger("engine").warn("provider health check failed");
+  } finally {
+    setLogSink(undefined);
+  }
+  assert.equal(records.length, 1);
+  assert.equal(records[0].level, "warn");
+  assert.equal(records[0].namespace, "engine");
+  assert.match(records[0].text, /provider health check failed/);
+  assert.equal(output(), "", "nothing reached stdout/stderr");
+});
+
+test("clearing the sink puts the terminal back", () => {
+  setLogSink(() => undefined);
+  setLogSink(undefined);
+  createLogger("test").info("back on stdout");
+  assert.match(output(), /back on stdout/);
+});
+
+test("a sink still gets redacted text", () => {
+  // The sink is a display surface like any other — a renderer that logs a
+  // mnemonic into a scrollable pane has leaked it just as thoroughly.
+  const records: LogRecord[] = [];
+  setLogSink((r) => records.push(r));
+  try {
+    createLogger("test").info(`seed ${MNEMONIC}`);
+  } finally {
+    setLogSink(undefined);
+  }
+  assert.ok(!records[0].text.includes(MNEMONIC));
+  assert.match(records[0].text, /REDACTED/);
+});
+
+test("a sink that throws does not swallow the line", () => {
+  setLogSink(() => {
+    throw new Error("sink is broken");
+  });
+  try {
+    createLogger("test").error("important");
+  } finally {
+    setLogSink(undefined);
+  }
+  assert.match(output(), /important/, "fell back to the terminal");
+});
+
+test("a sink that logs does not recurse forever", () => {
+  // A renderer's sink emits an event, which can redraw, which can log. Without
+  // the re-entrancy guard this is an unbounded stack, not a slow render.
+  let depth = 0;
+  const log = createLogger("test");
+  setLogSink(() => {
+    depth += 1;
+    if (depth < 5) log.info("from inside the sink");
+  });
+  try {
+    log.info("first");
+  } finally {
+    setLogSink(undefined);
+  }
+  assert.equal(depth, 1, "the nested line bypassed the sink instead of re-entering");
 });
