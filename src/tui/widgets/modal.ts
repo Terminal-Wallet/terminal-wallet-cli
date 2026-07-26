@@ -15,13 +15,21 @@
 export const MAX_MODAL_WIDTH = 72;
 export const MIN_MODAL_WIDTH = 40;
 
-/** Modal width in columns: `pct` of the screen, clamped to [MIN, MAX]. */
-export const modalWidth = (screen: any, pct: number): number => {
+/**
+ * Modal width in columns: `pct` of the screen, clamped to [MIN, max].
+ *
+ * The default cap keeps DIALOGS from stretching edge-to-edge on a wide
+ * terminal. A data panel is a different thing — a list of accounts or a log
+ * wants the room — and capping those at 72 silently truncated their footers,
+ * which is how the ephemeral console's actions came to look absent.
+ */
+export const modalWidth = (
+  screen: any,
+  pct: number,
+  max = MAX_MODAL_WIDTH,
+): number => {
   const cols = (screen.width as number) || 80;
-  return Math.max(
-    MIN_MODAL_WIDTH,
-    Math.min(Math.floor((cols * pct) / 100), MAX_MODAL_WIDTH),
-  );
+  return Math.max(MIN_MODAL_WIDTH, Math.min(Math.floor((cols * pct) / 100), max));
 };
 
 export interface ModalChrome {
@@ -48,6 +56,11 @@ export interface ModalOptions {
    */
   onDismiss?: () => void;
   /**
+   * Override the dialog width cap. For panels whose content is a table or a
+   * list, where the cap costs readability rather than buying it.
+   */
+  maxWidth?: number;
+  /**
    * Only the explicit buttons get out — an outside click is ignored. For the
    * password prompt, where a stray click while confirming a spend is the most
    * expensive click in the app. The [x] still works; it is unambiguous.
@@ -55,11 +68,43 @@ export interface ModalOptions {
   hardened?: boolean;
 }
 
-/** How many modals are currently up. See the grab in `createModal`. */
-let openModals = 0;
+interface OpenModal {
+  dismiss: () => void;
+  hardened: boolean;
+}
 
-/** For tests and teardown — the count is process-wide, like `screen.grabKeys`. */
-export const openModalCount = (): number => openModals;
+/** Innermost last. See the grab and the Escape handler in `createModal`. */
+const stack: OpenModal[] = [];
+
+/** For tests and teardown — the stack is process-wide, like `screen.grabKeys`. */
+export const openModalCount = (): number => stack.length;
+
+/**
+ * Escape, bound once per screen rather than per modal.
+ *
+ * Binding it on the modal's own list only works while that list holds focus,
+ * and anything underneath that takes focus back — a rail, a relayout — leaves
+ * the dialog with no keyboard way out. [x] kept working because a click does
+ * not need focus, which is exactly the shape of the bug reported: "only the
+ * [x] closes it, Esc no longer does".
+ *
+ * A screen-level `key` handler is normally silent while a modal is up, since
+ * modals set `screen.grabKeys`. `ignoreLocked` is blessed's exemption list for
+ * precisely this: keys on it are emitted at screen level even under a grab.
+ */
+const installEscape = (screen: any): void => {
+  if (screen.__modalEscapeInstalled) return;
+  screen.__modalEscapeInstalled = true;
+  if (!screen.ignoreLocked.includes("escape")) screen.ignoreLocked.push("escape");
+  screen.key(["escape"], () => {
+    const top = stack[stack.length - 1];
+    if (!top || top.hardened) return;
+    // A field mid-read owns Escape: it cancels the entry, not the dialog
+    // around it. Dismissing here would throw away the form as well.
+    if ((screen.focused as any)?._reading) return;
+    top.dismiss();
+  });
+};
 
 export const createModal = (
   blessed: any,
@@ -93,7 +138,7 @@ export const createModal = (
     parent: screen,
     top: "center",
     left: "center",
-    width: modalWidth(screen, opts.widthPct),
+    width: modalWidth(screen, opts.widthPct, opts.maxWidth),
     height: opts.height,
     border: { type: "line" },
     label: ` ${opts.title} `,
@@ -114,26 +159,29 @@ export const createModal = (
     });
   }
 
-  // Counted rather than set, because modals nest: a notify over a select, a
-  // review over a menu. Releasing the grab when the inner one closes would hand
-  // the deck's global keys back while a modal was still up, so `q` would quit
-  // the app from inside a dialog.
-  openModals += 1;
+  const dismissable = typeof opts.onDismiss === "function";
+  const dismiss = () => opts.onDismiss?.();
+
+  // Stacked rather than counted, because modals nest — a notify over a select,
+  // a review over a menu — and Escape has to reach the innermost one. Releasing
+  // the grab when an inner modal closes would also hand the deck's global keys
+  // back while an outer one was still up, so `q` would quit from inside it.
+  const entry: OpenModal = { dismiss, hardened: opts.hardened === true };
+  stack.push(entry);
   screen.grabKeys = true;
+  installEscape(screen);
 
   let closed = false;
   const close = () => {
-    if (closed) return; // a double close would decrement for a modal already gone
+    if (closed) return; // a double close would pop a modal already gone
     closed = true;
-    openModals = Math.max(0, openModals - 1);
-    if (openModals === 0) screen.grabKeys = false;
+    const at = stack.indexOf(entry);
+    if (at >= 0) stack.splice(at, 1);
+    if (stack.length === 0) screen.grabKeys = false;
     box.destroy();
     scrim.destroy();
     screen.render();
   };
-
-  const dismissable = typeof opts.onDismiss === "function";
-  const dismiss = () => opts.onDismiss?.();
 
   // An [x] on the border, beside the label. Always available, on every modal
   // including the hardened one — an explicit close is never the wrong answer,

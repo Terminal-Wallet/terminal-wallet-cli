@@ -35,6 +35,7 @@ import {
 } from "../format/ephemeral-rows";
 import {
   balanceLines,
+  parseIndex,
   rewindsIndex,
   rewindWarning,
   advanceWarning,
@@ -54,8 +55,16 @@ import { getSaltedPassword } from "../../railgun/wallet/wallet-password";
 import { getCurrentNetwork } from "../../railgun/engine/engine";
 import { runRecovery } from "./ephemeral-recover";
 
-const FOOTER =
-  "↑/↓ row · Enter scan · r recover · m make current · S scan all · s sync · a advance · Esc close";
+/**
+ * Spelled out on screen rather than left to a footer.
+ *
+ * The panel was reported as missing sync/advance/set entirely. They were bound
+ * — but the footer they were listed in ran past the modal's width cap and was
+ * truncated, so half the actions were invisible. Two short lines inside the
+ * panel cannot be cut off by a narrow terminal the way one long one can.
+ */
+const ACTIONS_ON_ROW = "Enter scan · b balances · r recover · m make current";
+const ACTIONS_GLOBAL = "S scan all · s sync from history · a advance · x set index · Esc close";
 
 export const openEphemeralConsole = async (ctx: DeckContext): Promise<void> => {
   const encryptionKey = await getSaltedPassword();
@@ -73,9 +82,10 @@ export const openEphemeralConsole = async (ctx: DeckContext): Promise<void> => {
     const { box, close } = createModal(blessed, ctx.screen, {
       title: `7702 ephemeral accounts · ${chainName}`,
       widthPct: 88,
+      maxWidth: 160, // a panel, not a dialog — see modalWidth
       height: Math.max(12, ((ctx.screen.height as number) || 24) - 4),
       accent: "magenta",
-      footer: FOOTER,
+      footer: `${ACTIONS_ON_ROW}  ·  ${ACTIONS_GLOBAL}`,
       onDismiss: () => done(),
     });
 
@@ -84,12 +94,12 @@ export const openEphemeralConsole = async (ctx: DeckContext): Promise<void> => {
       top: 0,
       left: 0,
       right: 0,
-      height: 3,
+      height: 4,
       tags: true,
     });
     const list: any = blessed.list({
       parent: box,
-      top: 3,
+      top: 4,
       left: 0,
       right: 0,
       bottom: 1,
@@ -115,6 +125,8 @@ export const openEphemeralConsole = async (ctx: DeckContext): Promise<void> => {
                 "gray",
               )
             : tag("no ephemeral history on this chain yet", "gray"),
+          `${tag("on this row:", "gray")} ${tag(ACTIONS_ON_ROW, "cyan")}`,
+          `${tag("anywhere:  ", "gray")} ${tag(ACTIONS_GLOBAL, "cyan")}`,
         ].join("\n"),
       );
       const keep = list.selected ?? 0;
@@ -233,6 +245,30 @@ export const openEphemeralConsole = async (ctx: DeckContext): Promise<void> => {
         provider.notify(`Ephemeral index set to ${row.index}.`);
       });
 
+    const setArbitrary = () =>
+      run("Set index", async () => {
+        // The rows only cover indexes history knows about. An index beyond them
+        // is reachable no other way, and setting one is how you skip past a
+        // wedged account.
+        const raw = await provider.input("Set ephemeral index to", {
+          hint: `current is ${currentIndex}`,
+        });
+        const parsed = parseIndex(raw);
+        if (!parsed.ok) {
+          if (parsed.message !== "Cancelled.") provider.notify(parsed.message);
+          return;
+        }
+        if (
+          rewindsIndex(currentIndex, parsed.index) &&
+          !(await provider.confirm(rewindWarning(currentIndex)))
+        ) {
+          return;
+        }
+        await setEphemeralIndex(chainName, parsed.index);
+        await reload();
+        provider.notify(`Ephemeral index set to ${parsed.index}.`);
+      });
+
     const sync = () =>
       run("Sync", async () => {
         const { before, after } = await syncEphemeralIndexFromHistory(
@@ -274,6 +310,7 @@ export const openEphemeralConsole = async (ctx: DeckContext): Promise<void> => {
     list.key(["S"], () => void scanAll());
     list.key(["s"], () => void sync());
     list.key(["a"], () => void advance());
+    list.key(["x"], () => void setArbitrary());
 
     done = () => {
       close();

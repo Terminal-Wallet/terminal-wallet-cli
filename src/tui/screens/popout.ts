@@ -59,6 +59,7 @@ const openScrollModal = (
   const { box, guardFocus, close } = createModal(blessed, ctx.screen, {
     title,
     widthPct: 88,
+    maxWidth: 160, // a panel, not a dialog — see modalWidth
     height: Math.max(8, ((ctx.screen.height as number) || 24) - 4),
     accent,
     footer,

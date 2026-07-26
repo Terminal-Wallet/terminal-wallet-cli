@@ -146,3 +146,88 @@ test("a later modal is drawn above an earlier one", () => {
   inner.close();
   outer.close();
 });
+
+test("Escape closes a modal even after focus moves underneath it", () => {
+  // The reported fault: "only the [x] works to close the header modals, Esc no
+  // longer does the trick." A click needs no focus; a key bound on the modal's
+  // own list needs it, and anything below that takes focus back leaves the
+  // dialog with no keyboard way out.
+  const rail = blessed.list({
+    parent: screen,
+    top: 0,
+    left: 0,
+    width: 20,
+    height: 5,
+    keys: true,
+    items: ["a"],
+  });
+
+  let dismissed = false;
+  const chrome = createModal(blessed, screen, {
+    title: "menu",
+    widthPct: 50,
+    height: 8,
+    onDismiss: () => {
+      dismissed = true;
+    },
+  });
+
+  rail.focus(); // the deck reclaims focus while the modal is up
+  screen.program.emit("keypress", "", {
+    name: "escape",
+    full: "escape",
+    sequence: "",
+  });
+
+  assert.equal(dismissed, true, "Escape did not reach the modal");
+  chrome.close();
+});
+
+test("Escape reaches the innermost modal only", () => {
+  const outerDismissed: string[] = [];
+  const outer = createModal(blessed, screen, {
+    title: "outer",
+    widthPct: 50,
+    height: 8,
+    onDismiss: () => outerDismissed.push("outer"),
+  });
+  const inner = createModal(blessed, screen, {
+    title: "inner",
+    widthPct: 40,
+    height: 6,
+    onDismiss: () => outerDismissed.push("inner"),
+  });
+
+  screen.program.emit("keypress", "", { name: "escape", full: "escape", sequence: "" });
+  assert.deepEqual(outerDismissed, ["inner"], "Escape did not target the top modal");
+
+  inner.close();
+  screen.program.emit("keypress", "", { name: "escape", full: "escape", sequence: "" });
+  assert.deepEqual(outerDismissed, ["inner", "outer"]);
+  outer.close();
+});
+
+test("a hardened modal is not dismissed by Escape, and does not fall through", () => {
+  // The password prompt. Escape must not cancel a spend confirmation, and must
+  // not reach past it to whatever dialog opened it either.
+  const reached: string[] = [];
+  const under = createModal(blessed, screen, {
+    title: "under",
+    widthPct: 50,
+    height: 8,
+    onDismiss: () => reached.push("under"),
+  });
+  const password = createModal(blessed, screen, {
+    title: "password",
+    widthPct: 40,
+    height: 6,
+    hardened: true,
+    onDismiss: () => reached.push("password"),
+  });
+
+  screen.program.emit("keypress", "", { name: "escape", full: "escape", sequence: "" });
+  assert.deepEqual(reached, [], "Escape got through a hardened modal");
+
+  password.close();
+  under.close();
+});

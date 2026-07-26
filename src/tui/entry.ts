@@ -32,6 +32,7 @@ import {
 } from "./format/deck";
 import { formatHistoryRows } from "./format/history";
 import { syncTreeLine } from "./format/dashboard";
+import { nextShieldMaturity, pendingNote } from "./format/shield-timer";
 import {
   buildPortfolioRows,
   groupPrivateByToken,
@@ -398,6 +399,10 @@ export const runDeck = async (): Promise<void> => {
       s.privateUSD,
       s.publicUSD,
       { tag, publicRow, privHeader, privBucket },
+      // A shield is pending for an hour. The bucket says only that funds are
+      // waiting, which reads as indefinite; history has the timestamps.
+      (summary) =>
+        pendingNote(summary, nextShieldMaturity(history, Math.floor(Date.now() / 1000))),
     );
     const empty = !s.privateBalances.length && !s.publicBalances.length;
     leftRail.setLabel(empty ? " portfolio · waiting for scan… " : " portfolio ");

@@ -132,6 +132,8 @@ export const buildPortfolioRows = (
   privTotal: string,
   pubTotal: string,
   r: PortfolioRenderers,
+  /** Appended to the pending summary; see format/shield-timer.ts. */
+  pendingNote: (summary: string) => string = (summary) => summary,
 ): PortfolioRow[] => {
   const rows: PortfolioRow[] = [];
   const sectionHead = (name: string, total: string, note = "") => {
@@ -140,7 +142,11 @@ export const buildPortfolioRows = (
   };
 
   const pending = pendingSummary(privGroups.flatMap((g) => g.buckets));
-  sectionHead("PRIVATE", privTotal, pending ? r.tag(`   ○ ${pending}`, "yellow") : "");
+  sectionHead(
+    "PRIVATE",
+    privTotal,
+    pending ? r.tag(`   ○ ${pendingNote(pending)}`, "yellow") : "",
+  );
   if (privGroups.length) {
     for (const g of privGroups) {
       // The header is the clickable token row; seeding resolves by symbol, so a
