@@ -30,6 +30,8 @@ export interface WalletState {
   privateBalances: TokenBalance[];
   scanProgress: number; // 0..100, -1 = idle (overall; legacy UIs)
   scanLabel: string;
+  /** Epoch ms after which `status` is stale. Undefined means it never expires. */
+  statusUntil?: number;
   utxoProgress: number; // UTXO merkletree scan: 0..100, -1 = idle
   txidProgress: number; // TXID merkletree scan: 0..100, -1 = idle
   utxoSynced: boolean; // UTXO historical scan finished

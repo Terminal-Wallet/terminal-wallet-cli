@@ -38,6 +38,39 @@ const recordLog = (prefix: string, text: string): void => {
   });
 };
 
+/** How long a message without an explicit lifetime stays on the bar. */
+const DEFAULT_STATUS_MS = 8000;
+
+let statusTimer: ReturnType<typeof setTimeout> | undefined;
+
+/**
+ * Show a message on the status bar for a while, then let it go.
+ *
+ * `statusUntil` is the authority — the renderer reads it, so a stale message is
+ * never shown even if no timer fired. The timer exists only to make a render
+ * happen at the moment it expires, since otherwise the last thing said would
+ * stay on screen until something unrelated triggered a redraw. Every message
+ * resets it, so an older one cannot clear a newer one.
+ */
+const setStatus = (text: string, durationMs = DEFAULT_STATUS_MS): void => {
+  if (statusTimer) clearTimeout(statusTimer);
+  setState({ status: text, statusUntil: Date.now() + durationMs });
+  statusTimer = setTimeout(() => {
+    statusTimer = undefined;
+    // Re-assert rather than blank it: this only has to nudge a render, and the
+    // renderer decides what is stale.
+    setState({ status: getState().status });
+  }, durationMs + 50);
+  statusTimer.unref?.();
+};
+
+/** A message that stays until something replaces it (work in progress). */
+const setStickyStatus = (text: string): void => {
+  if (statusTimer) clearTimeout(statusTimer);
+  statusTimer = undefined;
+  setState({ status: text, statusUntil: undefined });
+};
+
 const fold = (e: CoreEvent): void => {
   switch (e.type) {
     case "wallet:changed":
@@ -102,11 +135,8 @@ const fold = (e: CoreEvent): void => {
         // event, so it announced a completion that never arrived and sat on the
         // footer forever. Now the completion reports itself.
         const done = next.utxoSynced && next.txidSynced;
-        setState(
-          done
-            ? { ...patch, scanProgress: -1, status: "Balances synced." }
-            : { ...patch, status: `${e.tree} tree synced…` },
-        );
+        setState(done ? { ...patch, scanProgress: -1 } : patch);
+        setStatus(done ? "Balances synced." : `${e.tree} tree synced…`);
       } else {
         setState({ scanProgress: -1 }); // legacy untagged complete
       }
@@ -120,9 +150,12 @@ const fold = (e: CoreEvent): void => {
       });
       break;
     case "poi:progress":
-      setState({
-        status: `POI ${e.status} ${e.index}/${e.total} (${e.progress.toFixed(0)}%)`,
-      });
+      // Progress, not an announcement: it holds the bar while it is running and
+      // the next update replaces it. Left to expire it would flicker away
+      // between updates.
+      setStickyStatus(
+        `POI ${e.status} ${e.index}/${e.total} (${e.progress.toFixed(0)}%)`,
+      );
       break;
     case "broadcaster:status":
       setState({ broadcasters: e.connected ? "available" : "disconnected" });
@@ -145,7 +178,7 @@ const fold = (e: CoreEvent): void => {
       // next message overwrites, and it is where errors and transaction hashes
       // surface — so anything worth reading there is worth being able to scroll
       // back to and copy out.
-      setState({ status: e.text });
+      setStatus(e.text, e.durationMs);
       recordLog("›", e.text);
       break;
     case "tx:progress":
@@ -160,12 +193,13 @@ const fold = (e: CoreEvent): void => {
       const detail = e.ok
         ? `Transaction sent${e.hash ? ` · ${e.hash}` : ""}${e.url ? ` · ${e.url}` : ""}`
         : `Transaction failed: ${e.error ?? "unknown error"}`;
-      setState({
-        scanProgress: -1,
-        status: e.ok
+      setState({ scanProgress: -1, scanLabel: "" });
+      setStatus(
+        e.ok
           ? `Transaction sent${e.hash ? ` · ${e.hash.slice(0, 10)}…` : ""}`
           : `Transaction failed: ${e.error ?? "unknown error"}`,
-      });
+        30000, // an outcome is worth a longer look than a progress note
+      );
       recordLog(e.ok ? "›" : "✖", detail);
       break;
     }

@@ -17,6 +17,7 @@ import { NetworkName } from "@railgun-community/shared-models";
 import { DeckContext } from "./context";
 import { createFeeders } from "./feeders";
 import { getState, setState, subscribe, WalletState } from "./store";
+import { footerStatus } from "./format/footer";
 import { attachCoreAdapter } from "./adapter";
 import { createBlessedInputProvider } from "./input-provider";
 import { setInputProvider } from "../core/input";
@@ -87,8 +88,6 @@ type Mode = "home" | "palette" | "build";
 
 export const runDeck = async (): Promise<void> => {
   installProcessHandlers();
-  // Before any screen: blessed measures emoji as one cell and terminals draw
-  // two, which breaks every border a glyph sits on.
 
   const screen = blessed.screen({
     smartCSR: true,
@@ -419,8 +418,11 @@ export const runDeck = async (): Promise<void> => {
       drawBuilder();
     }
 
+    // Work in flight outranks a message, and a message outlives nothing: see
+    // format/footer.ts for why the order is what it is.
+    const status = footerStatus(s, Date.now());
     footer.setContent(
-      ` ${tag(s.status || "ready", s.status ? "yellow" : "gray")}   ` +
+      ` ${tag(status.text, status.active ? "yellow" : "gray")}   ` +
         tag(": cmds · u utils · t sync · l logs · Tab+Enter review · q quit", "gray"),
     );
 
