@@ -201,8 +201,15 @@ export const runDeck = async (): Promise<void> => {
     {
       key: "utilities",
       label: " ▸ utilities ",
+      // The card is the only advertisement this menu gets, so it names what is
+      // actually inside. Listing two of four is how the 7702 console came to
+      // look like it did not exist.
       render: () =>
-        [tag("sender privacy", "gray"), tag("wipe data", "gray"), tag("click → open (u)", "yellow")].join("\n"),
+        [
+          tag("fee mode · sender privacy", "gray"),
+          tag("7702 ephemeral accounts", "gray"),
+          tag("click → open (u)", "yellow"),
+        ].join("\n"),
       click: () => void openUtilitiesMenu(ctx),
     },
   ];
@@ -609,9 +616,15 @@ export const runDeck = async (): Promise<void> => {
 
   // Balances are re-read when a scan reports something new — not on a timer.
   // A poll would re-read a cache nothing had written to.
+  //
+  // Activity comes from the same place. It was loaded once at boot and then
+  // only by hand, so a transaction you had just sent did not appear until you
+  // went and asked for it — which is not what a live pane implies. A scan is
+  // what discovers new history, so it is the event that should re-read it.
   onCoreEvent((event) => {
     if (event.type === "balances:refreshed" || event.type === "scan:complete") {
       void feeders.refreshBalances();
+      void feeders.refreshHistory();
     }
   });
 

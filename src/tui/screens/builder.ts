@@ -223,7 +223,7 @@ export const createBuilder = (host: BuilderHost): Builder => {
   };
 
   const rowDisplay = (row: string): string => {
-    if (row === "__send") return tag("▶ Build & Send  (S)", "green");
+    if (row === "__send") return tag("▸ Build & Send  (S)", "green");
     if (row === "__cancel") return tag("✕ Cancel  (Esc)", "gray");
     if (row === "__addleg") return tag("+ Add token", "yellow");
     if (row.startsWith("__legsep:")) return tag("─".repeat(28), "gray");
@@ -344,7 +344,7 @@ export const createBuilder = (host: BuilderHost): Builder => {
       treeSynced({ leaves: s.txidLeaves, progress: s.txidProgress, ready: s.txidReady });
     if (cfg.fields.includes("fee") && !synced) {
       lines.unshift(
-        tag("⚠ not fully synced — proof may fail; rescan if it does", "yellow"),
+        tag("▲ not fully synced — proof may fail; rescan if it does", "yellow"),
       );
     }
 
@@ -353,7 +353,7 @@ export const createBuilder = (host: BuilderHost): Builder => {
       `overspends ${o.token.symbol} by ${fmtAmount(formatUnits(o.overBy, o.token.decimals), 6)}`;
     // At the top, so it is visible without scrolling the panel.
     if (over.length) {
-      lines.unshift(...over.map((o) => tag(`⚠ ${overText(o)}`, "red")), "");
+      lines.unshift(...over.map((o) => tag(`▲ ${overText(o)}`, "red")), "");
     }
 
     let ok: boolean;
@@ -386,7 +386,7 @@ export const createBuilder = (host: BuilderHost): Builder => {
     list.setItems(rows.map(rowDisplay));
     const { lines, ok, note, overspend } = detail();
     const head = overspend
-      ? tag(`${cfg.verb} · ⚠ ${note}`, "red")
+      ? tag(`${cfg.verb} · ▲ ${note}`, "red")
       : ok
         ? tag(`${cfg.verb} · ready`, "green")
         : tag(`${cfg.verb}${note ? ` · ${note}` : ""}`, "yellow");

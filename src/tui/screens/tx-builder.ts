@@ -134,7 +134,7 @@ export const runTxBuilder = async (
     });
 
     const rowLabel = (r: Row): string => {
-      if (r === "__send") return "{green-fg}▶ Build & Send{/}";
+      if (r === "__send") return "{green-fg}▸ Build & Send{/}";
       if (r === "__cancel") return "{gray-fg}✕ Cancel{/}";
       const label = r === "address" ? cfg.addressLabel ?? "Recipient" : FIELD_LABELS[r];
       return `${label.padEnd(13)}{cyan-fg}${fieldDisplay(r, state)}{/}`;

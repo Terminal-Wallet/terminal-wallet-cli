@@ -52,7 +52,7 @@ export const runFormCard = (
     });
 
     const rowLabel = (r: Row): string => {
-      if (r === "__submit") return `{green-fg}▶ ${submitLabel}{/}`;
+      if (r === "__submit") return `{green-fg}▸ ${submitLabel}{/}`;
       if (r === "__cancel") return "{gray-fg}✕ Cancel{/}";
       const f = spec.fields.find((x) => x.key === r);
       if (!f) return "";

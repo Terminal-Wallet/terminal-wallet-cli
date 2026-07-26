@@ -140,7 +140,7 @@ export const buildPortfolioRows = (
   };
 
   const pending = pendingSummary(privGroups.flatMap((g) => g.buckets));
-  sectionHead("PRIVATE", privTotal, pending ? r.tag(`   ⏳ ${pending}`, "yellow") : "");
+  sectionHead("PRIVATE", privTotal, pending ? r.tag(`   ○ ${pending}`, "yellow") : "");
   if (privGroups.length) {
     for (const g of privGroups) {
       // The header is the clickable token row; seeding resolves by symbol, so a

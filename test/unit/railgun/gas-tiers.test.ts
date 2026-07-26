@@ -31,7 +31,7 @@ const gwei = (v: string) => parseUnits(v, "gwei");
  * the 2 gwei default. Columns are [p25, p50, p75] under the current settings.
  */
 const rewards = (): bigint[][] =>
-  Array.from({ length: 40 }, () => [gwei("0.001"), gwei("0.025"), gwei("0.289")]);
+  Array.from({ length: 40 }, () => [gwei("0.0014"), gwei("0.05"), gwei("0.3434")]);
 
 /** The same blocks sampled at p60/p80/p95, as the tiers used to be. */
 const rewardsAtOldPercentiles = (): bigint[][] =>
@@ -48,15 +48,31 @@ test("the tiers sit below the wallet-default cohort", () => {
 
 test("tiers come out of the measured distribution", () => {
   const { slow, average, fast } = tiersFromRewards(rewards());
-  assert.equal(average, gwei("0.025"));
-  assert.equal(fast, gwei("0.289"));
-  assert.equal(slow, gwei("0.005"), "below the floor, so the floor applies");
+  assert.equal(average, gwei("0.05"));
+  assert.equal(fast, gwei("0.3434"));
+  assert.equal(slow, gwei("0.025"), "p25 is below the floor, so the floor applies");
 });
 
 test("the tiers are ordered and distinguishable", () => {
   const { slow, average, fast } = tiersFromRewards(rewards());
   assert.ok(slow < average, "slow is not cheaper than average");
   assert.ok(average < fast, "average is not cheaper than fast");
+});
+
+test("a market below the floor collapses slow into average", () => {
+  // Not a defect: every tier is max(percentile, floor), so when the median tip
+  // is at or under the minimum sensible one there is no cheaper option to
+  // offer. Ordering is non-decreasing by construction; separation is not
+  // guaranteed, and pretending otherwise would mean quoting a slow tier that
+  // cannot be mined.
+  const quiet = Array.from({ length: 40 }, () => [
+    gwei("0.0001"),
+    gwei("0.001"),
+    gwei("0.3"),
+  ]);
+  const { slow, average, fast } = tiersFromRewards(quiet);
+  assert.equal(slow, average, "expected the floor to bind both");
+  assert.ok(slow <= average && average <= fast, "ordering broke");
 });
 
 test("what the old percentiles produced, for contrast", () => {
@@ -83,10 +99,13 @@ test("no tier is ever a zero tip", () => {
   assert.equal(fast, MIN_PRIORITY_FEE);
 });
 
-test("the floor is small enough to be honest", () => {
-  // Blocks demonstrably include tips of 0.001 gwei. A floor far above that is
-  // its own overpayment on the cheapest tier.
-  assert.ok(MIN_PRIORITY_FEE <= gwei("0.005"));
+test("the floor is what slow actually means", () => {
+  // Below the median the distribution is degenerate, not merely cheap: p25 was
+  // 0.0014 gwei against a p50 of 0.05. So in quiet conditions the floor — not
+  // the percentile — is the slow tier, and it has to be a tip that gets mined
+  // rather than the smallest a block has ever accepted.
+  assert.ok(MIN_PRIORITY_FEE >= gwei("0.02"), "too low to be trusted as slow");
+  assert.ok(MIN_PRIORITY_FEE <= gwei("0.05"), "a floor above the median is not slow");
 });
 
 test("the median across blocks, not the mean", () => {

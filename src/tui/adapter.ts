@@ -169,7 +169,7 @@ const fold = (e: CoreEvent): void => {
       break;
     case "log": {
       if (isLogNoise(e.text)) break;
-      const prefix = e.level === "error" ? "✖" : e.level === "warn" ? "▲" : "·";
+      const prefix = e.level === "error" ? "✗" : e.level === "warn" ? "▲" : "·";
       recordLog(prefix, e.text);
       break;
     }
@@ -200,7 +200,7 @@ const fold = (e: CoreEvent): void => {
           : `Transaction failed: ${e.error ?? "unknown error"}`,
         30000, // an outcome is worth a longer look than a progress note
       );
-      recordLog(e.ok ? "›" : "✖", detail);
+      recordLog(e.ok ? "›" : "✗", detail);
       break;
     }
     default: {

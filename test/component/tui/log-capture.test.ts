@@ -66,7 +66,7 @@ test("a multi-line record stays one entry", () => {
 
 test("the level survives into the pane's marker", () => {
   createLogger("engine").error("fatal thing");
-  assert.match(getState().logs[0], /^✖/);
+  assert.match(getState().logs[0], /^✗/);
   setState({ logs: [] });
   createLogger("engine").warn("iffy thing");
   assert.match(getState().logs[0], /^▲/);

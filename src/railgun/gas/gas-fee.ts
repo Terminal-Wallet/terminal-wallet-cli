@@ -80,12 +80,22 @@ export const formatFeeHistory = (
 export const REWARD_PERCENTILES = [25, 50, 75];
 
 /**
- * Inclusion floor. A percentile can be 0 when most sampled blocks report no
- * tip at it, and a transaction offering no tip may never be mined. Small on
- * purpose: blocks demonstrably include tips of 0.001 gwei, and the floor only
- * bites when the network is quiet — which is exactly when a small tip works.
+ * The smallest tip worth offering.
+ *
+ * Below the median the tip distribution is degenerate rather than merely
+ * cheap — measured at a 0.0795 gwei base fee, p25 was 0.0014 gwei against a
+ * p50 of 0.05. So in quiet conditions this floor, not the percentile, is what
+ * "slow" actually means, and it has to be a figure that gets a transaction
+ * mined rather than the smallest number a block has ever accepted.
+ *
+ * It was briefly 0.005, argued from block inclusion: blocks do include tips
+ * that small. Inclusion turned out not to be the binding constraint. A
+ * broadcaster enforces its own minimum and rejects what is under it outright,
+ * and "slow" read as untrustworthy even when it would have worked. 0.025 sits
+ * just under the typical median tip and above the 0.02 this used to be, which
+ * never drew a complaint.
  */
-export const MIN_PRIORITY_FEE = parseUnits("0.005", "gwei");
+export const MIN_PRIORITY_FEE = parseUnits("0.025", "gwei");
 
 /**
  * The three tiers, from one reward-percentile column per tier. The median

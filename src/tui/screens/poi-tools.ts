@@ -29,7 +29,7 @@ type ActionId = keyof typeof ACTIONS;
 
 export const runPOITools = async (network: NetworkName): Promise<void> => {
   const chosen = await getInputProvider().select(
-    "🛡 POI Tools",
+    "◆ POI Tools",
     Object.entries(ACTIONS).map(([value, a]) => ({
       value,
       label: a.label,
