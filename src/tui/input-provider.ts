@@ -20,6 +20,7 @@ import { buildWalletInfo } from "../flows/new-wallet";
 import { FormSpec } from "./form-core";
 import { runFormCard } from "./widgets/form-card";
 import { createModal } from "./widgets/modal";
+import { emoji } from "./widgets/unicode-width";
 
 export const createBlessedInputProvider = (
   blessed: any,
@@ -121,7 +122,7 @@ export const createBlessedInputProvider = (
       });
       blessed.text({
         parent: box, top: 0, left: 1, right: 1, tags: true,
-        content: "{gray-fg}Enter your wallet password.{/}",
+        content: `{gray-fg}${emoji("🔒")} Enter your wallet password.{/}`,
       });
       const input = blessed.textbox({
         parent: box, top: 2, left: 1, right: 1, height: 1,
