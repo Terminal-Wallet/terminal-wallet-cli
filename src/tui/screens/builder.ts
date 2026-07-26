@@ -89,8 +89,13 @@ import {
   confirmPassword,
   getCachedEncryptionKey,
 } from "../../railgun/wallet/wallet-password";
-import { evmGasTypeForChain } from "../../railgun/gas/gas-selection";
+import { evmGasTypeForChain, priceField } from "../../railgun/gas/gas-selection";
 import { EVMGasType } from "@railgun-community/shared-models";
+import { FeeData } from "ethers";
+import {
+  setGasFeeSelection,
+  clearGasFeeSelection,
+} from "../../railgun/gas/gas-fee";
 
 export interface BuilderHost {
   ctx: DeckContext;
@@ -534,6 +539,8 @@ export const createBuilder = (host: BuilderHost): Builder => {
   };
 
   const closeBuilder = () => {
+    // The override is per build. Left set, it would price the next one.
+    clearGasFeeSelection();
     cfg = undefined;
     list.hide();
     summary.hide();
@@ -749,7 +756,22 @@ export const createBuilder = (host: BuilderHost): Builder => {
         cfg.gasSymbol,
         cfg.gasDecimals,
       );
-      if (gas !== undefined) state.gas = gas;
+      if (gas !== undefined) {
+        state.gas = gas;
+        // Also install it as the per-build override that getFeeDetailsForChain
+        // reads, so the gas estimate and the broadcaster fee quote — which
+        // scales with the gas price — are both priced from the chosen speed
+        // rather than from raw network estimates.
+        if (gas !== "keep") {
+          const price = priceField(gas);
+          setGasFeeSelection(cfg.chainName, {
+            gasPrice: price,
+            maxFeePerGas: price,
+            maxPriorityFeePerGas:
+              gas.evmGasType === EVMGasType.Type2 ? gas.maxPriorityFeePerGas : 0n,
+          } as FeeData);
+        }
+      }
     } else if (key === "fee") {
       const fee = await collectFeeMode(
         cfg.chainName,
