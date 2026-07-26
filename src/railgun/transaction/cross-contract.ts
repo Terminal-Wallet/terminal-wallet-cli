@@ -16,8 +16,8 @@ import {
   isDefined,
 } from "@railgun-community/shared-models";
 import {
-  gasEstimateForUnprovenCrossContractCalls,
-  generateCrossContractCallsProof,
+  gasEstimateForUnprovenCrossContractCalls7702,
+  generateCrossContractCallsProof7702,
   populateProvedCrossContractCalls,
 } from "@railgun-community/wallet";
 import { RecipeERC20Amount } from "@railgun-community/cookbook";
@@ -52,7 +52,12 @@ import { getOutputGasEstimate } from "./private/unshield-tx";
  */
 export const NO_CROSS_CONTRACT_GAS_FLOOR = 150_000n;
 
-/** The output every recipe (0x swap, LP, Beefy, combo) reduces to. */
+/**
+ * The output every recipe (0x swap, LP, Beefy, combo) reduces to.
+ *
+ * Every cross-contract batch is a 7702 relay-adapt: type-4 gas details, the
+ * SDK's 7702 estimate and proof, no min-gas-price commitment.
+ */
 export interface CrossContractInputs {
   relayAdaptUnshieldERC20Amounts: RecipeERC20Amount[];
   relayAdaptShieldERC20Addresses: RailgunERC20Recipient[];
@@ -76,6 +81,7 @@ export const getCrossContractGasEstimate = async (
   const gasDetailsResult = await getTransactionGasDetails(
     chainName,
     broadcasterSelection,
+    true,
   );
   if (!gasDetailsResult) return undefined;
 
@@ -94,7 +100,7 @@ export const getCrossContractGasEstimate = async (
     minGasLimit,
   } = inputs;
 
-  const { gasEstimate } = await gasEstimateForUnprovenCrossContractCalls(
+  const { gasEstimate } = await gasEstimateForUnprovenCrossContractCalls7702(
     txIDVersion,
     chainName,
     railgunWalletID,
@@ -146,13 +152,16 @@ export const getProvedCrossContractTransaction = async (
     minGasLimit,
   } = inputs;
 
-  const { broadcasterFeeERC20Recipient, overallBatchMinGasPrice, estimatedGasDetails } =
-    privateGasEstimate;
+  const { broadcasterFeeERC20Recipient, estimatedGasDetails } = privateGasEstimate;
+  // Relay-adapt commits no overall-batch-min-gas-price: pricing is governed by
+  // the type-4 maxFeePerGas, and a non-zero commitment reverts as "Gas price
+  // too low" whenever the effective price falls below it.
+  const overallBatchMinGasPrice = 0n;
   const sendWithPublicWallet =
     typeof broadcasterFeeERC20Recipient !== "undefined" ? false : true;
 
   try {
-    await generateCrossContractCallsProof(
+    await generateCrossContractCallsProof7702(
       txIDVersion,
       chainName,
       railgunWalletID,

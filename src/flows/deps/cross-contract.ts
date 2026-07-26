@@ -1,7 +1,7 @@
 /**
  * Generic cross-contract deps adapter. Any recipe (0x swap, LP, Beefy, combo)
  * whose output reduces to CrossContractInputs runs through this: estimate →
- * prove → broadcaster/self-sign (always Relay-Adapt). Wiring a new cookbook
+ * prove → broadcaster/self-sign. Always Relay-Adapt, and always 7702. Wiring a new cookbook
  * recipe = produce its CrossContractInputs + a CrossContractSpec; no new adapter.
  */
 import {
