@@ -14,6 +14,7 @@ const stubProvider = (
   confirm: async () => false,
   notify: () => undefined,
   select: async () => undefined,
+  multiSelect: async () => undefined,
   input: async () => undefined,
   ...over,
 });

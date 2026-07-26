@@ -33,6 +33,7 @@ const provider = (
     confirm: async () => false,
     notify: (m: string) => notified.push(m),
     select: async () => undefined,
+    multiSelect: async () => undefined,
     input: async () => undefined,
   };
 };

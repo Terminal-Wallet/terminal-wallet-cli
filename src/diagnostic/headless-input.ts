@@ -117,6 +117,39 @@ export const headlessInputProvider: WalletInputProvider = {
       : undefined;
   },
 
+  async multiSelect(
+    message: string,
+    choices: InputChoice[],
+    opts?: { initial?: string[] },
+  ): Promise<string[] | undefined> {
+    if (!isInteractive() || choices.length === 0) {
+      return undefined;
+    }
+    log.info(message);
+    choices.forEach((choice, index) => {
+      const preselected = opts?.initial?.includes(choice.value) ? "x" : " ";
+      log.info(
+        `  [${preselected}] ${index + 1}) ${choice.label}${choice.hint ? ` — ${choice.hint}` : ""}`,
+      );
+    });
+    const answer = await readLine("select numbers (comma-separated, blank = keep): ");
+    if (answer === undefined) {
+      return undefined;
+    }
+    const trimmed = answer.trim();
+    if (!trimmed) {
+      return opts?.initial ?? [];
+    }
+    // Anything unparseable is dropped rather than guessed at — this picks which
+    // assets get moved, so a typo must not silently widen the set.
+    const picked = trimmed
+      .split(",")
+      .map((part) => Number.parseInt(part.trim(), 10) - 1)
+      .filter((index) => Number.isInteger(index) && index >= 0 && index < choices.length)
+      .map((index) => choices[index].value);
+    return [...new Set(picked)];
+  },
+
   async input(
     message: string,
     opts?: { password?: boolean; hint?: string },

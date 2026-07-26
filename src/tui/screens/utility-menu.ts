@@ -62,6 +62,7 @@ import { getChainForName } from "../../railgun/network/network-util";
 import { loadTransactionHistory } from "../../railgun/transaction-history";
 import { confirmPassword } from "../../railgun/wallet/wallet-password";
 import { processDestroyExit } from "../../platform/lifecycle";
+import { openEphemeralAdmin } from "./ephemeral-admin";
 
 const network = (): NetworkName => getState().network as NetworkName;
 
@@ -317,6 +318,9 @@ export const dispatchUtility = async (
       setState({
         status: `Private TX sender ${shouldShowSender() ? "shown" : "hidden"}.`,
       });
+      break;
+    case "ephemeral-accounts":
+      await openEphemeralAdmin(ctx);
       break;
     case "destruct":
       await showDestruct();

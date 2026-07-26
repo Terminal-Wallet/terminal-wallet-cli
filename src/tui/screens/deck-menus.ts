@@ -43,5 +43,10 @@ export const utilitiesMenu = (showSender: boolean): InputChoice[] => [
     value: "toggle-sender",
     hint: "privacy",
   },
+  {
+    label: "7702 Ephemeral Accounts",
+    value: "ephemeral-accounts",
+    hint: "index · stranded-fund recovery",
+  },
   { label: "WIPE ALL DATA", value: "destruct", hint: "DANGER — no recovery" },
 ];

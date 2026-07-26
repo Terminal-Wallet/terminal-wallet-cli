@@ -36,6 +36,16 @@ export interface WalletInputProvider {
   notify(message: string): void;
   /** Pick one of a list of choices; returns the chosen value (undefined = cancel). */
   select(message: string, choices: InputChoice[]): Promise<string | undefined>;
+  /**
+   * Pick any number of choices. Returns the chosen values, or undefined if the
+   * user cancelled — which is distinct from an empty array, i.e. "none of
+   * these". `initial` pre-selects.
+   */
+  multiSelect(
+    message: string,
+    choices: InputChoice[],
+    opts?: { initial?: string[] },
+  ): Promise<string[] | undefined>;
   /** Free-text input; `password` masks it (undefined = cancel). `hint` shows a dimmed format hint. */
   input(
     message: string,

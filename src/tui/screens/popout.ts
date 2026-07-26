@@ -91,6 +91,21 @@ const openScrollModal = (
   ctx.screen.render();
 };
 
+/** A static, scrollable block of already-formatted text. */
+export const showText = (
+  ctx: DeckContext,
+  title: string,
+  body: string,
+  accent = "cyan",
+): void =>
+  openScrollModal(ctx, {
+    title,
+    getContent: () => body,
+    accent,
+    live: false,
+    tags: true,
+  });
+
 /** The engine and SDK log stream, live. */
 export const showLogs = (ctx: DeckContext): void =>
   openScrollModal(ctx, {

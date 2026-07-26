@@ -251,6 +251,73 @@ export const createBlessedInputProvider = (
       screen.render();
     });
 
+  // Same list as promptSelect, with a checkbox column. Space toggles, Enter
+  // confirms the set. Cancel and "confirmed nothing" are different answers, so
+  // Esc resolves undefined while Enter on an empty set resolves [].
+  const promptMultiSelect = (
+    message: string,
+    items: InputChoice[],
+    initial: string[],
+  ): Promise<string[] | undefined> =>
+    new Promise((resolve) => {
+      const chosen = new Set(initial);
+      const labelW = items.reduce((m, i) => Math.max(m, i.label.length), 0);
+      const rowFor = (i: InputChoice) =>
+        `${chosen.has(i.value) ? "{green-fg}[x]{/}" : "[ ]"} ` +
+        (i.hint ? `${i.label.padEnd(labelW + 2)}{gray-fg}${i.hint}{/}` : i.label);
+
+      const screenH = (screen.height as number) || 24;
+      const listH = Math.max(3, Math.min(items.length, screenH - 8));
+      const { box, guardFocus, close } = createModal(blessed, screen, {
+        title: `${message}  (${items.length})`,
+        widthPct: 62,
+        height: listH + 4,
+        accent: "cyan",
+        footer: "↑/↓ move · Space toggle · Enter confirm · Esc cancel",
+      });
+      const list = blessed.list({
+        parent: box,
+        top: 0,
+        left: 0,
+        right: 0,
+        height: listH,
+        tags: true,
+        keys: true,
+        mouse: true,
+        vi: true,
+        items: items.map(rowFor),
+        scrollbar: { ch: " ", style: { bg: "green" } },
+        style: { selected: { bg: "cyan", fg: "black" }, item: { fg: "white" } },
+      });
+      const done = (v?: string[]) => {
+        close();
+        resolve(v);
+      };
+      const toggle = () => {
+        const index = (list as any).selected as number;
+        const item = items[index];
+        if (!item) return;
+        if (chosen.has(item.value)) chosen.delete(item.value);
+        else chosen.add(item.value);
+        list.setItem(index, rowFor(item));
+        screen.render();
+      };
+      list.key(["space"], toggle);
+      // A blessed list emits "select" on Enter, which here means "I am done",
+      // not "I picked this row" — the row is toggled with Space.
+      list.on("select", () => done(items.filter((i) => chosen.has(i.value)).map((i) => i.value)));
+      list.on("cancel", () => done(undefined));
+      list.key(["escape", "q"], () => done(undefined));
+      box.key(["escape", "q"], () => done(undefined));
+      box.on("click", () => {
+        list.focus();
+        screen.render();
+      });
+      guardFocus(list);
+      list.focus();
+      screen.render();
+    });
+
   // Single-card New / Import wallet flow: collect mode + name + (seed) on one
   // card, then assemble via the pure buildWalletInfo (new → generate, import →
   // validate). The seed field is collected only for import; the password-confirm
@@ -313,6 +380,8 @@ export const createBlessedInputProvider = (
     },
     promptNewWallet,
     select: (message, choices) => promptSelect(message, choices),
+    multiSelect: (message, choices, opts) =>
+      promptMultiSelect(message, choices, opts?.initial ?? []),
     input: (message, opts) =>
       promptText(message, opts?.password ?? false, opts?.hint),
   };
