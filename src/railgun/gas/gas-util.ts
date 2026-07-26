@@ -134,7 +134,12 @@ export const getPublicGasDetails = async (
       gasDetailsInfo.gasPrice = gasPrice ?? 0n;
       break;
     }
-    case EVMGasType.Type2: {
+    // Type4 cannot be a CHAIN default — 7702 is chosen per transaction, and no
+    // network config ships it. Handled with Type2 anyway: both are 1559-style,
+    // and the fall-through would otherwise leave the initial `{ gasPrice }`,
+    // quietly giving a 1559 transaction legacy fee fields.
+    case EVMGasType.Type2:
+    case EVMGasType.Type4: {
       gasDetailsInfo = {
         maxFeePerGas: maxFeePerGas ?? gasPrice ?? 0n,
         maxPriorityFeePerGas: maxPriorityFeePerGas ?? 0n,

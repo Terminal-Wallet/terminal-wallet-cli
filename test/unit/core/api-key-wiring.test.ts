@@ -101,3 +101,26 @@ test("versionCheck returns a verdict rather than exiting itself", async () => {
     "versionCheck exits the process directly",
   );
 });
+
+/**
+ * The user's own RPC overrides.
+ *
+ * `applyProviderOverrides` reads provider URLs from app config into
+ * configDefaults. It was collected and never called, so a configured endpoint
+ * was silently ignored and the only way to avoid a bad public RPC was editing
+ * the baked-in defaults by hand.
+ */
+
+test("provider overrides are applied during config boot", () => {
+  const overrides = read("config/config-overrides.ts");
+  assert.match(overrides, /applyProviderOverrides\(\)/);
+});
+
+test("they are applied before anything reads a provider list", () => {
+  const overrides = read("config/config-overrides.ts");
+  const body = overrides.slice(overrides.indexOf("export const overrideMainConfig"));
+  const applied = body.indexOf("applyProviderOverrides()");
+  const read_ = body.indexOf("await loadConfigForNetwork()");
+  assert.ok(applied >= 0 && read_ > 0);
+  assert.ok(applied < read_, "config is read before the overrides are installed");
+});

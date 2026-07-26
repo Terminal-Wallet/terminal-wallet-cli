@@ -5,6 +5,7 @@ import {
   setRemoteConfig,
 } from "../railgun/network/network-util";
 import configDefaults from "./config-defaults";
+import { applyProviderOverrides } from "./config-manager";
 import {
   getProviderObjectFromURL,
   RemoteConfig,
@@ -69,6 +70,12 @@ const buildFallbackRemoteConfig = (): RemoteConfig => {
 export const fallbackRemoteConfig: RemoteConfig = buildFallbackRemoteConfig();
 
 export const overrideMainConfig = async (_version: string) => {
+  // The user's own RPC overrides, before anything reads a provider list. These
+  // were being collected from app config and never applied, so a configured
+  // endpoint was silently ignored and the only way to avoid a bad public RPC
+  // was to edit the baked-in defaults.
+  applyProviderOverrides();
+
   const overrides = await loadConfigForNetwork();
   // If the remote config is unavailable, run on the built-in fallback rather than exiting.
   const effective = overrides ?? fallbackRemoteConfig;
