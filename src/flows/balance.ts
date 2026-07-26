@@ -82,6 +82,29 @@ export const feeReservationFor = (
     ? { tokenAddress: fee.broadcaster.tokenAddress, amount: broadcasterFeeAmount }
     : undefined;
 
+/**
+ * The gas a self-signed transaction spends from the very balance it is moving.
+ *
+ * A base-token send or shield pays gas in the same asset it moves, so the wallet
+ * needs value + gas. Committing the whole balance leaves nothing for the second
+ * term and the node rejects the send — after the user has already approved it.
+ * Modelled as a reservation so the amount hint, "max", and the send-time
+ * overspend check all account for it through the same path a broadcaster fee
+ * takes.
+ *
+ * Returns undefined when the price is unknown, so an unavailable fee oracle
+ * leaves the amount unrestricted rather than reserving zero and implying the
+ * question was asked.
+ */
+export const gasReservationFor = (
+  tokenAddress: string | undefined,
+  gasUnits: bigint,
+  pricePerGas: bigint | undefined,
+): FeeReservation | undefined =>
+  tokenAddress !== undefined && pricePerGas !== undefined && pricePerGas > 0n && gasUnits > 0n
+    ? { tokenAddress, amount: gasUnits * pricePerGas }
+    : undefined;
+
 export interface ExpectedBalanceOpts {
   editingLegId?: string;
   fee?: FeeReservation;

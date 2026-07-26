@@ -28,7 +28,10 @@ import {
   getWalletInfoForName,
 } from "../../railgun/wallet/wallet-util";
 import { getCurrentEthersWallet } from "../../railgun/wallet/public-utils";
-import { getWrappedTokenBalance } from "../../railgun/balance/balance-util";
+import {
+  getPrivateERC20BalancesForChain,
+  getWrappedTokenBalance,
+} from "../../railgun/balance/balance-util";
 import { getInputProvider } from "../../core/input";
 import { toFeeMode } from "../../flows/transfer-flow";
 import { FeeMode, getERC20AmountRecipients } from "../../flows/spec";
@@ -36,6 +39,7 @@ import { populatePublicERC20ApprovalTransactions } from "../../railgun/transacti
 import { calculatePublicTransactionGasDetais } from "../../railgun/transaction/public/public-tx";
 import { runApprovals } from "../../flows/approval-flow";
 import { PrivateGasEstimate } from "../../models/transaction-models";
+import { RailgunDisplayBalance } from "../../models/balance-models";
 
 /**
  * Run the ERC20 approval pre-step for `spender` (Railgun proxy or 0x spender).
@@ -125,17 +129,48 @@ export const runErc20Approvals = async (
  * The real fee is known here, before proving. Returns the shortfall, or
  * undefined when it fits.
  */
-export const feeShortfall = (
+export const feeShortfall = async (
   legs: LegsState,
   gas: PrivateGasEstimate,
-): TokenOverspend | undefined => {
+  chainName: NetworkName,
+  /** Injection point so the check is testable without an engine. */
+  loadBalances: (
+    chain: NetworkName,
+  ) =>
+    | RailgunDisplayBalance[]
+    | Promise<RailgunDisplayBalance[]> = getPrivateERC20BalancesForChain,
+): Promise<TokenOverspend | undefined> => {
   const recipient = gas.broadcasterFeeERC20Recipient;
   if (!recipient) return undefined; // self-signed: gas is paid publicly
-  const [over] = overspentTokens(legs, {
+  const fee = {
     tokenAddress: recipient.tokenAddress,
-    amount: recipient.amount,
-  });
-  return over;
+    amount: BigInt(recipient.amount),
+  };
+  const [over] = overspentTokens(legs, fee);
+  if (over) return over;
+
+  // overspentTokens only evaluates tokens that appear in the legs, because the
+  // legs are where it gets balances from. A fee paid in a token this send is
+  // not moving is therefore invisible to it — which is exactly the case where
+  // the fee has a whole balance to itself and is easiest to get wrong.
+  const inLegs = legs.legs.some(
+    (l) =>
+      l.token?.tokenAddress.toLowerCase() === fee.tokenAddress.toLowerCase(),
+  );
+  if (inLegs) return undefined;
+
+  // Fails open: a balance read that cannot answer must not block a send the
+  // SDK would have accepted. This gate exists to give a better message than
+  // the SDK's, not to become a second way for a send to die.
+  try {
+    const token = (await loadBalances(chainName)).find(
+      (b) => b.tokenAddress.toLowerCase() === fee.tokenAddress.toLowerCase(),
+    );
+    if (!token) return undefined;
+    return overspentTokens({ legs: [{ id: "__fee", token }], seq: 1 }, fee)[0];
+  } catch {
+    return undefined;
+  }
 };
 
 export const applyGasDetailsConfirm =
@@ -148,7 +183,7 @@ export const applyGasDetailsConfirm =
     // costs nothing; the same refusal from the SDK costs a proof and says
     // nothing about how much to reduce by.
     if (legs) {
-      const over = feeShortfall(legs, gas);
+      const over = await feeShortfall(legs, gas, spec.chainName);
       if (over) {
         getInputProvider().notify(
           `Broadcaster fee leaves ${over.token.symbol} short by ` +

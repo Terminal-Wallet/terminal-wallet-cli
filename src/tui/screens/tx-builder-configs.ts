@@ -176,13 +176,18 @@ const gasInfo = (chainName: NetworkName) => {
 
 // These drive the broadcaster-fee preview AND the amount the overspend check
 // holds back, so an optimistic figure lets a build through that the real fee
-// cannot cover. Sized against measured execution, not proof-free guesses.
+// cannot cover. Where a figure is a bound rather than a measurement it says so:
+// over-reserving costs the user some headroom, under-reserving costs a failed
+// send after a proof.
 const PRIVATE_GAS_UNITS = 250000n;
 const PUBLIC_GAS_UNITS = 65000n;
-/** Relay-adapt unshield-to-base: unshield + unwrap, ~1.7M measured. */
+/** Base-token shield: a 7702 relay-adapt bundle (wrap + shield), not a transfer.
+ *  Upper bound — delegation + execute + wrapBase + a shield commitment. */
+const SHIELD_BASE_GAS_UNITS = 450_000n;
+/** Relay-adapt unshield-to-base: unshield + unwrap. Upper bound, not measured. */
 const RELAY_ADAPT_BASE_GAS_UNITS = 1_700_000n;
-/** Private 0x swap: the recipe's own floor, and ~2.5M measured. */
-const PRIVATE_SWAP_GAS_UNITS = 2_400_000n;
+/** Private 0x swap: above the 2,520,949 measured by scripts/swap-estimate-probe. */
+const PRIVATE_SWAP_GAS_UNITS = 2_600_000n;
 function baseSym(chainName: NetworkName): string {
   return NETWORK_CONFIG[chainName].baseToken.symbol;
 }
@@ -284,7 +289,10 @@ export const txBuilderConfigs: Record<
         (await getWrappedTokenBalance(chainName, true)).amount, // native (gas) balance
       ),
     ...gasInfo(chainName),
-    gasUnitsHint: PUBLIC_GAS_UNITS,
+    // The native leg is the expensive one and the only one gas is reserved
+    // against, so the hint is sized for it.
+    gasUnitsHint: SHIELD_BASE_GAS_UNITS,
+    gasFromBalance: true,
     submit: async (s: BuilderState) => {
       const { native, erc20 } = splitNative(s);
       if (!native.length && !erc20.length) return { ok: false, error: "incomplete" };
@@ -330,6 +338,7 @@ export const txBuilderConfigs: Record<
       ),
     ...gasInfo(chainName),
     gasUnitsHint: PUBLIC_GAS_UNITS,
+    gasFromBalance: true,
     submit: async (s: BuilderState) => {
       const { native, erc20 } = splitNative(s);
       if (!native.length && !erc20.length) return { ok: false, error: "incomplete" };
@@ -396,7 +405,8 @@ export const txBuilderConfigs: Record<
     fixedToken: () => wrappedToken(chainName, true),
     fixedAddress: getCurrentRailgunAddress(),
     ...gasInfo(chainName),
-    gasUnitsHint: PUBLIC_GAS_UNITS,
+    gasUnitsHint: SHIELD_BASE_GAS_UNITS,
+    gasFromBalance: true,
     submit: async (s: BuilderState) => {
       if (!s.token || !s.amount || !s.address) return { ok: false, error: "incomplete" };
       const recipient = buildRecipient(s.token, s.amount, s.address);
@@ -425,6 +435,7 @@ export const txBuilderConfigs: Record<
     fixedToken: () => wrappedToken(chainName, true),
     ...gasInfo(chainName),
     gasUnitsHint: PUBLIC_GAS_UNITS,
+    gasFromBalance: true,
     submit: async (s: BuilderState) => {
       if (!s.token || !s.amount || !s.address) return { ok: false, error: "incomplete" };
       const recipient = buildRecipient(s.token, s.amount, s.address);

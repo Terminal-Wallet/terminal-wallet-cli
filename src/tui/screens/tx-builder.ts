@@ -47,6 +47,12 @@ export interface TxBuilderConfig {
   gasDecimals: number;
   gasUnitsHint: bigint; // nominal gas units for the cost preview in the selector
   relayAdapt?: boolean; // for the fee field's broadcaster lookup (private flows)
+  /**
+   * This flow's gas comes out of the same balance it spends: the public native
+   * token. The amount must therefore leave room for gas, or the wallet holds
+   * less than value + gas and the node rejects the send.
+   */
+  gasFromBalance?: boolean;
   multiLeg?: boolean; // token/amount/recipient come from a multi-leg model (deck only)
   flowId?: string; // identifies the flow for the capability matrix (builder-legs.flowCaps)
   loadBuyTokens?: () =>

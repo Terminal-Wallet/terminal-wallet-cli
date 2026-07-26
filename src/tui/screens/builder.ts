@@ -57,9 +57,11 @@ import {
   TokenOverspend,
   overspentTokens,
   expectedBalance,
+  gasReservationFor,
   maxAmount,
 } from "../../flows/balance";
 import {
+  NATIVE_SENTINEL,
   NativeKind,
   isNativeChoice,
   nativeTokenLabel,
@@ -96,6 +98,7 @@ import {
   setGasFeeSelection,
   clearGasFeeSelection,
 } from "../../railgun/gas/gas-fee";
+import { getFeeDetailsForChain } from "../../railgun/gas/gas-util";
 
 export interface BuilderHost {
   ctx: DeckContext;
@@ -434,10 +437,37 @@ export const createBuilder = (host: BuilderHost): Builder => {
     }
   };
 
+  /** The per-gas price this build is priced at, including a chosen tier. */
+  const currentGasPrice = async (): Promise<bigint | undefined> => {
+    if (!cfg) return undefined;
+    try {
+      const fee = await getFeeDetailsForChain(cfg.chainName);
+      return fee?.maxFeePerGas ?? fee?.gasPrice ?? undefined;
+    } catch {
+      return undefined; // no fee oracle: leave the amount unrestricted
+    }
+  };
+
+  /**
+   * What the overspend model holds back: a broadcaster fee, or — for a flow
+   * whose gas comes out of the balance it spends — that gas. The two never
+   * apply to the same flow, since a base-token send has no fee field.
+   */
   const computeFeePreview = async () => {
     feePreview = undefined;
     feeReservation = undefined;
-    if (!cfg || state.fee?.kind !== "broadcaster") return;
+    if (!cfg) return;
+    if (cfg.gasFromBalance) {
+      feeReservation = gasReservationFor(
+        // The native leg is marked with the sentinel; a fixed-token base flow
+        // carries the wrapped address the gas balance is reported under.
+        cfg.multiLeg ? NATIVE_SENTINEL : state.token?.tokenAddress,
+        cfg.gasUnitsHint,
+        await currentGasPrice(),
+      );
+      return;
+    }
+    if (state.fee?.kind !== "broadcaster") return;
     const { broadcaster } = state.fee;
     const approx = await approxBroadcasterFee(
       broadcaster,
@@ -531,6 +561,9 @@ export const createBuilder = (host: BuilderHost): Builder => {
       if (seed && cfg.fields.includes("token")) state.token = seed;
     }
 
+    // Needs the token, so it runs after the leg/fixed-token resolution above.
+    if (cfg.gasFromBalance) await computeFeePreview();
+
     buildRows();
     list.show();
     summary.show();
@@ -617,6 +650,20 @@ export const createBuilder = (host: BuilderHost): Builder => {
     }
   };
 
+  /**
+   * Says why the spendable figure is short of the balance, when it is because
+   * gas was held back. Without it a base-token "max" reads as a wrong number.
+   */
+  const reservedNote = (tokenAddress: string): string => {
+    if (!cfg?.gasFromBalance || !feeReservation) return "";
+    if (feeReservation.tokenAddress.toLowerCase() !== tokenAddress.toLowerCase())
+      return "";
+    return ` (${fmtAmount(
+      formatUnits(feeReservation.amount, cfg.gasDecimals),
+      6,
+    )} held for gas)`;
+  };
+
   const editLegAmount = async (id: string) => {
     if (!state.legs) return;
     const leg = findLeg(id);
@@ -632,7 +679,7 @@ export const createBuilder = (host: BuilderHost): Builder => {
         hint: `spendable ${fmtAmount(
           formatUnits(expected > 0n ? expected : 0n, leg.token.decimals),
           6,
-        )} ${leg.token.symbol} · type "max"`,
+        )} ${leg.token.symbol}${reservedNote(leg.token.tokenAddress)} · type "max"`,
       };
     }
     let amount = await getInputProvider().input(
@@ -724,7 +771,7 @@ export const createBuilder = (host: BuilderHost): Builder => {
           hint: `spendable ${fmtAmount(
             formatUnits(expected > 0n ? expected : 0n, state.token.decimals),
             6,
-          )} ${state.token.symbol} · type "max"`,
+          )} ${state.token.symbol}${reservedNote(state.token.tokenAddress)} · type "max"`,
         };
       }
       let amount = await provider.input(
@@ -771,6 +818,9 @@ export const createBuilder = (host: BuilderHost): Builder => {
               gas.evmGasType === EVMGasType.Type2 ? gas.maxPriorityFeePerGas : 0n,
           } as FeeData);
         }
+        // A faster tier costs more gas, and for these flows that gas comes out
+        // of the amount being sent — so what is spendable just changed.
+        if (cfg.gasFromBalance) await computeFeePreview();
       }
     } else if (key === "fee") {
       const fee = await collectFeeMode(
