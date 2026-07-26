@@ -180,6 +180,7 @@ export const openEphemeralConsole = async (ctx: DeckContext): Promise<void> => {
 
     const showBalances = (row: IndexRow) =>
       run("Balances", async () => {
+        setState({ status: `Reading ephemeral [${row.index}]…` });
         const scan =
           scans.get(row.index) ??
           (await scanEphemeralAssets(chainName, row.address));
@@ -194,6 +195,10 @@ export const openEphemeralConsole = async (ctx: DeckContext): Promise<void> => {
 
     const recover = (row: IndexRow) =>
       run("Recovery", async () => {
+        // Said before the scan, not after. An unscanned account costs several
+        // RPC round-trips to read, and silence for that long is indistinguish-
+        // able from the key having done nothing.
+        setState({ status: `Reading ephemeral [${row.index}]…` });
         const scan =
           scans.get(row.index) ??
           (await scanEphemeralAssets(chainName, row.address));

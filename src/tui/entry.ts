@@ -52,6 +52,7 @@ import {
   TOP,
 } from "./layout";
 import { copyToClipboard } from "./widgets/clipboard";
+import { shifted } from "./widgets/modal";
 import { createPalette } from "./screens/palette";
 import { createBuilder } from "./screens/builder";
 import { showLogs, showTxReview } from "./screens/popout";
@@ -536,7 +537,7 @@ export const runDeck = async (): Promise<void> => {
   });
   // The footer advertises S while composing, so it is bound — but only in the
   // builder, where it means "review and send" rather than a stray letter.
-  screen.key(["S"], () => {
+  screen.key(shifted("S"), () => {
     if (mode === "build") builder.send();
   });
   screen.key(["escape"], () => {

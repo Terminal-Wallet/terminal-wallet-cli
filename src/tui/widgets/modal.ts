@@ -73,6 +73,18 @@ interface OpenModal {
   hardened: boolean;
 }
 
+/**
+ * Blessed key names for a shifted letter.
+ *
+ * `key.full` is assembled as `(ctrl?"C-")+(meta?"M-")+(shift?"S-")+name`, and
+ * `name` is lowercased first — so shift+S arrives as `S-s`, and a binding on
+ * `"S"` can never fire. Every capital-letter binding in the app was dead.
+ */
+export const shifted = (letter: string): string[] => [
+  letter,
+  `S-${letter.toLowerCase()}`,
+];
+
 /** Innermost last. See the grab and the Escape handler in `createModal`. */
 const stack: OpenModal[] = [];
 
@@ -171,6 +183,13 @@ export const createModal = (
   screen.grabKeys = true;
   installEscape(screen);
 
+  // Whatever had focus before this opened. Modals stack — a balances popup over
+  // the account list, a review over a menu — and closing the inner one used to
+  // leave focus nowhere, so the list underneath stopped taking arrow keys and
+  // its own shortcuts did nothing. The screen still looked right, which is what
+  // made it read as "the key did nothing" rather than "focus is gone".
+  const focusBefore = screen.focused;
+
   let closed = false;
   const close = () => {
     if (closed) return; // a double close would pop a modal already gone
@@ -180,6 +199,12 @@ export const createModal = (
     if (stack.length === 0) screen.grabKeys = false;
     box.destroy();
     scrim.destroy();
+    // Hand focus back, if the element is still around to take it. Destroying
+    // the modal does not restore it: blessed's focus history holds the dead
+    // element, so the caller is left with a screen it cannot drive.
+    if (focusBefore && !focusBefore.detached && focusBefore !== box) {
+      focusBefore.focus();
+    }
     screen.render();
   };
 

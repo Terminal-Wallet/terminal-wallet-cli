@@ -19,7 +19,7 @@ import { emitCoreEvent } from "../core/events";
 import { buildWalletInfo } from "../flows/new-wallet";
 import { FormSpec } from "./form-core";
 import { runFormCard } from "./widgets/form-card";
-import { createModal } from "./widgets/modal";
+import { createModal, shifted } from "./widgets/modal";
 
 export const createBlessedInputProvider = (
   blessed: any,
@@ -215,8 +215,8 @@ export const createBlessedInputProvider = (
       });
       yes.on("click", () => done(true));
       no.on("click", () => done(false));
-      box.key(["y", "Y", "enter"], () => done(true));
-      box.key(["n", "N", "escape"], () => done(false));
+      box.key(["y", ...shifted("Y"), "enter"], () => done(true));
+      box.key(["n", ...shifted("N"), "escape"], () => done(false));
       guardFocus(box);
       box.focus();
       screen.render();

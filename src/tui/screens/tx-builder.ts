@@ -18,7 +18,7 @@ import { collectGasSelection } from "../../flows/collect/gas";
 import { collectFeeMode, resolveDefaultFeeAsync } from "../../flows/collect/fee";
 import { evmGasTypeForChain } from "../../railgun/gas/gas-selection";
 import { RailgunDisplayBalance } from "../../models/balance-models";
-import { createModal } from "../widgets/modal";
+import { createModal, shifted } from "../widgets/modal";
 import {
   FieldKey,
   BuilderState,
@@ -273,7 +273,7 @@ export const runTxBuilder = async (
       else void edit(r as FieldKey);
     });
     list.key(["escape"], close);
-    list.key(["s", "S"], () => void trySend());
+    list.key(["s", ...shifted("S")], () => void trySend());
 
     screen.grabKeys = true;
     refresh();
