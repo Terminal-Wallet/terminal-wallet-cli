@@ -51,6 +51,9 @@ import {
 import { getTransactionGasDetails } from "../private/private-tx";
 import { getCurrentEthersWallet } from "../../wallet/public-utils";
 import { emitCoreEvent } from "../../../core/events";
+import { createLogger } from "../../../platform/logger";
+
+const swapLog = createLogger("swap");
 
 export const updateApiKey = () => {
   const zeroXApiKey = configDefaults.apiKeys.zeroXApi;
@@ -176,9 +179,14 @@ export const getZer0XSwapInputs = async (
       );
     }
     await syncEphemeralIndexOnce(chainName, encryptionKey);
-    const { address: ephemeralAddress } = await getCurrentEphemeralInfo(
-      chainName,
-      encryptionKey,
+    const { address: ephemeralAddress, index: ephemeralIndex } =
+      await getCurrentEphemeralInfo(chainName, encryptionKey);
+    // The quote is bound to this address as taker. If the index moves between
+    // quoting and estimating, the relay-adapt rewrites the call to a different
+    // account and the estimate reverts with no usable index — so both ends say
+    // which one they used.
+    swapLog.debug(
+      `quote bound to ephemeral [${ephemeralIndex}] ${ephemeralAddress}`,
     );
 
     const swap = new Ephemeral7702ZeroXV2SwapRecipe(
@@ -276,6 +284,12 @@ export const getZer0XSwapTransactionGasEstimate = async (
   // Private swaps run through the 7702 relay-adapt path; realign the ephemeral index with
   // history once before the SDK derives the ephemeral address for this op.
   await syncEphemeralIndexOnce(chainName, encryptionKey);
+  try {
+    const { address, index } = await getCurrentEphemeralInfo(chainName, encryptionKey);
+    swapLog.debug(`estimating from ephemeral [${index}] ${address}`);
+  } catch {
+    /* diagnostic only — never block the estimate on it */
+  }
 
   const gasDetailsResult = await getTransactionGasDetails(
     chainName,

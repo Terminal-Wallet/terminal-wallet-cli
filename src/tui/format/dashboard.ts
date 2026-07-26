@@ -71,6 +71,26 @@ const miniBar = (pct: number): string => {
  * only. Without the latch the card flickers between a bar and a tick forever,
  * which reads as something being wrong.
  */
+/**
+ * Whether a merkletree is caught up.
+ *
+ * One definition, because there were two. The sync card treated "has leaves and
+ * is not mid-scan" as done, while the builder's proof warning required the
+ * `ready` latch — so a tree could show ✓ on the card and still be called
+ * unsynced in the transaction window. The engine emits a progress-0 callback
+ * after a scan completes, which is what drove them apart: 0 is not "scanning",
+ * but it is also not the `< 0 || >= 100` the latch waits for.
+ *
+ * A progress of 0 therefore means "not scanning", not "no progress" — the only
+ * state that counts as in-flight is a percentage strictly between the ends.
+ */
+export const treeSynced = (tree: {
+  leaves: number;
+  progress: number;
+  ready: boolean;
+}): boolean =>
+  tree.ready || (tree.leaves > 0 && !(tree.progress > 0 && tree.progress < 100));
+
 export const syncTreeLine = (
   label: string,
   tree: number,
@@ -82,12 +102,10 @@ export const syncTreeLine = (
   const position =
     tree >= 0 && leaves >= 0 ? `${tree}:${leaves.toLocaleString("en-US")}` : "—";
   const scanning = pct > 0 && pct < 100;
-  const right = ready
+  const right = treeSynced({ leaves, progress: pct, ready })
     ? tag("✓", "green")
     : scanning
       ? tag(miniBar(pct), "yellow")
-      : leaves > 0
-        ? tag("✓", "green")
-        : tag("…", "gray");
+      : tag("…", "gray");
   return `${tag(label, "gray")} ${tag(position, "white")} ${right}`;
 };

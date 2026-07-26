@@ -24,6 +24,7 @@ import { getState, setState } from "../store";
 import { getInputProvider } from "../../core/input";
 import { tag, short } from "../format/tags";
 import { fmtAmount } from "../format/deck";
+import { treeSynced } from "../format/dashboard";
 import { createModal } from "../widgets/modal";
 import { RailgunDisplayBalance } from "../../models/balance-models";
 import { txBuilderConfigs, buildSwapInputs } from "./tx-builder-configs";
@@ -328,7 +329,10 @@ export const createBuilder = (host: BuilderHost): Builder => {
     // Advisory only: spending against a partially-synced tree risks a failed
     // proof, but the balances it would spend are real. Warn, do not block.
     const s = getState();
-    if (cfg.fields.includes("fee") && !(s.utxoReady && s.txidReady)) {
+    const synced =
+      treeSynced({ leaves: s.utxoLeaves, progress: s.utxoProgress, ready: s.utxoReady }) &&
+      treeSynced({ leaves: s.txidLeaves, progress: s.txidProgress, ready: s.txidReady });
+    if (cfg.fields.includes("fee") && !synced) {
       lines.unshift(
         tag("⚠ not fully synced — proof may fail; rescan if it does", "yellow"),
       );
