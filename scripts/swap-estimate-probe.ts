@@ -16,13 +16,18 @@
  * Print only. Amounts and addresses are already visible in the builder; the
  * encryption key is never logged.
  */
-import { formatUnits } from "ethers";
+import { parseUnits } from "ethers";
 import { overrideMainConfig } from "../src/config/config-overrides";
 import { initializeWalletSystems } from "../src/railgun/wallet/wallet-init";
+import { refreshBalances } from "@railgun-community/wallet";
 import { getCurrentNetwork } from "../src/railgun/engine/engine";
 import { getPrivateERC20BalancesForChain } from "../src/railgun/balance/balance-util";
 import { getSaltedPassword } from "../src/railgun/wallet/wallet-password";
-import { getWrappedTokenInfoForChain } from "../src/railgun/network/network-util";
+import { getCurrentRailgunID } from "../src/railgun/wallet/wallet-util";
+import {
+  getWrappedTokenInfoForChain,
+  getChainForName,
+} from "../src/railgun/network/network-util";
 import {
   getZer0XSwapInputs,
   getZer0XSwapTransactionGasEstimate,
@@ -51,18 +56,25 @@ const main = async () => {
   const encryptionKey = await getSaltedPassword();
   if (!encryptionKey) throw new Error("no encryption key");
 
-  // Balances arrive from engine events after boot, so the first read is empty.
-  // Wait for the cache to fill rather than reporting "not in spendable".
+  // The cache is empty until a scan writes to it, and nothing scans on its own.
+  // The deck kicks one at boot; do the same, then wait for the balance events
+  // to drain into the cache.
+  console.log("kicking a balance scan…");
+  refreshBalances(getChainForName(chainName), [getCurrentRailgunID()]);
+
   let balances = await getPrivateERC20BalancesForChain(chainName);
-  for (let i = 0; i < 60 && balances.length === 0; i += 1) {
+  for (let i = 0; i < 180 && balances.length === 0; i += 1) {
     await new Promise((r) => setTimeout(r, 1000));
     balances = await getPrivateERC20BalancesForChain(chainName);
-    if (i % 5 === 0) console.log(`  waiting for balances… ${i}s`);
+    if (i > 0 && i % 15 === 0) console.log(`  waiting for balances… ${i}s`);
   }
   if (balances.length === 0) {
-    console.log("no spendable balances after 60s — is the wallet synced?");
+    console.log(
+      "no spendable balances after 3m — the wallet may still be doing its first sync",
+    );
     process.exit(1);
   }
+  console.log(`spendable tokens: ${balances.map((b) => b.symbol).join(", ")}`);
 
   const sell = balances.find((b) => b.symbol === sellSymbol);
   if (!sell) {
@@ -92,7 +104,9 @@ const main = async () => {
   line("buy isBaseToken", wrapped.symbol === buy.symbol);
   line("amount", amountStr);
 
-  const amount = BigInt(Math.round(Number(amountStr) * 10 ** sell.decimals));
+  // parseUnits, exactly as buildSwapInputs does — float maths loses precision
+  // at 18 decimals and would quote a different amount than the app.
+  const amount = parseUnits(amountStr, sell.decimals);
   const inputs = await getZer0XSwapInputs(
     chainName,
     { tokenAddress: sell.tokenAddress, isBaseToken: wrapped.symbol === sell.symbol },
