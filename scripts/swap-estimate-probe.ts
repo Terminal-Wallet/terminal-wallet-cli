@@ -28,6 +28,7 @@ import { getCurrentRailgunID } from "../src/railgun/wallet/wallet-util";
 import {
   getWrappedTokenInfoForChain,
   getChainForName,
+  getProviderForChain,
 } from "../src/railgun/network/network-util";
 import {
   getZer0XSwapInputs,
@@ -142,6 +143,37 @@ const main = async () => {
     line("quote buy amount", inputs.quote.buyERC20Amount?.amount);
     line("quote min buy", inputs.quote.minimumBuyAmount);
   }
+
+  // The SDK's sanitizeError has a final fallback that returns a new Error
+  // WITHOUT the cause, so the underlying revert never escapes it. Hook the
+  // provider and print the raw failure before the SDK sees it.
+  const provider = getProviderForChain(chainName) as unknown as {
+    estimateGas: (tx: unknown) => Promise<bigint>;
+  };
+  const realEstimateGas = provider.estimateGas.bind(provider);
+  provider.estimateGas = async (tx: unknown) => {
+    try {
+      return await realEstimateGas(tx);
+    } catch (e) {
+      const t = tx as Record<string, unknown>;
+      console.log("\n>>> RAW provider.estimateGas failure");
+      line("  tx.type", t.type);
+      line("  tx.to", t.to);
+      line("  tx.from", t.from);
+      line("  tx.value", t.value);
+      line("  tx.data bytes", String(t.data ?? "").length);
+      line(
+        "  authorizationList",
+        Array.isArray(t.authorizationList) ? t.authorizationList.length : t.authorizationList,
+      );
+      console.log("  error: " + errDetail(e, 6));
+      const anyErr = e as { info?: unknown; data?: unknown; shortMessage?: unknown };
+      if (anyErr.shortMessage) line("  shortMessage", anyErr.shortMessage);
+      if (anyErr.data) line("  revert data", anyErr.data);
+      if (anyErr.info) console.log("  info: " + JSON.stringify(anyErr.info).slice(0, 600));
+      throw e;
+    }
+  };
 
   console.log("\n--- gas estimate (self-send, no broadcaster) ---");
   try {

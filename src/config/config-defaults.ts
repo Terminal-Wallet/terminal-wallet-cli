@@ -110,7 +110,6 @@ export default {
       providers: [
         getProviderObjectFromURL("https://ethereum-rpc.publicnode.com"),
         getProviderObjectFromURL("https://eth.drpc.org"),
-        getProviderObjectFromURL("https://1rpc.io/eth"),
         getProviderObjectFromURL("https://rpc.flashbots.net"),
         getProviderObjectFromURL("https://eth.meowrpc.com"),
       ],
