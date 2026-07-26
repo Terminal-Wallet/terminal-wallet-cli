@@ -221,3 +221,29 @@ export const summarize = (
   const to = s.address ?? cfg.fixedAddress;
   return `${cfg.verb} ${amt} ${sym} → ${to ? short(to) : "—"}`;
 };
+
+/**
+ * The entry in this flow's own token list that a seeded balance corresponds to.
+ *
+ * A seed comes from the dashboard's balance rows, and the public balance list
+ * reports the NATIVE balance under the WRAPPED token's address — the ETH row
+ * carries WETH's address. Used as a token identity that reads as WETH, so a
+ * flow which routes the native token by address (wrap+shield, native send)
+ * never sees a native choice. It takes the ERC20 branch instead: asks to
+ * approve a token the wallet does not hold, then fails at the spend with
+ * "SafeERC20: low-level call failed", naming neither the token nor the reason.
+ *
+ * Resolving the seed against the list the flow itself offers settles it.
+ * Address first, being exact; then symbol, which is what maps a base-token row
+ * onto the flow's native entry. A seed matching neither is left as it came.
+ */
+export const resolveSeedToken = (
+  seed: RailgunDisplayBalance | undefined,
+  options: RailgunDisplayBalance[],
+): RailgunDisplayBalance | undefined => {
+  if (!seed) return undefined;
+  const byAddress = options.find(
+    (o) => o.tokenAddress.toLowerCase() === seed.tokenAddress.toLowerCase(),
+  );
+  return byAddress ?? options.find((o) => o.symbol === seed.symbol) ?? seed;
+};

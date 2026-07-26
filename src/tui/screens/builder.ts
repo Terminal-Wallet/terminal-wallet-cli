@@ -38,6 +38,7 @@ import {
   validate,
   requireReauthBeforeSend,
   preflight,
+  resolveSeedToken,
   swapQuoteKey,
 } from "./tx-builder-core";
 import {
@@ -516,6 +517,7 @@ export const createBuilder = (host: BuilderHost): Builder => {
     try {
       if (cfg.loadTokens) {
         const tokens = await cfg.loadTokens();
+        seed = resolveSeedToken(seed, tokens);
         prices = await getTokenPricesUSD(
           cfg.chainName,
           tokens.map((t) => t.tokenAddress).filter((a) => a !== "native"),
