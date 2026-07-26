@@ -22,6 +22,7 @@ import { setInputProvider } from "../core/input";
 import { headlessInputProvider } from "./headless-input";
 import configDefaults from "../config/config-defaults";
 import { overrideMainConfig } from "../config/config-overrides";
+import { updateApiKey } from "../railgun/transaction/zeroX/0x-swap";
 import {
   initRailgunEngine,
   loadEngineProvidersForNetwork,
@@ -72,7 +73,13 @@ const runSelftest = async (network: NetworkName): Promise<void> => {
 
   await step("remote config", async () => {
     await overrideMainConfig(version);
-    return "resolved";
+    // Hand the fetched 0x key to the SDK exactly as the deck does, then report
+    // whether one arrived. Presence only — never the value. A swap quote fails
+    // with "no API key configured" when this is missing, and that is far easier
+    // to read here than from inside a failed transaction.
+    updateApiKey();
+    const zeroX = configDefaults.apiKeys?.zeroXApi;
+    return `resolved · 0x key ${zeroX ? "present" : "MISSING (swaps will fail)"}`;
   });
 
   await step("railgun engine", async () => {

@@ -73,6 +73,7 @@ import { getCurrentNetwork } from "../railgun/engine/engine";
 import { getWrappedTokenInfoForChain } from "../railgun/network/network-util";
 import { initializeWalletSystems } from "../railgun/wallet/wallet-init";
 import { overrideMainConfig } from "../config/config-overrides";
+import { updateApiKey } from "../railgun/transaction/zeroX/0x-swap";
 import { configuredDefaultNetwork } from "../config/config-manager";
 import { installProcessHandlers } from "../platform/lifecycle";
 import { createLogger } from "../platform/logger";
@@ -576,6 +577,11 @@ export const runDeck = async (): Promise<void> => {
 
   try {
     await overrideMainConfig(version);
+    // After the remote config lands and before anything can quote: that fetch
+    // is what fills configDefaults.apiKeys, and this is what hands the 0x key
+    // to the SDK. Without it every swap quote fails with "no API key
+    // configured" while the key sits in config, fetched and unused.
+    updateApiKey();
     await initializeWalletSystems();
   } catch (err) {
     setState({ status: `Boot failed: ${(err as Error).message}` });
