@@ -84,11 +84,7 @@ export const rowLabel = (row: IndexRow): string =>
   `#${String(row.index).padEnd(4)} ${short(row.address).padEnd(15)} ` +
   `${rowState(row).padEnd(8)} ${row.scan ? assetSummary(row) : "not scanned"}`;
 
-/** Rows worth scanning first: everything not already scanned, newest first. */
-export const unscanned = (rows: IndexRow[]): IndexRow[] =>
-  rows.filter((row) => row.scan === undefined);
-
-/** A one-line verdict for the header, once a full scan has run. */
+/** A one-line verdict for the header: how much has been looked at so far. */
 export const scanVerdict = (rows: IndexRow[]): string => {
   const scanned = rows.filter((row) => row.scan !== undefined);
   if (scanned.length === 0) return "not scanned yet";

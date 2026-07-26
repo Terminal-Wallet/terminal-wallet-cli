@@ -21,7 +21,6 @@ import {
   rowLabel,
   rowState,
   scanVerdict,
-  unscanned,
 } from "../../../src/tui/format/ephemeral-rows";
 import { EphemeralAssetScan } from "../../../src/railgun/wallet/ephemeral-recovery";
 import { EphemeralHistoryEntry } from "../../../src/railgun/wallet/ephemeral-util";
@@ -112,15 +111,6 @@ test("history's used marker survives into the row", () => {
   const rows = buildIndexRows(35, entries(33));
   assert.equal(rows[0].usedForUnshield, true);
   assert.equal(rowState(rows[0]), "used");
-});
-
-test("scanning is tracked so a sweep can resume", () => {
-  const scans = new Map([[34, scan(0n)]]);
-  const rows = buildIndexRows(35, entries(33, 34, 35), scans);
-  assert.deepEqual(
-    unscanned(rows).map((r) => r.index),
-    [35, 33],
-  );
 });
 
 test("the verdict distinguishes nothing-found from nothing-checked", () => {

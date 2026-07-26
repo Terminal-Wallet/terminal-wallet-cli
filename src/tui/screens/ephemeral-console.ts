@@ -31,7 +31,6 @@ import {
   holdsAssets,
   rowLabel,
   scanVerdict,
-  unscanned,
 } from "../format/ephemeral-rows";
 import {
   balanceLines,
@@ -64,7 +63,7 @@ import { runRecovery } from "./ephemeral-recover";
  * panel cannot be cut off by a narrow terminal the way one long one can.
  */
 const ACTIONS_ON_ROW = "Enter scan · b balances · r recover · m make current";
-const ACTIONS_GLOBAL = "S scan all · s sync from history · a advance · x set index · Esc close";
+const ACTIONS_GLOBAL = "s sync from history · a advance · x set index · Esc close";
 
 export const openEphemeralConsole = async (ctx: DeckContext): Promise<void> => {
   const encryptionKey = await getSaltedPassword();
@@ -179,27 +178,6 @@ export const openEphemeralConsole = async (ctx: DeckContext): Promise<void> => {
         );
       });
 
-    const scanAll = () =>
-      run("Scan all", async () => {
-        const pending = unscanned(rows);
-        if (!pending.length) {
-          provider.notify("Every account is already scanned.");
-          return;
-        }
-        for (const [n, row] of pending.entries()) {
-          setState({
-            status: `Scanning ephemeral accounts… ${n + 1}/${pending.length}`,
-          });
-          // Sequential on purpose: this is several RPC calls per account, and
-          // firing them all at once is how a public endpoint rate-limits us.
-          // eslint-disable-next-line no-await-in-loop
-          scans.set(row.index, await scanEphemeralAssets(chainName, row.address));
-          // eslint-disable-next-line no-await-in-loop
-          await reload();
-        }
-        provider.notify(scanVerdict(rows));
-      });
-
     const showBalances = (row: IndexRow) =>
       run("Balances", async () => {
         const scan =
@@ -307,7 +285,6 @@ export const openEphemeralConsole = async (ctx: DeckContext): Promise<void> => {
     list.key(["b"], onRow(showBalances));
     list.key(["r"], onRow(recover));
     list.key(["m"], onRow(makeCurrent));
-    list.key(["S"], () => void scanAll());
     list.key(["s"], () => void sync());
     list.key(["a"], () => void advance());
     list.key(["x"], () => void setArbitrary());
