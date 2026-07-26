@@ -50,6 +50,7 @@ import {
 } from "./layout";
 import { copyToClipboard } from "./widgets/clipboard";
 import { createPalette } from "./screens/palette";
+import { createBuilder } from "./screens/builder";
 import { showLogs, showTxReview } from "./screens/popout";
 import {
   openWalletMenu,
@@ -107,6 +108,9 @@ export const runDeck = async (): Promise<void> => {
   // declared indirection that is filled in once the widgets are up.
   let draw: () => void = () => undefined;
   const render = () => draw();
+  // Same cycle one level down: `render` draws the builder, and the builder is
+  // constructed with a context that renders.
+  let drawBuilder: () => void = () => undefined;
 
   const feeders = createFeeders(render);
   const ctx: DeckContext = {
@@ -226,6 +230,20 @@ export const runDeck = async (): Promise<void> => {
   const homeBox = blessed.box({ parent: center, top: 0, left: 0, right: 0, bottom: 0, tags: true });
   const paletteBox = blessed.box({
     parent: center, top: 0, left: 0, right: 0, bottom: 0, tags: true, hidden: true, keys: true, mouse: true,
+  });
+  // The builder takes the top half of the centre for its rows and gives the rest
+  // to the breakdown, which is the part the user is actually reading before they
+  // approve a spend.
+  const buildList = blessed.list({
+    parent: center, top: 0, left: 0, right: 0, height: "45%", tags: true, hidden: true,
+    keys: true, mouse: true, vi: true,
+    scrollbar: { ch: " ", style: { bg: "green" } },
+    style: { selected: { bg: "cyan", fg: "black" }, item: { fg: "white" } },
+  });
+  const buildSummary = blessed.box({
+    parent: center, top: "45%", left: 0, right: 0, bottom: 0, tags: true, hidden: true,
+    scrollable: true, alwaysScroll: true, mouse: true,
+    scrollbar: { ch: " ", style: { bg: "green" } },
   });
   const activity = blessed.list({
     parent: screen, top: TOP, right: 0, width: RIGHT_W, height: 8, tags: true,
@@ -391,6 +409,10 @@ export const runDeck = async (): Promise<void> => {
           `  ${tag("click", "cyan")} a balance to seed the builder\n` +
           `  ${tag("b", "cyan")}/${tag("v", "cyan")} peek rails`,
       );
+    } else if (mode === "build") {
+      // The breakdown reflects live balances, so a scan landing mid-compose
+      // updates what the user is about to approve.
+      drawBuilder();
     }
 
     footer.setContent(
@@ -401,22 +423,38 @@ export const runDeck = async (): Promise<void> => {
     screen.render();
   };
 
-  // --- palette ---------------------------------------------------------------
+  // --- palette and builder ---------------------------------------------------
+  const backHome = () => {
+    mode = "home";
+    homeBox.show();
+    center.setLabel(" deck ");
+    leftRail.focus();
+    render();
+  };
+
+  const builder = createBuilder({
+    ctx,
+    list: buildList,
+    summary: buildSummary,
+    center,
+    onClose: backHome,
+  });
+  // Closes the render cycle: `render` draws the builder, and the builder is
+  // built from `render`. Same shape as `draw` above.
+  drawBuilder = builder.render;
+
   const palette = createPalette({
     ctx,
     box: paletteBox,
+    // The palette has already closed itself by the time this runs, so the
+    // builder is free to take the centre pane.
+    onSelect: (flowId, seed) => {
+      mode = "build";
+      homeBox.hide();
+      void builder.open(flowId, seed);
+    },
     seeded: () => ({ token: seededToken, kind: seededKind }),
-    onSelect: (flowId) => {
-      // The builder lands next; until then say so rather than doing nothing.
-      getInputProvider().notify(`${flowId} — builder not wired yet.`);
-    },
-    onClose: () => {
-      mode = "home";
-      homeBox.show();
-      center.setLabel(" deck ");
-      leftRail.focus();
-      render();
-    },
+    onClose: backHome,
   });
 
   const openPalette = () => {
@@ -475,7 +513,16 @@ export const runDeck = async (): Promise<void> => {
     wantRight = !wantRight;
     relayout(false);
   });
+  // The footer advertises S while composing, so it is bound — but only in the
+  // builder, where it means "review and send" rather than a stray letter.
+  screen.key(["S"], () => {
+    if (mode === "build") builder.send();
+  });
   screen.key(["escape"], () => {
+    if (mode === "build") {
+      builder.close();
+      return;
+    }
     if (mode === "palette") {
       palette.close();
       return;
@@ -486,7 +533,10 @@ export const runDeck = async (): Promise<void> => {
     relayout(false);
   });
   screen.key(["tab"], () => {
-    if (screen.focused === leftRail && !activity.hidden) activity.focus();
+    // Tab is a no-op cycle in the builder: it returns focus to the rows rather
+    // than moving it out to a rail mid-compose.
+    if (mode === "build") buildList.focus();
+    else if (screen.focused === leftRail && !activity.hidden) activity.focus();
     else leftRail.focus();
     screen.render();
   });

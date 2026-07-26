@@ -49,6 +49,24 @@ const interceptLog = {
   error: (err: unknown) => engineLog.error(err),
 };
 
+/**
+ * RAILGUN's shield/unshield rates, kept per chain as the provider reports them.
+ *
+ * The cookbook is told these rates so it can build recipes, but it offers no way
+ * to read them back, and the transaction breakdown has to show the user what the
+ * protocol will take before they approve a spend. Cached here rather than
+ * re-derived, so the figure shown is the same one the recipe was built with.
+ */
+const railgunFeeBasisPoints: Partial<
+  Record<NetworkName, { shield: bigint; unshield: bigint }>
+> = {};
+
+/** Undefined until the chain's provider has loaded and reported its fees. */
+export const getRailgunFeeBasisPoints = (
+  chainName: NetworkName,
+): { shield: bigint; unshield: bigint } | undefined =>
+  railgunFeeBasisPoints[chainName];
+
 export const getCustomProviders = () => {
   // Providers can be loaded before (or without) a keychain — the diagnostic
   // selftest brings the engine up with no wallet at all. Custom providers are a
@@ -306,6 +324,10 @@ export const loadProviderList = async (chainName: NetworkName) => {
   );
 
   setRailgunFees(chainName, feesShield, feesUnshield);
+  railgunFeeBasisPoints[chainName] = {
+    shield: feesShield,
+    unshield: feesUnshield,
+  };
   loadedRailgunNetworks[chainName] = true;
   currentLoadedNetwork = chainName;
 };

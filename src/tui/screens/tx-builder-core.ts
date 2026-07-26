@@ -8,7 +8,9 @@ import { formatUnits } from "ethers";
 import { GasChoice } from "../../flows/collect/gas";
 import { FeeMode } from "../../flows/spec";
 import { RailgunDisplayBalance } from "../../models/balance-models";
-import { LegsState } from "../../flows/caps";
+import { LegsState, FlowCaps, validateLegs } from "../../flows/caps";
+import { TokenOverspend } from "../../flows/balance";
+import { fmtAmount } from "../format/deck";
 
 export type FieldKey = "token" | "buyToken" | "amount" | "address" | "memo" | "gas" | "fee" | "showSender";
 
@@ -101,6 +103,74 @@ export const validate = (
  */
 export const requireReauthBeforeSend = (opts: { isSimulation: boolean }): boolean =>
   !opts.isSimulation;
+
+export type Preflight =
+  | { ok: true }
+  | { ok: false; reason: "legs" | "fields" | "overspend"; message: string };
+
+export interface PreflightInput {
+  fields: FieldKey[];
+  state: BuilderState;
+  /** Multi-token flows only; validated against `caps`. */
+  legs?: LegsState;
+  caps?: FlowCaps;
+  /** Tokens whose committed amount plus same-token fee exceeds the balance. */
+  overspend: TokenOverspend[];
+}
+
+/**
+ * Everything that must hold before a build may be reviewed and broadcast.
+ *
+ * Pure and ordered on purpose. The builder renders an `ok` flag alongside the
+ * breakdown, but a rendered flag is a display artefact — it can be stale, and it
+ * exists only if something drew it. The send path calls this instead, so the
+ * decision to spend is made from state rather than from what is on screen.
+ *
+ * The order is cheapest-first and most-specific-last: unfinished legs name what
+ * to finish, missing fields name themselves, and only a complete build is worth
+ * measuring against the balance.
+ */
+export const preflight = ({
+  fields,
+  state,
+  legs,
+  caps,
+  overspend,
+}: PreflightInput): Preflight => {
+  if (legs && caps) {
+    const result = validateLegs(legs, caps);
+    if (!result.ok) {
+      return {
+        ok: false,
+        reason: "legs",
+        message:
+          result.violations[0] ?? `Incomplete — finish ${result.missing.length} leg(s).`,
+      };
+    }
+  }
+
+  const fieldResult = validate(fields, state);
+  if (!fieldResult.ok) {
+    return {
+      ok: false,
+      reason: "fields",
+      message: `Incomplete — need: ${fieldResult.missing.join(", ")}.`,
+    };
+  }
+
+  if (overspend.length) {
+    const [first] = overspend;
+    return {
+      ok: false,
+      reason: "overspend",
+      message:
+        `Overspends ${first.token.symbol} by ` +
+        `${fmtAmount(formatUnits(first.overBy, first.token.decimals), 6)} — reduce the amount or fee.`,
+    };
+  }
+
+  return { ok: true };
+};
 
 /** Live one-line summary of the transaction being built. */
 export const summarize = (

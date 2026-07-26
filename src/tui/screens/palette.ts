@@ -109,6 +109,12 @@ export const createPalette = (host: PaletteHost): Palette => {
     }
   };
 
+  const close = () => {
+    box.hide();
+    clear();
+    host.onClose();
+  };
+
   const select = () => {
     if (!cursor) return;
     if (isDisabled(cursor)) {
@@ -124,7 +130,11 @@ export const createPalette = (host: PaletteHost): Palette => {
       void openOther();
       return;
     }
-    host.onSelect(cursor, host.seeded().token);
+    // Closed before the flow starts, not after. Whatever runs next owns the
+    // centre pane, and cards left alive under it would still take keypresses.
+    const { token } = host.seeded();
+    close();
+    host.onSelect(cursor, token);
   };
 
 
@@ -202,12 +212,6 @@ export const createPalette = (host: PaletteHost): Palette => {
     cursor = gridNav(layout.rows, cursor, direction, isDisabled);
     highlight();
     ctx.screen.render();
-  };
-
-  const close = () => {
-    box.hide();
-    clear();
-    host.onClose();
   };
 
   box.key(["left", "h"], () => move("left"));
