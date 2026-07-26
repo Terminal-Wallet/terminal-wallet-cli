@@ -44,6 +44,7 @@ export const showAddresses = async (ctx: DeckContext): Promise<void> => {
     height: 7,
     accent: "cyan",
     footer: "Enter / click copy · Esc close",
+    onDismiss: () => close(),
   });
 
   const list = blessed.list({

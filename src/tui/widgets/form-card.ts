@@ -32,11 +32,13 @@ export const runFormCard = (
   const submitLabel = spec.submitLabel ?? "Save";
 
   return new Promise((resolve) => {
+    let close: (result?: { ok: boolean; message?: string }) => void = () => undefined;
     const { box, guardFocus, close: closeChrome } = createModal(blessed, screen, {
       title: spec.title,
       widthPct: 72,
       height: rows.length + 7,
       accent: "cyan",
+      onDismiss: () => close(undefined),
     });
     const list = blessed.list({
       parent: box, top: 0, left: 0, right: 0, height: rows.length, tags: true,
@@ -74,7 +76,7 @@ export const runFormCard = (
       refresh();
     };
 
-    const close = (result?: { ok: boolean; message?: string }) => {
+    close = (result?: { ok: boolean; message?: string }) => {
       closeChrome();
       resolve(result);
     };

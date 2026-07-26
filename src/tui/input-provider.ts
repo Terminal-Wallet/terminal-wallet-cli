@@ -34,12 +34,14 @@ export const createBlessedInputProvider = (
     hint?: string,
   ): Promise<string | undefined> =>
     new Promise((resolve) => {
+      let finish: (val?: string) => void = () => undefined;
       const { box, guardFocus, close } = createModal(blessed, screen, {
         title: message,
         widthPct: 60,
         height: hint ? 8 : 7,
         accent: "cyan",
         footer: "Enter submit · Esc cancel",
+        onDismiss: () => finish(undefined),
       });
       if (hint) {
         blessed.text({
@@ -66,16 +68,35 @@ export const createBlessedInputProvider = (
         mouse: true,
         style: { bg: "black", focus: { bg: "black" } },
       });
-      const done = (val?: string) => {
+      let settled = false;
+      finish = (val?: string) => {
+        if (settled) return;
+        settled = true;
+        // blessed's own teardown: removes its keypress listener, hides the
+        // cursor and releases grabKeys. "stop" performs all of that and returns
+        // without emitting submit/cancel, which we have already decided.
+        (input as unknown as { _done?: (err: string) => void })._done?.("stop");
         close();
         resolve(val);
       };
-      input.on("submit", () => done(input.getValue() || undefined));
-      input.on("cancel", () => done(undefined));
-      input.key(["escape"], () => done(undefined));
+      input.on("submit", () => finish(input.getValue() || undefined));
+      input.on("cancel", () => finish(undefined));
+      input.key(["escape"], () => finish(undefined));
       guardFocus(input);
       input.focus();
       input.readInput(); // single arm — see the inputOnFocus note above
+
+      // blessed cancels the read on ANY blur (textarea.js binds
+      // `on('blur', __done)`, and __done is _done(null, null) → "cancel").
+      // Its own click-to-focus emits a blur on the already-focused element, so
+      // clicking into the field dismissed the prompt — and once cancelled the
+      // keypress listener is gone, so nothing could be typed either.
+      //
+      // Losing focus is not an answer. Esc, Enter, [x] and an outside click are.
+      input.removeListener(
+        "blur",
+        (input as unknown as { __done: () => void }).__done,
+      );
       screen.render();
     });
 
@@ -86,12 +107,17 @@ export const createBlessedInputProvider = (
     message: string,
   ): Promise<string | undefined> =>
     new Promise((resolve) => {
+      let finish: (val?: string) => void = () => undefined;
       const { box, guardFocus, close } = createModal(blessed, screen, {
         title: message,
         widthPct: 60,
         height: 9,
         accent: "green",
-        footer: "Enter / [Unlock] to continue · clicks won't dismiss",
+        footer: "Enter / [Unlock] · [x] to cancel · outside clicks won't dismiss",
+        // The [x] is an explicit cancel, same as the button. Outside clicks are
+        // still ignored: this modal guards a spend confirmation.
+        onDismiss: () => finish(undefined),
+        hardened: true,
       });
       blessed.text({
         parent: box, top: 0, left: 1, right: 1, tags: true,
@@ -114,7 +140,8 @@ export const createBlessedInputProvider = (
         content: "{center}[ Cancel ]{/}", style: { bg: "red", fg: "white", hover: { bg: "white", fg: "black" } },
       });
       let closing = false;
-      const finish = (val?: string) => {
+      finish = (val?: string) => {
+        if (closing) return;
         closing = true;
         close();
         resolve(val);
@@ -140,12 +167,14 @@ export const createBlessedInputProvider = (
 
   const promptConfirm = (message: string): Promise<boolean> =>
     new Promise((resolve) => {
+      let done: (v: boolean) => void = () => undefined;
       const { box, guardFocus, close } = createModal(blessed, screen, {
         title: "Confirm",
         widthPct: 55,
         height: 9,
         accent: "yellow",
         footer: "y / Enter = yes · n / Esc = no",
+        onDismiss: () => done(false),
       });
       blessed.text({
         parent: box,
@@ -155,7 +184,7 @@ export const createBlessedInputProvider = (
         tags: true,
         content: message,
       });
-      const done = (v: boolean) => {
+      done = (v: boolean) => {
         close();
         resolve(v);
       };
@@ -200,6 +229,7 @@ export const createBlessedInputProvider = (
     new Promise((resolve) => {
       // Right-align the optional detail column (e.g. balance) under a padded
       // label so the list reads like a table.
+      let done: (v?: string) => void = () => undefined;
       const labelW = items.reduce((m, i) => Math.max(m, i.label.length), 0);
       const rows = items.map((i) =>
         i.hint ? `${i.label.padEnd(labelW + 2)}{gray-fg}${i.hint}{/}` : i.label,
@@ -213,6 +243,7 @@ export const createBlessedInputProvider = (
         height: listH + 4,
         accent: "cyan",
         footer: "↑/↓ move · Enter select · Esc cancel",
+        onDismiss: () => done(undefined),
       });
       const list = blessed.list({
         parent: box,
@@ -231,7 +262,7 @@ export const createBlessedInputProvider = (
           item: { fg: "white" },
         },
       });
-      const done = (v?: string) => {
+      done = (v?: string) => {
         close();
         resolve(v);
       };
@@ -260,6 +291,7 @@ export const createBlessedInputProvider = (
     initial: string[],
   ): Promise<string[] | undefined> =>
     new Promise((resolve) => {
+      let done: (v?: string[]) => void = () => undefined;
       const chosen = new Set(initial);
       const labelW = items.reduce((m, i) => Math.max(m, i.label.length), 0);
       const rowFor = (i: InputChoice) =>
@@ -274,6 +306,7 @@ export const createBlessedInputProvider = (
         height: listH + 4,
         accent: "cyan",
         footer: "↑/↓ move · Space toggle · Enter confirm · Esc cancel",
+        onDismiss: () => done(undefined),
       });
       const list = blessed.list({
         parent: box,
@@ -289,7 +322,7 @@ export const createBlessedInputProvider = (
         scrollbar: { ch: " ", style: { bg: "green" } },
         style: { selected: { bg: "cyan", fg: "black" }, item: { fg: "white" } },
       });
-      const done = (v?: string[]) => {
+      done = (v?: string[]) => {
         close();
         resolve(v);
       };

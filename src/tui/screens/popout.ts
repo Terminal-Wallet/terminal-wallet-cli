@@ -30,12 +30,14 @@ const openScrollModal = (
   ctx: DeckContext,
   { title, getContent, accent, live, tags = false, copy }: ScrollModalOptions,
 ): void => {
+  let done: () => void = () => undefined;
   const { box, guardFocus, close } = createModal(blessed, ctx.screen, {
     title,
     widthPct: 88,
     height: Math.max(8, ((ctx.screen.height as number) || 24) - 4),
     accent,
     footer: `↑/↓ · PgUp/PgDn scroll${copy ? ` · c copy ${copy.label}` : ""} · Esc close`,
+    onDismiss: () => done(),
   });
 
   const body = blessed.box({
@@ -69,7 +71,7 @@ const openScrollModal = (
 
   // Unsubscribing on close is what stops a dismissed modal from redrawing
   // forever behind whatever replaced it.
-  const done = () => {
+  done = () => {
     unsubscribe?.();
     close();
   };

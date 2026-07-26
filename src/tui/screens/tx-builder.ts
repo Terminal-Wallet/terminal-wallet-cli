@@ -91,11 +91,13 @@ export const runTxBuilder = async (
   const rows: Row[] = [...cfg.fields, "__send", "__cancel"];
 
   return new Promise<void>((resolve) => {
+    let close: () => void = () => undefined;
     const { box, guardFocus, close: closeChrome } = createModal(blessed, screen, {
       title: cfg.title,
       widthPct: 70,
       height: rows.length + 7,
       accent: "cyan",
+      onDismiss: () => close(),
     });
     const list = blessed.list({
       parent: box,
@@ -152,7 +154,7 @@ export const runTxBuilder = async (
       refresh();
     };
 
-    const close = () => {
+    close = () => {
       closeChrome();
       resolve();
     };

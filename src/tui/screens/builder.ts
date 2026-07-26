@@ -759,6 +759,7 @@ export const createBuilder = (host: BuilderHost): Builder => {
   /** The same breakdown the panel shows, as a modal that must be accepted. */
   const showReviewModal = (): Promise<boolean> =>
     new Promise((resolve) => {
+      let done: (confirmed: boolean) => void = () => undefined;
       const { lines } = detail();
       const { box, guardFocus, close } = createModal(blessed, ctx.screen, {
         title: `Review · ${cfg?.verb ?? "Transaction"}`,
@@ -766,6 +767,7 @@ export const createBuilder = (host: BuilderHost): Builder => {
         height: Math.min((ctx.screen.height as number) - 4, lines.length + 6),
         accent: "cyan",
         footer: "Enter / y confirm · Esc / n cancel",
+        onDismiss: () => done(false),
       });
       blessed.box({
         parent: box,
@@ -805,7 +807,7 @@ export const createBuilder = (host: BuilderHost): Builder => {
         content: "{center}[ Cancel ]{/}",
         style: { bg: "red", fg: "white", hover: { bg: "white", fg: "black" } },
       });
-      const done = (confirmed: boolean) => {
+      done = (confirmed: boolean) => {
         close();
         resolve(confirmed);
       };

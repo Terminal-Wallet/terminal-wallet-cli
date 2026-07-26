@@ -39,6 +39,7 @@ export const showMnemonic = async (
     height: lines.length + 6,
     accent: "red",
     footer: "c copy · Esc / Enter dismiss",
+    onDismiss: () => close(),
   });
 
   blessed.box({
