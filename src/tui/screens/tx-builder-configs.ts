@@ -53,7 +53,8 @@ import {
 import { RunResult, SendOutcome } from "../../flows/run";
 import { TxBuilderConfig } from "./tx-builder";
 import { BuilderState } from "./tx-builder-core";
-import { Leg, toRecipients } from "../../flows/caps";
+import {
+  LegsState, Leg, toRecipients } from "../../flows/caps";
 import { isNativeChoice, makeNativeEntry } from "../../flows/native-token";
 import { parseUnits } from "ethers";
 import { getZer0XSwapInputs } from "../../railgun/transaction/zeroX/0x-swap";
@@ -102,6 +103,18 @@ export const buildSwapInputs = async (
 };
 
 type SubmitResult = { ok: boolean; error?: string };
+
+/**
+ * The build as a LegsState, for the fee gate. Multi-token flows have real legs;
+ * a single-token flow is one synthetic leg so both measure the same way.
+ */
+const legsView = (s: BuilderState): LegsState | undefined => {
+  if (s.legs) return s.legs;
+  if (s.token && s.amount) {
+    return { legs: [{ id: "__single", token: s.token, amount: s.amount }], seq: 1 };
+  }
+  return undefined;
+};
 
 const toResult = (r: RunResult<SendOutcome>): SubmitResult =>
   r.ok ? { ok: true } : { ok: false, error: r.error };
@@ -161,8 +174,15 @@ const gasInfo = (chainName: NetworkName) => {
   return { gasSymbol: symbol, gasDecimals: decimals };
 };
 
+// These drive the broadcaster-fee preview AND the amount the overspend check
+// holds back, so an optimistic figure lets a build through that the real fee
+// cannot cover. Sized against measured execution, not proof-free guesses.
 const PRIVATE_GAS_UNITS = 250000n;
 const PUBLIC_GAS_UNITS = 65000n;
+/** Relay-adapt unshield-to-base: unshield + unwrap, ~1.7M measured. */
+const RELAY_ADAPT_BASE_GAS_UNITS = 1_700_000n;
+/** Private 0x swap: the recipe's own floor, and ~2.5M measured. */
+const PRIVATE_SWAP_GAS_UNITS = 2_400_000n;
 function baseSym(chainName: NetworkName): string {
   return NETWORK_CONFIG[chainName].baseToken.symbol;
 }
@@ -198,7 +218,7 @@ export const txBuilderConfigs: Record<
         fee: s.fee ?? resolveDefaultFee(),
         memo: s.memo || undefined,
       });
-      return toResult(await runTransferTransaction(spec, applyGasDetailsConfirm(s.gas)));
+      return toResult(await runTransferTransaction(spec, applyGasDetailsConfirm(s.gas, legsView(s))));
     },
   }),
 
@@ -235,7 +255,7 @@ export const txBuilderConfigs: Record<
         const spec: UnshieldBaseSpec = {
           type: RailgunTransaction.UnshieldBase, chainName, recipient, encryptionKey, fee,
         };
-        return toResult(await runUnshieldBaseTransaction(spec, applyGasDetailsConfirm(s.gas)));
+        return toResult(await runUnshieldBaseTransaction(spec, applyGasDetailsConfirm(s.gas, legsView(s))));
       }
       const recipients = toRecipients({ legs: erc20, seq: 0 });
       const spec: UnshieldSpec = {
@@ -245,7 +265,7 @@ export const txBuilderConfigs: Record<
         encryptionKey,
         fee,
       };
-      return toResult(await runUnshieldTransaction(spec, applyGasDetailsConfirm(s.gas)));
+      return toResult(await runUnshieldTransaction(spec, applyGasDetailsConfirm(s.gas, legsView(s))));
     },
   }),
 
@@ -283,14 +303,14 @@ export const txBuilderConfigs: Record<
           recipient,
           encryptionKey,
         };
-        return toResult(await runShieldBaseTransaction(spec, applyGasDetailsConfirm(s.gas)));
+        return toResult(await runShieldBaseTransaction(spec, applyGasDetailsConfirm(s.gas, legsView(s))));
       }
       const recipients = toRecipients({ legs: erc20, seq: 0 });
       const spender = getRailgunProxyAddressForChain(chainName);
       if (!(await runErc20Approvals(chainName, recipients, spender)))
         return { ok: false, error: "approvals not completed" };
       const spec: ShieldSpec = { type: RailgunTransaction.Shield, chainName, recipients };
-      return toResult(await runShieldTransaction(spec, applyGasDetailsConfirm(s.gas)));
+      return toResult(await runShieldTransaction(spec, applyGasDetailsConfirm(s.gas, legsView(s))));
     },
   }),
 
@@ -347,7 +367,7 @@ export const txBuilderConfigs: Record<
     addressLabel: "Recipient public (0x) address",
     fixedToken: () => wrappedToken(chainName, false),
     ...gasInfo(chainName),
-    gasUnitsHint: PRIVATE_GAS_UNITS,
+    gasUnitsHint: RELAY_ADAPT_BASE_GAS_UNITS,
     relayAdapt: true,
     submit: async (s: BuilderState) => {
       const encryptionKey = await requireEncryptionKey();
@@ -363,7 +383,7 @@ export const txBuilderConfigs: Record<
         fee: s.fee ?? resolveDefaultFee(),
       };
       return toResult(
-        await runUnshieldBaseTransaction(spec, applyGasDetailsConfirm(s.gas)),
+        await runUnshieldBaseTransaction(spec, applyGasDetailsConfirm(s.gas, legsView(s))),
       );
     },
   }),
@@ -391,7 +411,7 @@ export const txBuilderConfigs: Record<
         encryptionKey,
       };
       return toResult(
-        await runShieldBaseTransaction(spec, applyGasDetailsConfirm(s.gas)),
+        await runShieldBaseTransaction(spec, applyGasDetailsConfirm(s.gas, legsView(s))),
       );
     },
   }),
@@ -431,7 +451,7 @@ export const txBuilderConfigs: Record<
     loadTokens: () => getPrivateERC20BalancesForChain(chainName),
     loadBuyTokens: () => loadBuyTokens(chainName),
     ...gasInfo(chainName),
-    gasUnitsHint: 350000n,
+    gasUnitsHint: PRIVATE_SWAP_GAS_UNITS,
     relayAdapt: true,
     submit: async (s: BuilderState) => {
       if (!s.token || !s.buyToken || !s.amount) return { ok: false, error: "incomplete" };
@@ -458,7 +478,7 @@ export const txBuilderConfigs: Record<
         encryptionKey,
         fee: s.fee ?? resolveDefaultFee(),
       };
-      return toResult(await runPrivateSwapTransaction(spec, applyGasDetailsConfirm(s.gas)));
+      return toResult(await runPrivateSwapTransaction(spec, applyGasDetailsConfirm(s.gas, legsView(s))));
     },
   }),
 

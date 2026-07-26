@@ -20,6 +20,8 @@ import {
   GasOverride,
 } from "../../railgun/gas/gas-selection";
 import { PublicTransactionDetails } from "../../railgun/transaction/public/public-tx";
+import { LegsState } from "../../flows/caps";
+import { overspentTokens, TokenOverspend } from "../../flows/balance";
 import {
   getCurrentWalletName,
   getCurrentWalletPublicAddress,
@@ -110,12 +112,52 @@ export const runErc20Approvals = async (
 };
 
 /** Select an amount of the wrapped base token; returns the single recipient. */
+/**
+ * Refuse a send whose real broadcaster fee will not fit.
+ *
+ * The builder reserves an approximate fee while composing, computed against a
+ * nominal gas figure. The estimate returns the measured one, which for a
+ * relay-adapt swap is several times larger — so a build that looked affordable
+ * can fail at the SDK with "private balance too low to pay broadcaster fee".
+ * That is recoverable but only after the user has waited for a proof, and the
+ * message does not say by how much.
+ *
+ * The real fee is known here, before proving. Returns the shortfall, or
+ * undefined when it fits.
+ */
+export const feeShortfall = (
+  legs: LegsState,
+  gas: PrivateGasEstimate,
+): TokenOverspend | undefined => {
+  const recipient = gas.broadcasterFeeERC20Recipient;
+  if (!recipient) return undefined; // self-signed: gas is paid publicly
+  const [over] = overspentTokens(legs, {
+    tokenAddress: recipient.tokenAddress,
+    amount: recipient.amount,
+  });
+  return over;
+};
+
 export const applyGasDetailsConfirm =
-  (choice: GasChoice) =>
+  (choice: GasChoice, legs?: LegsState) =>
   async (
     spec: { chainName: NetworkName },
     gas: PrivateGasEstimate,
   ): Promise<boolean> => {
+    // The measured fee, checked before a proof is generated. Refusing here
+    // costs nothing; the same refusal from the SDK costs a proof and says
+    // nothing about how much to reduce by.
+    if (legs) {
+      const over = feeShortfall(legs, gas);
+      if (over) {
+        getInputProvider().notify(
+          `Broadcaster fee leaves ${over.token.symbol} short by ` +
+            `${formatUnits(over.overBy, over.token.decimals)} — reduce the amount or ` +
+            `pick a different fee token.`,
+        );
+        return false;
+      }
+    }
     if (choice && choice !== "keep") {
       const decimals = baseDecimals(spec.chainName);
       gas.estimatedGasDetails = applyOverrideToDetails(gas.estimatedGasDetails, choice);
