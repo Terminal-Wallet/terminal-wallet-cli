@@ -70,6 +70,7 @@ import {
   getPublicERC20BalancesForChain,
 } from "../railgun/balance/balance-util";
 import { getCurrentNetwork } from "../railgun/engine/engine";
+import { installRevertCapture } from "../railgun/network/revert-capture";
 import { getWrappedTokenInfoForChain } from "../railgun/network/network-util";
 import { initializeWalletSystems } from "../railgun/wallet/wallet-init";
 import { overrideMainConfig, versionCheck } from "../config/config-overrides";
@@ -604,6 +605,7 @@ export const runDeck = async (): Promise<void> => {
     return;
   }
   setState({ status: "Wallet ready." });
+  installRevertCapture(getCurrentNetwork());
 
   // Balances are re-read when a scan reports something new — not on a timer.
   // A poll would re-read a cache nothing had written to.

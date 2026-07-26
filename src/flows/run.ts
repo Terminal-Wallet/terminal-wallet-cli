@@ -10,6 +10,7 @@
  */
 import { CoreEvent, emitCoreEvent } from "../core/events";
 import { errDetail } from "../platform/errors";
+import { takeLastRevert } from "../railgun/network/revert-capture";
 import { createLogger } from "../platform/logger";
 
 const log = createLogger("tx");
@@ -123,7 +124,10 @@ export const runTransaction = async <
     // Error("Unable to decrypt ciphertext.", { cause }) and everything that
     // identifies WHICH record and why is in the cause — dropping it leaves a
     // message nobody can act on.
-    const error = errDetail(e);
+    // The SDK drops the chain's revert reason for relay-adapt failures; recover
+    // it from the provider so the message names what actually happened.
+    const revert = takeLastRevert();
+    const error = revert ? `${errDetail(e)} ← ${revert}` : errDetail(e);
     emit({ type: "tx:progress", phase: "failed", message: error });
     emit({ type: "tx:result", ok: false, error });
     // Full object to the log pane, so the stack survives even though the
