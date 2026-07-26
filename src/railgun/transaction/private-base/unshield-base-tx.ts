@@ -23,6 +23,9 @@ import { getCurrentRailgunID } from "../../wallet/wallet-util";
 import { syncEphemeralIndexOnce } from "../../wallet/ephemeral-util";
 import { getCurrentNetwork } from "../../engine/engine";
 import { emitCoreEvent } from "../../../core/events";
+import { createLogger } from "../../../platform/logger";
+
+const log = createLogger("unshield-base");
 
 export const getUnshieldBaseTokenGasEstimate = async (
   chainName: NetworkName,
@@ -47,7 +50,7 @@ export const getUnshieldBaseTokenGasEstimate = async (
   );
 
   if (!gasDetailsResult) {
-    console.log("Failed to get Gas Details for Transaction");
+    log.warn("Failed to get Gas Details for Transaction");
     return undefined;
   }
   const {
@@ -61,7 +64,7 @@ export const getUnshieldBaseTokenGasEstimate = async (
     tokenAddress: _wrappedERC20Amount.tokenAddress, // wETH
     amount: _wrappedERC20Amount.amount, // hexadecimal amount
   };
-  console.log(
+  log.info(
     "Getting Gas Estimate for Transaction...... this may take some time",
   );
   const { gasEstimate, broadcasterFeeCommitment } =
@@ -82,7 +85,7 @@ export const getUnshieldBaseTokenGasEstimate = async (
   let broadcasterFeeERC20Recipient;
   let estimatedCost = 0;
   if (feeTokenDetails && broadcasterSelection) {
-    console.log("Calculating Gas Fee...... this may take some time");
+    log.info("Calculating Gas Fee...... this may take some time");
     const broadcasterFeeAmountDetails =
       await calculateBroadcasterFeeERC20Amount(
         feeTokenDetails,
@@ -183,7 +186,7 @@ export const getProvedUnshieldBaseTokenTransaction = async (
     return { transaction, nullifiers, preTransactionPOIsPerTxidLeafPerList };
   } catch (err) {
     const error = err as Error;
-    console.log(error.message);
+    log.error(error.message);
     return undefined;
   }
 };

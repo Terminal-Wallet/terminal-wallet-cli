@@ -10,7 +10,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { EVMGasType, TransactionGasDetails } from "@railgun-community/shared-models";
+import { readFileSync } from "node:fs";
+import { join, resolve } from "node:path";
 import {
+  unbufferGasLimit,
   applyOverrideToDetails,
   presetsFromEstimate,
   customOverride,
@@ -103,4 +106,52 @@ test("a custom type-4 entry collects the 1559 pair", () => {
   assert.ok(o, "type-4 custom entry was rejected");
   assert.equal(o.evmGasType, EVMGasType.Type2);
   assert.equal(priceField(o), 7n);
+});
+
+/**
+ * The gas figure quoted to a broadcaster.
+ *
+ * shared-models' calculateGasLimit multiplies the estimate by 1.2 and the SDK
+ * writes that onto the transaction, so the padded limit is the only place the
+ * figure survives — the proved transaction does not carry the estimate. A
+ * broadcaster quoted on padded gas overprices its fee.
+ */
+
+/** What shared-models does: (estimate * 12000n) / 10000n. */
+const pad = (estimate: bigint) => (estimate * 12000n) / 10000n;
+
+test("un-buffering recovers the measured estimate", () => {
+  for (const estimate of [2_100_790n, 1_000_000n, 2_520_949n, 7n]) {
+    const recovered = unbufferGasLimit(pad(estimate));
+    const drift = estimate > recovered ? estimate - recovered : recovered - estimate;
+    assert.ok(drift <= 1n, `${estimate}: recovered ${recovered}`);
+  }
+});
+
+test("it is strictly below the padded limit", () => {
+  const padded = pad(2_100_790n);
+  assert.ok(unbufferGasLimit(padded) < padded);
+});
+
+test("it is about five sixths of the padded limit", () => {
+  // 1 / 1.2. A regression to a different divisor changes what a broadcaster
+  // charges on, so the ratio is asserted rather than the divisor.
+  const padded = 1_200_000n;
+  assert.equal(unbufferGasLimit(padded), 1_000_000n);
+});
+
+test("zero stays zero", () => {
+  assert.equal(unbufferGasLimit(0n), 0n);
+});
+
+test("the broadcaster override sends the un-buffered figure", () => {
+  const source = readFileSync(
+    join(resolve(process.cwd(), "src"), "railgun/transaction/private/private-tx.ts"),
+    "utf-8",
+  );
+  assert.match(source, /gasLimit: unbufferGasLimit\(/);
+  assert.ok(
+    !/gasLimit: tx\.transaction\.gasLimit/.test(source),
+    "back to quoting the broadcaster on padded gas",
+  );
 });

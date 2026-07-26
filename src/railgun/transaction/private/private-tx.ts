@@ -33,7 +33,11 @@ import {
   getWrappedTokenInfoForChain,
 } from "../../network/network-util";
 import { getFeeDetailsForChain } from "../../gas/gas-util";
+import { unbufferGasLimit } from "../../gas/gas-selection";
 import { emitCoreEvent } from "../../../core/events";
+import { createLogger } from "../../../platform/logger";
+
+const log = createLogger("private-tx");
 
 export const getOriginalGasDetailsForPrivateTransaction = async (
   chainName: NetworkName,
@@ -131,7 +135,7 @@ export const getOriginalGasDetailsForPrivateTransaction = async (
       feeTokenInfo,
     };
   } catch (error) {
-    console.log(error);
+    log.error(error);
     return undefined;
   }
 };
@@ -186,7 +190,7 @@ export const getPrivateTransactionGasEstimate = async (
     broadcasterSelection,
   );
   if (!gasDetailsResult) {
-    console.log("Failed to get Gas Details for Transaction");
+    log.warn("Failed to get Gas Details for Transaction");
     return undefined;
   }
   const {
@@ -196,7 +200,7 @@ export const getPrivateTransactionGasEstimate = async (
     feeTokenInfo,
     sendWithPublicWallet,
   } = gasDetailsResult;
-  console.log("Getting Gas Estimate for Transaction...");
+  log.info("Getting Gas Estimate for Transaction...");
 
   const { gasEstimate } = await gasEstimateForUnprovenTransfer(
     txIDVersion,
@@ -216,7 +220,7 @@ export const getPrivateTransactionGasEstimate = async (
   let broadcasterFeeERC20Recipient;
   let estimatedCost = 0;
   if (feeTokenDetails && broadcasterSelection) {
-    console.log("Calculating Gas Fee... this may take some time");
+    log.info("Calculating Gas Fee... this may take some time");
     const broadcasterFeeAmountDetails =
       await calculateBroadcasterFeeERC20Amount(
         feeTokenDetails,
@@ -301,13 +305,13 @@ export const getProvedPrivateTransaction = async (
       progressCallback,
     )
       .catch((err) => {
-        console.log("We errored out");
+        log.error("We errored out");
       })
       .finally(() => {
       });
     const proofEndTime = Date.now();
     const proofTimeElapsed = (proofEndTime - proofStartTime) / 1000;
-    console.log(`Proof Generation Took ${proofTimeElapsed}s`);
+    log.info(`Proof Generation Took ${proofTimeElapsed}s`);
     const { transaction, nullifiers, preTransactionPOIsPerTxidLeafPerList } =
       await populateProvedTransfer(
         txIDVersion,
@@ -325,7 +329,7 @@ export const getProvedPrivateTransaction = async (
     return { transaction, nullifiers, preTransactionPOIsPerTxidLeafPerList };
   } catch (err) {
     const error = err as Error;
-    console.log(error.message);
+    log.error(error.message);
   }
 };
 
@@ -356,11 +360,11 @@ export const getBroadcasterTranaction = async (
   }
   const type4FeeOverrides = is7702Transaction
     ? {
-        // Hand the broadcaster the gas limit we already computed. Without it, the broadcaster
-        // runs its own estimateGas on the type-4 tx (which underestimates 7702 execution) and
-        // submits below RelayAdapt's `gasleft() > minGasLimit` check ("Not enough gas
-        // supplied"). This is the app's populated limit (calculateGasLimit = estimate x1.2).
-        gasLimit: tx.transaction.gasLimit,
+        // The measured estimate, not the padded limit. The SDK writes
+        // calculateGasLimit(estimate) — estimate x1.2 — onto the transaction, and
+        // quoting a broadcaster on padded gas overprices the fee it charges. The
+        // client requires the field, so it is un-padded rather than omitted.
+        gasLimit: unbufferGasLimit(BigInt(tx.transaction.gasLimit)),
         maxFeePerGas: tx.transaction.maxFeePerGas,
         maxPriorityFeePerGas: tx.transaction.maxPriorityFeePerGas,
       }

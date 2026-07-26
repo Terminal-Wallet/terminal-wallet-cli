@@ -5,6 +5,9 @@ import { promiseTimeout } from "../../util/util";
 import { FeeHistoryResponse } from "../../models/gas-models";
 import { CustomGasEstimate } from "../../models/gas-models";
 import { FeeHistoryBlock } from "../../models/gas-models";
+import { createLogger } from "../../platform/logger";
+
+const log = createLogger("gas-fee");
 
 // Median across the sampled blocks. Priority-fee percentiles are dominated by MEV/urgent
 // tips, so an arithmetic mean is dragged far above the typical fee by a few spike blocks;
@@ -72,7 +75,7 @@ export const getGasEstimates = async (
     provider.send("eth_gasPrice", []),
     10 * 1000,
   ).catch((err) => {
-    console.log(err.message);
+    log.info(err.message);
     return undefined;
   });
 
@@ -93,7 +96,7 @@ export const getGasEstimates = async (
     ]),
     10 * 1000,
   ).catch((err) => {
-    console.log(err.message);
+    log.info(err.message);
     return undefined;
   });
 

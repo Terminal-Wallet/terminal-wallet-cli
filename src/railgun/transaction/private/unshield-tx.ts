@@ -24,6 +24,9 @@ import { PrivateGasEstimate } from "../../../models/transaction-models";
 import { getCurrentNetwork } from "../../engine/engine";
 import { ERC20Token } from "../../../models/token-models";
 import { emitCoreEvent } from "../../../core/events";
+import { createLogger } from "../../../platform/logger";
+
+const log = createLogger("unshield");
 
 export const getOutputGasEstimate = async (
   originalGasDetails: TransactionGasDetails,
@@ -38,7 +41,7 @@ export const getOutputGasEstimate = async (
   let broadcasterFeeERC20Recipient;
   let estimatedCost = 0;
   if (feeTokenDetails && broadcasterSelection) {
-    console.log("Calculating Broadcaster Fee... This may take a few moments.");
+    log.info("Calculating Broadcaster Fee... This may take a few moments.");
     const broadcasterFeeAmountDetails =
       await calculateBroadcasterFeeERC20Amount(
         feeTokenDetails,
@@ -86,7 +89,7 @@ export const getUnshieldERC20TransactionGasEstimate = async (
   );
 
   if (!gasDetailsResult) {
-    console.log("Failed to get Gas Details for Transaction");
+    log.warn("Failed to get Gas Details for Transaction");
     return undefined;
   }
   const {
@@ -96,7 +99,7 @@ export const getUnshieldERC20TransactionGasEstimate = async (
     feeTokenInfo,
     sendWithPublicWallet,
   } = gasDetailsResult;
-  console.log(
+  log.info(
     "Getting Gas Estimate for UNSHIELD Transaction...... this may take some time",
   );
   const { gasEstimate, broadcasterFeeCommitment } =
@@ -183,6 +186,6 @@ export const getProvedUnshieldERC20Transaction = async (
     return { transaction, nullifiers, preTransactionPOIsPerTxidLeafPerList };
   } catch (err) {
     const error = err as Error;
-    console.log(error.message);
+    log.error(error.message);
   }
 };

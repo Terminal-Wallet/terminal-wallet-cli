@@ -9,6 +9,9 @@ import { initilizeFreshWallet, reinitWalletForChain } from "./wallet-init";
 import { updateCachedTokenData } from "../balance/token-util";
 import configDefaults from "../../config/config-defaults";
 import { getSaltedPassword } from "./wallet-password";
+import { createLogger } from "../../platform/logger";
+
+const log = createLogger("wallet");
 
 const railgunWallets: MapType<WalletCache> = {};
 
@@ -71,7 +74,7 @@ export const switchRailgunWallet = async (
     walletManager.railgunWalletID,
     false,
   );
-  console.log(`Loading wallet ${walletName}, Please Wait...`);
+  log.info(`Loading wallet ${walletName}, Please Wait...`);
 
   walletManager.keyChain.selectedWallet = walletName;
   walletManager.activeWalletName = walletName;

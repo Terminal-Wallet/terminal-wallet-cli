@@ -10,6 +10,9 @@ import configDefaults from "../../config/config-defaults";
 import { Contract, HDNodeWallet, JsonRpcProvider, Mnemonic, Wallet } from "ethers";
 import { getFallbackProviderForNetwork } from "@railgun-community/wallet";
 import { RemoteConfig } from "../../models/network-models";
+import { createLogger } from "../../platform/logger";
+
+const log = createLogger("network");
 
 export const getChainForName = (chainName: NetworkName): Chain => {
   return NETWORK_CONFIG[chainName].chain;
@@ -123,8 +126,8 @@ export const loadConfigForNetwork = async (): Promise<
     } catch {
       /* keep as-is if not a parseable URL */
     }
-    console.error(`[remote-config] Failed to fetch config from ${host}. ${err.message}`);
-    console.error(
+    log.error(`[remote-config] Failed to fetch config from ${host}. ${err.message}`);
+    log.error(
       '[remote-config] Falling back to built-in defaults. Set REMOTE_CONFIG_RPC to a healthy Ethereum RPC to use remote config.',
     );
     return undefined;
@@ -137,7 +140,7 @@ export const loadConfigForNetwork = async (): Promise<
     remoteConfig = config;
     return config;
   } catch (err) {
-    console.error(
+    log.error(
       `[remote-config] Failed to parse config; falling back to built-in defaults. ${(err as Error).message}`,
     );
     return undefined;

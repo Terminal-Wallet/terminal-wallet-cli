@@ -7,6 +7,9 @@ import { Contract, ContractTransaction } from "ethers";
 import { ERC20_ABI } from "../../abi";
 import { getTokenInfo } from "../balance/token-util";
 import { getProviderForChain } from "../network/network-util";
+import { createLogger } from "../../platform/logger";
+
+const log = createLogger("approvals");
 
 export const MAX_UINT_ALLOWANCE = 2n ** 256n - 1n;
 // senderAddress<spenderAddress<tokenAddress<approvalAmount>>>
@@ -113,7 +116,7 @@ export const populatePublicERC20ApprovalTransactions = async (
       };
       populatedTransactions.push(populatedApproval);
     } catch (err: any) {
-      console.log(
+      log.warn(
         `Could not populate transaction for some token: ${err.message}`,
       );
     }

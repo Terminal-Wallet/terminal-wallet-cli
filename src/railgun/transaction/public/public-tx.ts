@@ -23,6 +23,9 @@ import {
 } from "../../network/network-util";
 import { getCurrentWalletPublicAddress } from "../../wallet/wallet-util";
 import { PrivateGasEstimate } from "../../../models/transaction-models";
+import { createLogger } from "../../../platform/logger";
+
+const log = createLogger("public-tx");
 
 export const populatePublicERC20Transaction = async (
   erc20AmountRecipient: RailgunERC20AmountRecipient,
@@ -88,7 +91,7 @@ export const waitOnTx = async (
 ) => {
   await promiseTimeout(
     txResponse.wait().catch((err) => {
-      console.log(err);
+      log.info(err);
     }),
     txTimeout,
   );
@@ -101,7 +104,7 @@ export const waitForTx = async (
   try {
     await waitOnTx(txResponse, txTimeout);
   } catch (err: Error | any) {
-    console.log(`Transaction ${txResponse.hash} error: ${err.message}`);
+    log.error(`Transaction ${txResponse.hash} error: ${err.message}`);
   }
 };
 
@@ -119,6 +122,6 @@ export const waitForRelayedTx = async (
       await waitOnTx(txResponse, txTimeout);
     }
   } catch (err: Error | any) {
-    console.log(`Transaction ${txHash} error: ${err.message}`);
+    log.error(`Transaction ${txHash} error: ${err.message}`);
   }
 };

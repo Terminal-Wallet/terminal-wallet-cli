@@ -15,6 +15,9 @@ import {
   getGasFeeSelection,
 } from "./gas-fee";
 import { getProviderForChain } from "../network/network-util";
+import { createLogger } from "../../platform/logger";
+
+const log = createLogger("gas");
 
 export const calculatePublicGasFee = async (
   transaction: ContractTransaction,
@@ -70,7 +73,7 @@ export const getPublicGasEstimate = async (
       .catch(throwError);
     return gasEstimate;
   } catch (error) {
-    console.log(error);
+    log.error(error);
     throw new Error("Gas Estimation Error");
   }
 };

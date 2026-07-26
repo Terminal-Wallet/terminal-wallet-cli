@@ -144,3 +144,21 @@ export const applyOverrideToTx = <
   }
   return copy as T;
 };
+
+/** The 20% headroom shared-models adds in calculateGasLimit. */
+const GAS_LIMIT_BUFFER_BPS = 12_000n;
+const BPS = 10_000n;
+
+/**
+ * The gas estimate behind a populated gas limit.
+ *
+ * `calculateGasLimit` multiplies the estimate by 1.2 and the SDK writes that
+ * onto the transaction, so the populated limit is the only place the figure
+ * survives — the proved transaction does not carry the estimate itself.
+ * Dividing it back out recovers the measured value, which is what a broadcaster
+ * should be quoted on when its own estimation is trusted.
+ *
+ * Integer division, so the result can be one wei of gas below the original.
+ */
+export const unbufferGasLimit = (populated: bigint): bigint =>
+  (populated * BPS) / GAS_LIMIT_BUFFER_BPS;

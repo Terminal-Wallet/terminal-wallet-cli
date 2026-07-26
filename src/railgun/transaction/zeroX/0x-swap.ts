@@ -298,7 +298,7 @@ export const getZer0XSwapTransactionGasEstimate = async (
   );
 
   if (!gasDetailsResult) {
-    console.log("Failed to get Gas Details for Transaction");
+    swapLog.warn("Failed to get Gas Details for Transaction");
     return undefined;
   }
 
@@ -420,7 +420,7 @@ export const getProvedZer0XSwapTransaction = async (
     return { transaction, nullifiers, preTransactionPOIsPerTxidLeafPerList };
   } catch (err) {
     const error = err as Error;
-    console.log(
+    swapLog.error(
       "ERROR getting proved transaction.",
       error.message,
       error.cause,
