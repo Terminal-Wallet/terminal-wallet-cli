@@ -1,11 +1,15 @@
 /**
- * 0x swap deps. The PRIVATE swap reduces to CrossContractInputs and runs
- * through the generic cross-contract pipeline (so LP / Beefy / combo recipes
- * wire in the same way); that pipeline branches on execution mode, so the swap
- * still executes as a 7702 relay-adapt. The PUBLIC swap is a plain ethers tx
- * (no proof) and stays here.
+ * 0x swap deps.
+ *
+ * The PRIVATE swap runs its own 7702 estimate and proof rather than the generic
+ * cross-contract pipeline: it realigns the ephemeral index before the SDK
+ * derives the taker, and it is the path the 7702 work was built against. The
+ * PUBLIC swap is a plain ethers tx (no proof) and stays here too.
  */
-import { NetworkName } from "@railgun-community/shared-models";
+import {
+  NetworkName,
+  RailgunPopulateTransactionResponse,
+} from "@railgun-community/shared-models";
 import { PrivateGasEstimate, RailgunTransaction } from "../../models/transaction-models";
 import { Zer0XSwap } from "../../models/0x-models";
 import {
@@ -17,23 +21,72 @@ import {
 import { FeeMode, PrivateSwapSpec, PublicSwapSpec } from "../spec";
 import { NO_CROSS_CONTRACT_GAS_FLOOR, CrossContractInputs } from "../../railgun/transaction/cross-contract";
 import {
-  CrossContractSpec,
-  runCrossContractTransaction,
-} from "./cross-contract";
-import { calculateGasForPublicSwapTransaction } from "../../railgun/transaction/zeroX/0x-swap";
+  calculateGasForPublicSwapTransaction,
+  getZer0XSwapTransactionGasEstimate,
+  getProvedZer0XSwapTransaction,
+} from "../../railgun/transaction/zeroX/0x-swap";
+import { sendPrivateTransaction } from "../send-private";
 import { PublicTransactionDetails } from "../../railgun/transaction/public/public-tx";
 import { sendPublicTransaction } from "../send-public";
 
-/** The 0x quote IS a recipe output — reduce it to the generic cross-contract inputs. */
+/**
+ * The 0x quote reduced to the generic cross-contract shape.
+ *
+ * Kept for recipes that genuinely are generic (LP, Beefy, combo). The private
+ * swap does NOT use it — see createPrivateSwapDeps.
+ */
 export const swapToCrossContractInputs = (
   swap: Zer0XSwap,
 ): CrossContractInputs => ({
   relayAdaptUnshieldERC20Amounts: swap.relayAdaptUnshieldERC20Amounts,
   relayAdaptShieldERC20Addresses: swap.relayAdaptShieldERC20Addresses,
   crossContractCalls: swap.crossContractCalls,
-  // The recipe's own floor; the swap's variable 0x call needs it. Only the
-  // deterministic ops fall back to NO_CROSS_CONTRACT_GAS_FLOOR.
   minGasLimit: swap.minGasLimit ?? NO_CROSS_CONTRACT_GAS_FLOOR,
+});
+
+/**
+ * Private 0x swap deps.
+ *
+ * These call the swap's own 7702 estimate and proof rather than reducing to the
+ * generic cross-contract pipeline. The swap needs its ephemeral index realigned
+ * with history before the SDK derives the taker address, and it is the path the
+ * 7702 work was built and tested against — a generic route has to reproduce all
+ * of that exactly, and every difference is silent.
+ */
+export const createPrivateSwapDeps = (): TransactionRunDeps<
+  PrivateSwapSpec,
+  PrivateGasEstimate,
+  RailgunPopulateTransactionResponse,
+  SendOutcome
+> => ({
+  estimateGas: async (spec) => {
+    const broadcaster =
+      spec.fee.kind === "broadcaster" ? spec.fee.broadcaster : undefined;
+    const gas = await getZer0XSwapTransactionGasEstimate(
+      spec.chainName,
+      spec.inputs,
+      spec.encryptionKey,
+      broadcaster,
+    );
+    if (!gas) throw new Error("Failed to estimate gas for the private swap.");
+    return gas;
+  },
+  prove: async (spec, gas) => {
+    const proved = await getProvedZer0XSwapTransaction(
+      spec.encryptionKey,
+      spec.inputs,
+      gas,
+    );
+    if (!proved) throw new Error("Failed to generate the private swap proof.");
+    return proved;
+  },
+  send: (spec, proved) =>
+    sendPrivateTransaction(
+      proved,
+      spec.fee,
+      spec.chainName,
+      RailgunTransaction.Private0XSwap,
+    ),
 });
 
 export const runPrivateSwapTransaction = (
@@ -42,16 +95,8 @@ export const runPrivateSwapTransaction = (
     spec: { chainName: NetworkName; fee: FeeMode },
     gas: PrivateGasEstimate,
   ) => Promise<boolean>,
-): Promise<RunResult<SendOutcome>> => {
-  const crossContract: CrossContractSpec = {
-    type: RailgunTransaction.Private0XSwap,
-    chainName: spec.chainName,
-    inputs: swapToCrossContractInputs(spec.inputs),
-    encryptionKey: spec.encryptionKey,
-    fee: spec.fee,
-  };
-  return runCrossContractTransaction(crossContract, confirm);
-};
+): Promise<RunResult<SendOutcome>> =>
+  runTransaction(spec, { ...createPrivateSwapDeps(), confirm });
 
 // ---- Public 0x swap (no proof; sign after the approval pre-step) ------------
 type PublicPrepared = PublicTransactionDetails;
