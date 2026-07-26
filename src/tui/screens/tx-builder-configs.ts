@@ -52,7 +52,7 @@ import {
 } from "./tx-flow-helpers";
 import { RunResult, SendOutcome } from "../../flows/run";
 import { TxBuilderConfig } from "./tx-builder";
-import { BuilderState, swapQuoteUsable } from "./tx-builder-core";
+import { BuilderState } from "./tx-builder-core";
 import { Leg, toRecipients } from "../../flows/caps";
 import { isNativeChoice, makeNativeEntry } from "../../flows/native-token";
 import { parseUnits } from "ethers";
@@ -102,27 +102,6 @@ export const buildSwapInputs = async (
 };
 
 type SubmitResult = { ok: boolean; error?: string };
-
-/**
- * The quote to spend against: the one the review was built from, if it was
- * fetched for these exact inputs, otherwise a fresh one.
- *
- * The key covers sell token, buy token, amount and destination — change any of
- * them and the carried quote is for a different trade, so it is discarded
- * rather than reused.
- */
-type SwapInputs = Awaited<ReturnType<typeof buildSwapInputs>>["inputs"];
-
-const quoteForSubmit = async (
-  s: BuilderState,
-  fetch: () => Promise<{ inputs: SwapInputs }>,
-): Promise<SwapInputs> => {
-  const carried = s.swapQuote;
-  if (carried && swapQuoteUsable(carried, s, Date.now())) {
-    return carried.inputs as SwapInputs;
-  }
-  return (await fetch()).inputs;
-};
 
 const toResult = (r: RunResult<SendOutcome>): SubmitResult =>
   r.ok ? { ok: true } : { ok: false, error: r.error };
@@ -458,13 +437,18 @@ export const txBuilderConfigs: Record<
       if (!s.token || !s.buyToken || !s.amount) return { ok: false, error: "incomplete" };
       const encryptionKey = await requireEncryptionKey();
       if (!encryptionKey) return { ok: false, error: "cancelled" };
-      // Prove against the quote the review was built from. Re-quoting here
-      // meant the figure on screen and the figure being spent came from two
-      // different fetches, and a miss on the second one failed a send the user
-      // had already approved.
+      // Quoted fresh at submit, as the reference does. The preview's quote is
+      // for display; the recipe and its cross-contract calls are bound to the
+      // ephemeral taker derived at quote time, so spending against a carried
+      // one is a deviation this path has not earned.
       const { token: sell, buyToken: buy, amount: amountStr } = s;
-      const inputs = await quoteForSubmit(s, () =>
-        buildSwapInputs(chainName, sell, buy, amountStr, false, encryptionKey),
+      const { inputs } = await buildSwapInputs(
+        chainName,
+        sell,
+        buy,
+        amountStr,
+        false,
+        encryptionKey,
       );
       if (!inputs?.quote) return { ok: false, error: "no swap quote for that pair" };
       const spec: PrivateSwapSpec = {
@@ -490,9 +474,12 @@ export const txBuilderConfigs: Record<
     submit: async (s: BuilderState) => {
       if (!s.token || !s.buyToken || !s.amount) return { ok: false, error: "incomplete" };
       const { token: sell, buyToken: buy, amount: amountStr } = s;
-      const { amount, sellIsBase } = await buildSwapInputs(chainName, sell, buy, amountStr, true);
-      const inputs = await quoteForSubmit(s, () =>
-        buildSwapInputs(chainName, sell, buy, amountStr, true),
+      const { inputs, amount, sellIsBase } = await buildSwapInputs(
+        chainName,
+        sell,
+        buy,
+        amountStr,
+        true,
       );
       if (!inputs?.quote) return { ok: false, error: "no swap quote for that pair" };
       if (!sellIsBase) {
