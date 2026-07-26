@@ -45,6 +45,24 @@ const preserveNodeModules = [
   POSIEDON_HASH_WASM_BUILD,
 ];
 
+// Whole directories that must survive, not single files.
+//
+// blessed loads its widgets with `require('./widgets/' + name)` — a dynamic
+// specifier esbuild cannot resolve statically. It follows the require anyway and
+// then fails on blessed's optional `term.js`/`pty.js`; forcing those to no-op
+// gets a bundle that dies at runtime with "Module not found in bundle:
+// ./widgets/node", because the lookup uses a literal path esbuild has re-keyed.
+// Importing every widget statically does NOT fix it (measured at C08).
+//
+// So blessed stays external and ships as real files, terminfo and all.
+const preserveTrees = [Path.join(BUILD_NODE_MODULES, "blessed")];
+
+const isPreserved = (path) =>
+  preserveNodeModules.includes(path) ||
+  preserveTrees.some(
+    (tree) => path === tree || path.startsWith(tree + Path.sep),
+  );
+
 (async function ship() {
   if (clean) {
     // Reset build folder
@@ -127,6 +145,8 @@ const preserveNodeModules = [
     bundle: true,
     platform: "node",
     outfile: BUNDLE,
+    // Resolved from node_modules at runtime, not inlined — see preserveTrees.
+    external: ["blessed"],
     alias: {
       "default-gateway": "no-op",
       "@achingbrain/ssdp": "no-op",
@@ -142,7 +162,7 @@ const preserveNodeModules = [
   rimrafSync(BUILD_DIR, {
     filter(path) {
       if (path === BUNDLE) return false;
-      if (preserveNodeModules.includes(path)) return false;
+      if (isPreserved(path)) return false;
       return true;
     },
   });
