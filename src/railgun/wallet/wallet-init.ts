@@ -63,18 +63,30 @@ export const initializeKeychainSystem = async (): Promise<KeychainFile> => {
   const { keyChainPath } = configDefaults.engine;
   const keychains = await getRailgunKeychains(keyChainPath);
 
-  if (keychains.length > 0) {
-    // we have keychains. run selection prompt. or return if only 1 available.
-    if (keychains.length === 1) {
-      return keychains[0];
+  if (keychains.length === 1) {
+    return keychains[0];
+  }
+
+  if (keychains.length > 1) {
+    // Previously this logged "returning first" and carried on, so a second
+    // keychain was unreachable: the wallet it held could not be opened from the
+    // app at all, and nothing said why.
+    const chosen = await getInputProvider().select(
+      "Select a keychain",
+      keychains.map((k) => ({
+        label: k.name,
+        value: k.name,
+        hint: `${Object.keys(k.wallets ?? {}).length} wallet(s)`,
+      })),
+    );
+    const selected = keychains.find((k) => k.name === chosen);
+    if (selected) {
+      return selected;
     }
-    // run selection here.
-    // will implement this after.
-    // Selecting between keychains needs the input seam; it lands with the
-    // keychain work. Until then this is at least visible instead of silent.
+    // Cancelled, or a host that cannot ask. Falling back to the first keeps the
+    // wallet openable rather than refusing to boot, but say which one.
     log.warn(
-      `${keychains.length} keychains found; using ${keychains[0].name}. ` +
-        "Selecting between them is not implemented yet.",
+      `no keychain selected; opening ${keychains[0].name} of ${keychains.length}`,
     );
     return keychains[0];
   }
