@@ -31,14 +31,15 @@ import {
 import { walletMenu, networkMenu, statusMenu, utilitiesMenu } from "./deck-menus";
 import {
   buildBroadcasterRows,
-  cyclePref,
-  prefOf,
 } from "./broadcaster-list-edit";
 import {
   getBroadcasterFavorites,
   getBroadcasterBlocklist,
   setBroadcasterPref,
+  moveBroadcasterFavorite,
+  BroadcasterPref,
 } from "../../railgun/wallet/broadcaster-prefs";
+import { favoriteRank } from "../../flows/broadcaster-rank";
 import {
   listExternalSigners,
 } from "../../railgun/wallet/external-signers";
@@ -102,9 +103,13 @@ export const refreshNow = async (ctx: DeckContext): Promise<void> => {
 };
 
 /**
- * Broadcaster allow/blocklist. Each entry cycles none → favourite → blocked →
- * none, so a single control both promotes and demotes; edits persist as they
- * are made rather than on exit.
+ * Broadcaster allow/blocklist, and the order favourites are tried in.
+ *
+ * Favourites are ranked: ⭐1 is the broadcaster new sends default to, and the
+ * rest are fallbacks in order. Selecting a row opens its actions rather than
+ * cycling in place, because promote/demote needs somewhere to live and having
+ * this disagree with the same editor in the fee flow would be worse. Edits
+ * persist as they are made rather than on exit.
  */
 export const showBroadcasterList = async (): Promise<void> => {
   const provider = getInputProvider();
@@ -116,10 +121,15 @@ export const showBroadcasterList = async (): Promise<void> => {
     const choices: InputChoice[] = buildBroadcasterRows(lists).map((row) => ({
       label:
         row.pref === "favorite"
-          ? tag(short(row.address), "green")
-          : tag(short(row.address), "red"),
+          ? `${tag(`⭐${row.rank + 1}`, "yellow")} ${tag(short(row.address), "green")}`
+          : `   ${tag(short(row.address), "red")}`,
       value: row.address,
-      hint: row.pref === "favorite" ? "favorite → block" : "blocked → remove",
+      hint:
+        row.rank === 0
+          ? "default for new sends"
+          : row.pref === "favorite"
+            ? `fallback #${row.rank}`
+            : "blocked",
     }));
     choices.push({
       label: tag("＋ Add broadcaster…", "yellow"),
@@ -141,16 +151,38 @@ export const showBroadcasterList = async (): Promise<void> => {
       }
       continue;
     }
-    setBroadcasterPref(picked, cyclePref(prefOf(lists, picked)));
+    const rank = favoriteRank(lists.favorites, picked);
+    const isFavorite = rank !== Number.POSITIVE_INFINITY;
+    const action = await provider.select(short(picked), [
+      ...(isFavorite && rank > 0
+        ? [
+            { label: "⭐ Make default", value: "top", hint: "to #1" },
+            { label: "▲ Move up", value: "up", hint: `to #${rank}` },
+          ]
+        : []),
+      ...(isFavorite && rank < lists.favorites.length - 1
+        ? [{ label: "▼ Move down", value: "down", hint: `to #${rank + 2}` }]
+        : []),
+      ...(isFavorite
+        ? []
+        : [{ label: "⭐ Favorite", value: "favorite", hint: "adds to the end" }]),
+      { label: "🚫 Block", value: "blocked", hint: "hide it" },
+      { label: "Remove", value: "none" },
+    ]);
+    if (!action) continue;
+    if (action === "top") moveBroadcasterFavorite(picked, -lists.favorites.length);
+    else if (action === "up") moveBroadcasterFavorite(picked, -1);
+    else if (action === "down") moveBroadcasterFavorite(picked, 1);
+    else setBroadcasterPref(picked, action as BroadcasterPref);
   }
 };
 
 /**
  * The default fee mode for new private sends.
  *
- * A broadcaster is never stored as a default — it is selected live per
- * transaction from whoever is reachable and cheapest — so only the signer
- * choice persists.
+ * This is the signer choice only. Which broadcaster relays a send is decided
+ * separately, by the favourites order: ⭐1 if it is reachable, otherwise the
+ * next favourite, otherwise whoever is cheapest.
  */
 export const showDefaultFeeSetting = async (): Promise<void> => {
   const provider = getInputProvider();

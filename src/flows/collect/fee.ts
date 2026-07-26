@@ -17,7 +17,7 @@ import {
 } from "@railgun-community/shared-models";
 import { calculateBroadcasterFeeERC20Amount } from "@railgun-community/wallet";
 import { formatUnits } from "ethers";
-import { getInputProvider } from "../../core/input";
+import { getInputProvider, InputChoice } from "../../core/input";
 import { FeeMode } from "../spec";
 import { selfSignFee } from "./tx-input";
 import { getDefaultFeeModePref } from "../../railgun/wallet/wallet-util";
@@ -29,12 +29,21 @@ import { getGasEstimates } from "../../railgun/gas/gas-fee";
 import { evmGasTypeForChain } from "../../railgun/gas/gas-selection";
 import { hasExternalSigners, listExternalSigners } from "../../railgun/wallet/external-signers";
 import { RailgunDisplayBalance } from "../../models/balance-models";
-import { rankBroadcasters, bonusPct, BroadcasterRow } from "../broadcaster-rank";
+import {
+  rankBroadcasters,
+  bonusPct,
+  cheapestFee,
+  favoriteRank,
+  preferredFavorite,
+  moveInList,
+  BroadcasterRow,
+} from "../broadcaster-rank";
 import {
   getBroadcasterFavorites,
   getBroadcasterBlocklist,
   getBroadcasterPref,
   setBroadcasterPref,
+  moveBroadcasterFavorite,
   BroadcasterPref,
 } from "../../railgun/wallet/broadcaster-prefs";
 
@@ -97,7 +106,18 @@ const broadcasterHint = async (
   return `~${readable} ${symbol} · rel ${rel}% · ${b.tokenFee.availableWallets}w`;
 };
 
-/** Auto-pick the best broadcaster across your spendable fee tokens (or undefined). */
+/**
+ * The broadcaster a new send starts with.
+ *
+ * A ranked favourite wins if any of them is reachable and serves one of your
+ * spendable fee tokens — that ranking is the user saying "use this one", and
+ * the default is where it has to take effect. Blocked broadcasters are excluded
+ * outright. Otherwise fall back to the network's best.
+ *
+ * Precedence is checked across ALL your fee tokens before falling back, so a
+ * favourite that only serves your second token still beats an auto-pick on the
+ * first.
+ */
 const autoBestBroadcaster = async (
   chainName: NetworkName,
   relayAdapt: boolean,
@@ -106,15 +126,31 @@ const autoBestBroadcaster = async (
   const waku = getWakuClient();
   const chain = getChainForName(chainName);
   const balances = await getPrivateERC20BalancesForChain(chainName); // Spendable
+  const blocked = new Set(getBroadcasterBlocklist());
+
+  const reachable: SelectedBroadcaster[] = [];
+  let fallback: SelectedBroadcaster | undefined;
   for (const b of balances) {
     try {
-      const best = waku.findBestBroadcaster(chain, b.tokenAddress.toLowerCase(), relayAdapt);
-      if (best) return best;
+      const token = b.tokenAddress.toLowerCase();
+      for (const candidate of waku.findBroadcastersForToken(chain, token, relayAdapt) ?? []) {
+        if (!blocked.has(candidate.railgunAddress)) reachable.push(candidate);
+      }
+      if (!fallback) {
+        const best = waku.findBestBroadcaster(chain, token, relayAdapt);
+        if (best && !blocked.has(best.railgunAddress)) fallback = best;
+      }
     } catch {
       /* skip token */
     }
   }
-  return undefined;
+
+  const favoriteAddress = preferredFavorite(
+    getBroadcasterFavorites(),
+    reachable.map((b) => b.railgunAddress),
+  );
+  const favorite = reachable.find((b) => b.railgunAddress === favoriteAddress);
+  return favorite ?? fallback;
 };
 
 /**
@@ -166,24 +202,62 @@ export const approxBroadcasterFee = async (
 };
 
 /** Collect a FeeMode for a private-spend tx. Returns undefined on cancel/no-change. */
-/** Favorite / block / clear broadcasters; persists. Loops until "Done". */
+/**
+ * Favourite / rank / block / clear broadcasters; persists. Loops until "Done".
+ *
+ * Favourites are listed in precedence order ahead of everything else, because
+ * their order is the thing being edited — showing them in discovery order while
+ * asking the user to rank them would be its own puzzle.
+ */
 const manageBroadcasterPrefs = async (computed: BroadcasterRow[]): Promise<void> => {
   const provider = getInputProvider();
   for (;;) {
-    const rows = computed.map((r) => {
+    const favorites = getBroadcasterFavorites();
+    const ordered = rankBroadcasters(computed, { favorites });
+    const rows: InputChoice[] = ordered.map((r) => {
       const pref = getBroadcasterPref(r.address);
-      const mark = pref === "favorite" ? "⭐" : pref === "blocked" ? "🚫" : "  ";
-      return { label: `${mark} ${short(r.address)}`, value: r.address };
+      const rank = favoriteRank(favorites, r.address);
+      const mark =
+        pref === "blocked"
+          ? "🚫"
+          : rank === Number.POSITIVE_INFINITY
+            ? "  "
+            : `⭐${rank + 1}`;
+      return {
+        label: `${mark} ${short(r.address)}`,
+        value: r.address,
+        // Only the top favourite is actually the default, so only it says so.
+        hint: rank === 0 ? "default for new sends" : undefined,
+      };
     });
     rows.push({ label: "← Done", value: "__done" });
-    const pick = await provider.select("Favorites & blocklist", rows);
+    const pick = await provider.select("Favorites, order & blocklist", rows);
     if (!pick || pick === "__done") return;
-    const action = await provider.select(short(pick), [
-      { label: "⭐ Favorite", value: "favorite", hint: "float to top" },
+
+    const rank = favoriteRank(favorites, pick);
+    const isFavorite = rank !== Number.POSITIVE_INFINITY;
+    const actions = [
+      ...(isFavorite
+        ? []
+        : [{ label: "⭐ Favorite", value: "favorite", hint: "adds to the end" }]),
+      ...(isFavorite && rank > 0
+        ? [{ label: "▲ Move up", value: "up", hint: `to #${rank}` }]
+        : []),
+      ...(isFavorite && rank < favorites.length - 1
+        ? [{ label: "▼ Move down", value: "down", hint: `to #${rank + 2}` }]
+        : []),
+      ...(isFavorite && rank > 0
+        ? [{ label: "⭐ Make default", value: "top", hint: "to #1" }]
+        : []),
       { label: "🚫 Block", value: "blocked", hint: "hide it" },
       { label: "Clear", value: "none" },
-    ]);
-    if (action) setBroadcasterPref(pick, action as BroadcasterPref);
+    ];
+    const action = await provider.select(short(pick), actions);
+    if (!action) continue;
+    if (action === "up") moveBroadcasterFavorite(pick, -1);
+    else if (action === "down") moveBroadcasterFavorite(pick, 1);
+    else if (action === "top") moveBroadcasterFavorite(pick, -favorites.length);
+    else setBroadcasterPref(pick, action as BroadcasterPref);
   }
 };
 
@@ -270,15 +344,41 @@ export const collectFeeMode = async (
     return undefined;
   }
 
-  const choice = await provider.select(`Broadcaster for ${token.symbol}`, [
-    {
+  // Your highest-precedence favourite, if one of them serves this token right
+  // now. Offered FIRST and chosen by default: having ranked them, being asked
+  // again every time defeats the point of ranking them.
+  const forToken =
+    waku.findBroadcastersForToken(chain, tokenAddr.toLowerCase(), relayAdapt) ?? [];
+  const favoriteAddress = preferredFavorite(
+    getBroadcasterFavorites(),
+    forToken.map((b) => b.railgunAddress),
+  );
+  const favorite = forToken.find((b) => b.railgunAddress === favoriteAddress);
+
+  const options = [];
+  if (favorite) {
+    options.push({
+      label: `⭐ Use favorite — ${short(favorite.railgunAddress)}`,
+      value: "favorite",
+      hint: await broadcasterHint(favorite, token.symbol, token.decimals, gasDetails),
+    });
+  }
+  // Suppressed when they are the same broadcaster: two identical rows reading
+  // differently is a worse answer than one.
+  if (favorite?.railgunAddress !== best.railgunAddress) {
+    options.push({
       label: `Use best — ${short(best.railgunAddress)}`,
       value: "best",
       hint: await broadcasterHint(best, token.symbol, token.decimals, gasDetails),
-    },
-    { label: "Compare all broadcasters…", value: "compare" },
-  ]);
+    });
+  }
+  options.push({ label: "Compare all broadcasters…", value: "compare" });
+
+  const choice = await provider.select(`Broadcaster for ${token.symbol}`, options);
   if (!choice) return undefined;
+  if (choice === "favorite" && favorite) {
+    return { kind: "broadcaster", broadcaster: favorite };
+  }
   if (choice === "best") return { kind: "broadcaster", broadcaster: best };
 
   // Comparison modal — broadcasters for THIS fee token: blocked hidden, ⭐
@@ -299,27 +399,34 @@ export const collectFeeMode = async (
     }),
   );
   for (;;) {
-    const favorites = new Set(getBroadcasterFavorites());
+    const favorites = getBroadcasterFavorites();
     const blocked = new Set(getBroadcasterBlocklist());
     const ranked = rankBroadcasters(computed, { favorites, blocked });
     if (!ranked.length) {
       provider.notify(`No broadcasters for ${token.symbol} (all blocked?).`);
       return undefined;
     }
-    const cheapest = ranked[0].feeAmount;
+    // The cheapest ROW, not the first one — the top of this list is now the
+    // highest-precedence favourite, which is frequently not the cheapest.
+    const cheapest = cheapestFee(ranked);
     const rows = ranked.map((r) => {
       const bonus = bonusPct(r.feeAmount, cheapest);
       const bonusText = r.feeAmount === undefined ? "  —  " : bonus === 0 ? " best " : `+${bonus.toFixed(1)}%`;
       const rel = Math.round(r.reliability * 100);
-      const star = favorites.has(r.address) ? "⭐" : " ";
+      const rank = favoriteRank(favorites, r.address);
+      // The precedence number is the point: "⭐1" is the one that gets used.
+      const star = rank === Number.POSITIVE_INFINITY ? "  " : `⭐${rank + 1}`;
       const label =
         `${star} ${short(r.address).padEnd(15)}` +
         `${r.feeReadable.padStart(11)} ${token.symbol.padEnd(5)}` +
         `${bonusText.padStart(7)}  rel ${String(rel).padStart(3)}%  ${r.wallets}w`;
       return { label, value: r.address };
     });
-    rows.push({ label: "⚙ Favorites & blocklist…", value: "__manage" });
-    const picked = await provider.select(`Broadcasters · ${token.symbol} · ⭐ favorites first`, rows);
+    rows.push({ label: "⚙ Favorites, order & blocklist…", value: "__manage" });
+    const picked = await provider.select(
+      `Broadcasters · ${token.symbol} · ⭐ by precedence, then cheapest`,
+      rows,
+    );
     if (!picked) return undefined;
     if (picked === "__manage") {
       await manageBroadcasterPrefs(computed);

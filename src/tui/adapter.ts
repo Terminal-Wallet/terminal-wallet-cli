@@ -16,6 +16,21 @@ import { getState, setState, appendLog } from "./store";
 const BOOT_MS = Date.now();
 const runtimeStamp = (): string => `+${Date.now() - BOOT_MS}ms`;
 
+/**
+ * The waku broadcaster client announces every fee message it receives, several
+ * times a second, which buries everything else in the log pane.
+ *
+ * Matched on those two specific lines rather than on the word "fee". This is
+ * the single choke point for the whole log stream now that the logger drains
+ * through it, so a broad pattern here silently discards real failures — "fee
+ * too high", "insufficient fee for broadcaster", and the builder's own
+ * overspend messages all contain it.
+ */
+const BROADCASTER_FEE_CHATTER = /Broadcaster Fee (?:STALE|receipt)/i;
+
+export const isLogNoise = (text: string): boolean =>
+  BROADCASTER_FEE_CHATTER.test(text);
+
 const fold = (e: CoreEvent): void => {
   switch (e.type) {
     case "wallet:changed":
@@ -103,9 +118,7 @@ const fold = (e: CoreEvent): void => {
       // cache on this; the store carries no extra state for it.
       break;
     case "log": {
-      // Drop noisy broadcaster-fee chatter from every log source (waku, SDK,
-      // console) at the single choke point.
-      if (/fee/i.test(e.text)) break;
+      if (isLogNoise(e.text)) break;
       const prefix = e.level === "error" ? "✖" : e.level === "warn" ? "▲" : "·";
       // Elapsed-runtime counter so intervals between events are readable.
       setState({ logs: appendLog(getState().logs, `${prefix} [${runtimeStamp()}] ${e.text}`) });

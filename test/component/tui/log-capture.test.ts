@@ -14,7 +14,7 @@ import { test, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import { createLogger } from "../../../src/platform/logger";
 import { installDeckLogSink, releaseDeckLogSink } from "../../../src/tui/log-sink";
-import { attachCoreAdapter } from "../../../src/tui/adapter";
+import { attachCoreAdapter, isLogNoise } from "../../../src/tui/adapter";
 import { getState, setState } from "../../../src/tui/store";
 
 let written: string[] = [];
@@ -87,4 +87,38 @@ test("a secret is redacted before it reaches the pane", () => {
   createLogger("engine").info(`seed ${mnemonic}`);
   assert.ok(!getState().logs[0].includes(mnemonic));
   assert.match(getState().logs[0], /REDACTED/);
+});
+
+/**
+ * The noise filter.
+ *
+ * The broadcaster client announces every fee message it receives, several times
+ * a second. Suppressing it used to mean dropping any line matching /fee/i —
+ * fine when two call sites emitted log events, and much less fine now that the
+ * whole logger drains through here.
+ */
+
+test("broadcaster fee chatter is suppressed", () => {
+  assert.equal(isLogNoise("Broadcaster Fee STALE: Difference was 31.2s"), true);
+  assert.equal(isLogNoise("Broadcaster Fee receipt SUCCESS in 0.4s"), true);
+});
+
+test("real failures that happen to mention a fee are kept", () => {
+  // Each of these was silently discarded by the old pattern.
+  for (const line of [
+    "Overspends WETH by 0.25 — reduce the amount or fee.",
+    "Broadcaster fee too high for this transaction",
+    "insufficient fee token balance",
+    "Priority fee cannot exceed max fee.",
+    "Could not load gas tiers; keeping default gas.",
+  ]) {
+    assert.equal(isLogNoise(line), false, `dropped: ${line}`);
+  }
+});
+
+test("the filter runs on the way into the pane", () => {
+  createLogger("waku").info("Broadcaster Fee receipt SUCCESS in 0.2s");
+  assert.equal(getState().logs.length, 0);
+  createLogger("waku").warn("Broadcaster fee too high");
+  assert.equal(getState().logs.length, 1);
 });
