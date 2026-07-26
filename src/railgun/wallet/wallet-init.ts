@@ -5,6 +5,7 @@ import {
   loadWalletByID,
   setOnBalanceUpdateCallback,
   setOnUTXOMerkletreeScanCallback,
+  setOnTXIDMerkletreeScanCallback,
   setOnWalletPOIProofProgressCallback,
   setBatchListCallback,
 } from "@railgun-community/wallet";
@@ -30,7 +31,8 @@ import { getEthersWallet } from "../network/network-util";
 import { walletManager } from "./wallet-manager";
 import {
   scanBalancesCallback,
-  merkelTreeScanCallback,
+  utxoMerkletreeScanCallback,
+  txidMerkletreeScanCallback,
   poiScanCallback,
   batchListCallback
 } from "./scan-callbacks";
@@ -244,7 +246,10 @@ export const initializeWalletSystems = async () => {
   walletManager.keyChain = await initializeKeychainSystem();
   setBatchListCallback(batchListCallback)
   setOnBalanceUpdateCallback(scanBalancesCallback);
-  setOnUTXOMerkletreeScanCallback(merkelTreeScanCallback);
+  setOnUTXOMerkletreeScanCallback(utxoMerkletreeScanCallback);
+  // Both trees, because the renderer tracks them separately and only calls the
+  // wallet synced once both have finished their historical scan.
+  setOnTXIDMerkletreeScanCallback(txidMerkletreeScanCallback);
   setOnWalletPOIProofProgressCallback(poiScanCallback);
 
   const currentNetwork =
