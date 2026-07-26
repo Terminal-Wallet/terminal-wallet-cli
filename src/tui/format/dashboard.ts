@@ -57,3 +57,37 @@ export const balanceCard = (s: WalletState, tag: Tagger): string => {
     tag(`${s.showPrivate ? "private" : "public"} · click to toggle`, "gray"),
   ].join("\n");
 };
+
+const miniBar = (pct: number): string => {
+  const filled = barCells(pct, 5);
+  return "█".repeat(filled) + "░".repeat(5 - filled);
+};
+
+/**
+ * One merkletree's sync line: position, and whether it is caught up.
+ *
+ * The ✓ latches. Once a tree is synced it stays ticked through the routine
+ * re-scans that follow every new block — the live bar is for the initial sync
+ * only. Without the latch the card flickers between a bar and a tick forever,
+ * which reads as something being wrong.
+ */
+export const syncTreeLine = (
+  label: string,
+  tree: number,
+  leaves: number,
+  pct: number,
+  ready: boolean,
+  tag: Tagger,
+): string => {
+  const position =
+    tree >= 0 && leaves >= 0 ? `${tree}:${leaves.toLocaleString("en-US")}` : "—";
+  const scanning = pct > 0 && pct < 100;
+  const right = ready
+    ? tag("✓", "green")
+    : scanning
+      ? tag(miniBar(pct), "yellow")
+      : leaves > 0
+        ? tag("✓", "green")
+        : tag("…", "gray");
+  return `${tag(label, "gray")} ${tag(position, "white")} ${right}`;
+};

@@ -14,7 +14,6 @@
 import { runDiagnostic } from "./diagnostic/report";
 import { clearConsoleBuffer, setConsoleTitle } from "./platform/console";
 import { installProcessHandlers } from "./platform/lifecycle";
-import { errMessage } from "./platform/errors";
 import { createLogger } from "./platform/logger";
 
 const log = createLogger("main");
@@ -24,8 +23,20 @@ const main = async () => {
   // down rather than swallowed.
   installProcessHandlers();
   setConsoleTitle();
-  const code = await runDiagnostic(process.argv.slice(2));
-  process.exit(code);
+
+  const argv = process.argv.slice(2);
+
+  // The diagnostic modes are explicit. They stay available after the UI becomes
+  // the default, because "is it the wallet or the network" is much easier to
+  // answer from a state dump than from a rendered screen.
+  if (argv.includes("--selftest") || argv.includes("--status")) {
+    process.exit(await runDiagnostic(argv));
+  }
+
+  // Loaded on demand: the terminal UI pulls in blessed and builds a screen, and
+  // the diagnostic modes above have no use for either.
+  const { runDeck } = await import("./tui/entry.js");
+  await runDeck();
 };
 
 clearConsoleBuffer();
