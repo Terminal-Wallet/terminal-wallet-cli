@@ -416,7 +416,7 @@ export const createBuilder = (host: BuilderHost): Builder => {
       // Kept so the send proves against the quote that was reviewed, rather
       // than a second one fetched after the user has already approved.
       if (inputs?.quote) {
-        state.swapQuote = { inputs, forKey: swapQuoteKey(state) };
+        state.swapQuote = { inputs, forKey: swapQuoteKey(state), at: Date.now() };
       }
     } catch {
       swapPreview = undefined;

@@ -52,7 +52,7 @@ import {
 } from "./tx-flow-helpers";
 import { RunResult, SendOutcome } from "../../flows/run";
 import { TxBuilderConfig } from "./tx-builder";
-import { BuilderState, swapQuoteKey } from "./tx-builder-core";
+import { BuilderState, swapQuoteUsable } from "./tx-builder-core";
 import { Leg, toRecipients } from "../../flows/caps";
 import { isNativeChoice, makeNativeEntry } from "../../flows/native-token";
 import { parseUnits } from "ethers";
@@ -124,7 +124,7 @@ const quoteForSubmit = async (
   fetch: () => Promise<{ inputs: SwapInputs }>,
 ): Promise<SwapInputs> => {
   const carried = s.swapQuote;
-  if (carried && carried.forKey === swapQuoteKey(s)) {
+  if (carried && swapQuoteUsable(carried, s, Date.now())) {
     return carried.inputs as SwapInputs;
   }
   return (await fetch()).inputs;

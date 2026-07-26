@@ -11,7 +11,12 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { swapQuoteKey, BuilderState } from "../../../src/tui/screens/tx-builder-core";
+import {
+  swapQuoteKey,
+  swapQuoteUsable,
+  SWAP_QUOTE_TTL_MS,
+  BuilderState,
+} from "../../../src/tui/screens/tx-builder-core";
 import { RailgunDisplayBalance } from "../../../src/models/balance-models";
 
 const token = (address: string): RailgunDisplayBalance =>
@@ -69,4 +74,51 @@ test("a missing field cannot collide with a filled one", () => {
   const a: BuilderState = { gas: undefined, amount: "1", address: "2" };
   const b: BuilderState = { gas: undefined, amount: "12" };
   assert.notEqual(swapQuoteKey(a), swapQuoteKey(b));
+});
+
+
+/**
+ * Quote freshness.
+ *
+ * A 0x quote is baked calldata for a route that existed when it was fetched and
+ * a taker it named. Spending against a stale one reverts the gas estimate, and
+ * that surfaces as "RelayAdapt multicall failed at index UNKNOWN." — a message
+ * that says nothing about the quote being old. So age is bounded here rather
+ * than discovered on chain.
+ */
+
+const carried = (over: Partial<{ forKey: string; at: number }> = {}) => ({
+  forKey: swapQuoteKey(base()),
+  at: 1_000_000,
+  ...over,
+});
+
+test("a fresh quote for the same trade is usable", () => {
+  assert.equal(swapQuoteUsable(carried(), base(), 1_000_000 + 5_000), true);
+});
+
+test("a quote past its lifetime is not", () => {
+  assert.equal(
+    swapQuoteUsable(carried(), base(), 1_000_000 + SWAP_QUOTE_TTL_MS + 1),
+    false,
+  );
+});
+
+test("the boundary is exclusive", () => {
+  assert.equal(swapQuoteUsable(carried(), base(), 1_000_000 + SWAP_QUOTE_TTL_MS - 1), true);
+  assert.equal(swapQuoteUsable(carried(), base(), 1_000_000 + SWAP_QUOTE_TTL_MS), false);
+});
+
+test("a quote stamped in the future is refused", () => {
+  // A clock that stepped backwards must not make a quote immortal.
+  assert.equal(swapQuoteUsable(carried(), base(), 999_000), false);
+});
+
+test("freshness does not rescue a quote for a different trade", () => {
+  const changed = { ...base(), amount: "99" };
+  assert.equal(swapQuoteUsable(carried(), changed, 1_000_000 + 1), false);
+});
+
+test("no carried quote is not usable", () => {
+  assert.equal(swapQuoteUsable(undefined, base(), 1_000_000), false);
 });

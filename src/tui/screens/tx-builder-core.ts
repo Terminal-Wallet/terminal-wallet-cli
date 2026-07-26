@@ -32,7 +32,7 @@ export interface BuilderState {
    * whether the send happens at all. Reused when it still matches the inputs on
    * screen; re-fetched when they have moved.
    */
-  swapQuote?: { inputs: unknown; forKey: string };
+  swapQuote?: { inputs: unknown; forKey: string; at: number };
 }
 
 /** Identifies the inputs a swap quote was fetched for. */
@@ -40,6 +40,30 @@ export const swapQuoteKey = (s: BuilderState): string =>
   [s.token?.tokenAddress, s.buyToken?.tokenAddress, s.amount, s.address]
     .map((part) => part ?? "")
     .join("|");
+
+/**
+ * How long a carried 0x quote may be spent against.
+ *
+ * A quote is baked calldata for a route that existed when it was fetched, bound
+ * to the taker address it named. Reuse it long enough and the gas estimate
+ * reverts — which surfaces as "RelayAdapt multicall failed", a message that
+ * says nothing about the quote being old.
+ *
+ * Short enough that a normal review-and-send reuses the quote that was on
+ * screen, and anything slower re-fetches rather than failing.
+ */
+export const SWAP_QUOTE_TTL_MS = 60_000;
+
+/** Whether a carried quote may still be spent against. */
+export const swapQuoteUsable = (
+  quote: { forKey: string; at: number } | undefined,
+  state: BuilderState,
+  now: number,
+): boolean =>
+  !!quote &&
+  quote.forKey === swapQuoteKey(state) &&
+  now - quote.at >= 0 &&
+  now - quote.at < SWAP_QUOTE_TTL_MS;
 
 const short = (a?: string): string =>
   a && a.length > 16 ? `${a.slice(0, 8)}…${a.slice(-6)}` : a ?? "";
