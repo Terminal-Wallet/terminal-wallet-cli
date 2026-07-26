@@ -1,0 +1,319 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+/**
+ * Blessed-native implementation of the core WalletInputProvider — the modals the
+ * wallet boot and every transaction flow use to ASK the user for input (token
+ * pick, amount, address, gas, password, confirm). Designed to feel like one
+ * cohesive app rather than ad-hoc prompts: a shared modal "chrome" (line border,
+ * accent colour, drop shadow, title, and a dimmed footer of key hints) wraps each
+ * dialog, the select list scrolls + shows a count + a right-aligned detail
+ * column, and EVERY dialog cancels cleanly on Esc (resolve undefined/false) while
+ * releasing grabKeys so the dashboard never gets stuck.
+ *
+ * A factory over (blessed, screen) so it shares the running screen. `notify`
+ * routes to the store's status line.
+ */
+import { Mnemonic } from "ethers";
+import { WalletInputProvider, InputChoice } from "../core/input";
+import { TMPWalletInfo } from "../models/wallet-models";
+import { setState, getState } from "./store";
+import { buildWalletInfo } from "../flows/new-wallet";
+import { FormSpec } from "./form-core";
+import { runFormCard } from "./widgets/form-card";
+import { createModal } from "./widgets/modal";
+
+export const createBlessedInputProvider = (
+  blessed: any,
+  screen: any,
+): WalletInputProvider => {
+  // Centered single-line text/password modal. Resolves the raw value or
+  // undefined (Esc/empty). grabKeys keeps the global menu shortcuts from firing
+  // while the modal is focused.
+  const promptText = (
+    message: string,
+    censor: boolean,
+    hint?: string,
+  ): Promise<string | undefined> =>
+    new Promise((resolve) => {
+      const { box, guardFocus, close } = createModal(blessed, screen, {
+        title: message,
+        widthPct: 60,
+        height: hint ? 8 : 7,
+        accent: "cyan",
+        footer: "Enter submit · Esc cancel",
+      });
+      if (hint) {
+        blessed.text({
+          parent: box,
+          top: 0,
+          left: 1,
+          right: 1,
+          tags: true,
+          content: `{gray-fg}${hint}{/}`,
+        });
+      }
+      const input = blessed.textbox({
+        parent: box,
+        top: hint ? 2 : 1,
+        left: 1,
+        right: 1,
+        height: 1,
+        censor,
+        // NOTE: do NOT set inputOnFocus. We arm reading once via readInput()
+        // below; inputOnFocus would ALSO arm on focus, double-attaching keypress
+        // listeners (blessed attaches on nextTick, removes synchronously) and
+        // multiplying keystrokes when focus churns (guardFocus refocus / clicks).
+        keys: true,
+        mouse: true,
+        style: { bg: "black", focus: { bg: "black" } },
+      });
+      const done = (val?: string) => {
+        close();
+        resolve(val);
+      };
+      input.on("submit", () => done(input.getValue() || undefined));
+      input.on("cancel", () => done(undefined));
+      input.key(["escape"], () => done(undefined));
+      guardFocus(input);
+      input.focus();
+      input.readInput(); // single arm — see the inputOnFocus note above
+      screen.render();
+    });
+
+  // Dedicated password/unlock modal. Hardened against accidental dismissal: a
+  // blur / stray click / Esc does NOT close it — it re-grabs input and stays up.
+  // The ONLY ways out are the explicit [Unlock] (submit) and [Cancel] buttons.
+  const promptPasswordModal = (
+    message: string,
+  ): Promise<string | undefined> =>
+    new Promise((resolve) => {
+      const { box, guardFocus, close } = createModal(blessed, screen, {
+        title: message,
+        widthPct: 60,
+        height: 9,
+        accent: "green",
+        footer: "Enter / [Unlock] to continue · clicks won't dismiss",
+      });
+      blessed.text({
+        parent: box, top: 0, left: 1, right: 1, tags: true,
+        content: "{gray-fg}🔒 Enter your wallet password.{/}",
+      });
+      const input = blessed.textbox({
+        parent: box, top: 2, left: 1, right: 1, height: 1,
+        // No inputOnFocus: we arm reading explicitly via readInput(). Combining
+        // both double-attaches keypress listeners and multiplies keystrokes.
+        censor: true, keys: true, mouse: true,
+        // Filled field so the input area is clearly visible.
+        style: { bg: "#2b303b", fg: "white", focus: { bg: "#1f4f82", fg: "white" } },
+      });
+      const unlock = blessed.box({
+        parent: box, bottom: 1, left: 1, width: 12, height: 1, tags: true, mouse: true, clickable: true,
+        content: "{center}[ Unlock ]{/}", style: { bg: "green", fg: "black", hover: { bg: "white" } },
+      });
+      const cancel = blessed.box({
+        parent: box, bottom: 1, left: 14, width: 12, height: 1, tags: true, mouse: true, clickable: true,
+        content: "{center}[ Cancel ]{/}", style: { bg: "red", fg: "white", hover: { bg: "white", fg: "black" } },
+      });
+      let closing = false;
+      const finish = (val?: string) => {
+        closing = true;
+        close();
+        resolve(val);
+      };
+      input.on("submit", () => finish(input.getValue() || undefined));
+      // blur / Esc / stray click → keep the modal up and resume input. Re-arm
+      // exactly once (no inputOnFocus, so focus() alone won't re-attach a
+      // listener — readInput() does, and its internal _reading guard prevents a
+      // second concurrent listener).
+      input.on("cancel", () => {
+        if (closing) return;
+        input.focus();
+        input.readInput();
+        screen.render();
+      });
+      unlock.on("click", () => finish(input.getValue() || undefined));
+      cancel.on("click", () => finish(undefined));
+      guardFocus(input);
+      input.focus();
+      input.readInput();
+      screen.render();
+    });
+
+  const promptConfirm = (message: string): Promise<boolean> =>
+    new Promise((resolve) => {
+      const { box, guardFocus, close } = createModal(blessed, screen, {
+        title: "Confirm",
+        widthPct: 55,
+        height: 9,
+        accent: "yellow",
+        footer: "y / Enter = yes · n / Esc = no",
+      });
+      blessed.text({
+        parent: box,
+        top: 0,
+        left: 1,
+        right: 1,
+        tags: true,
+        content: message,
+      });
+      const done = (v: boolean) => {
+        close();
+        resolve(v);
+      };
+      // Clickable Yes/No (mouse) alongside the y/n/Enter/Esc keys.
+      const yes = blessed.box({
+        parent: box,
+        bottom: 2,
+        left: 1,
+        width: 11,
+        height: 1,
+        tags: true,
+        mouse: true,
+        clickable: true,
+        content: "{center}[ Yes ]{/}",
+        style: { bg: "green", fg: "black", hover: { bg: "white" } },
+      });
+      const no = blessed.box({
+        parent: box,
+        bottom: 2,
+        left: 14,
+        width: 11,
+        height: 1,
+        tags: true,
+        mouse: true,
+        clickable: true,
+        content: "{center}[ No ]{/}",
+        style: { bg: "red", fg: "white", hover: { bg: "white", fg: "black" } },
+      });
+      yes.on("click", () => done(true));
+      no.on("click", () => done(false));
+      box.key(["y", "Y", "enter"], () => done(true));
+      box.key(["n", "N", "escape"], () => done(false));
+      guardFocus(box);
+      box.focus();
+      screen.render();
+    });
+
+  const promptSelect = (
+    message: string,
+    items: InputChoice[],
+  ): Promise<string | undefined> =>
+    new Promise((resolve) => {
+      // Right-align the optional detail column (e.g. balance) under a padded
+      // label so the list reads like a table.
+      const labelW = items.reduce((m, i) => Math.max(m, i.label.length), 0);
+      const rows = items.map((i) =>
+        i.hint ? `${i.label.padEnd(labelW + 2)}{gray-fg}${i.hint}{/}` : i.label,
+      );
+      // Cap height to the viewport and scroll the rest (long token lists).
+      const screenH = (screen.height as number) || 24;
+      const listH = Math.max(3, Math.min(items.length, screenH - 8));
+      const { box, guardFocus, close } = createModal(blessed, screen, {
+        title: items.length > 1 ? `${message}  (${items.length})` : message,
+        widthPct: 62,
+        height: listH + 4,
+        accent: "cyan",
+        footer: "↑/↓ move · Enter select · Esc cancel",
+      });
+      const list = blessed.list({
+        parent: box,
+        top: 0,
+        left: 0,
+        right: 0,
+        height: listH,
+        tags: true,
+        keys: true,
+        mouse: true,
+        vi: true,
+        items: rows,
+        scrollbar: { ch: " ", style: { bg: "green" } },
+        style: {
+          selected: { bg: "cyan", fg: "black" },
+          item: { fg: "white" },
+        },
+      });
+      const done = (v?: string) => {
+        close();
+        resolve(v);
+      };
+      list.on("select", (_item: any, idx: number) => done(items[idx]?.value));
+      // blessed lists handle Esc internally and emit "cancel" — relying only on
+      // .key(["escape"]) is flaky (it can be pre-empted by the list's own
+      // keypress handler when nothing is highlighted). Bind both, plus the box.
+      list.on("cancel", () => done(undefined));
+      list.key(["escape", "q"], () => done(undefined));
+      box.key(["escape", "q"], () => done(undefined));
+      box.on("click", () => {
+        list.focus();
+        screen.render();
+      });
+      guardFocus(list);
+      list.focus();
+      screen.render();
+    });
+
+  // Single-card New / Import wallet flow: collect mode + name + (seed) on one
+  // card, then assemble via the pure buildWalletInfo (new → generate, import →
+  // validate). The seed field is collected only for import; the password-confirm
+  // path stays downstream in initilizeFreshWallet.
+  const promptNewWallet = async (): Promise<TMPWalletInfo | undefined> => {
+    let built: TMPWalletInfo | undefined;
+    const spec: FormSpec = {
+      title: "New / Import Wallet",
+      fields: [
+        {
+          key: "mode", label: "Mode", type: "select",
+          staticOptions: [
+            { label: "New wallet (generate a fresh seed)", value: "new" },
+            { label: "Import an existing seed phrase", value: "import" },
+          ],
+        },
+        { key: "name", label: "Wallet name", type: "text", required: true },
+        {
+          key: "mnemonic", label: "Seed phrase", type: "password", secret: true,
+          hint: "12 / 24 words — import only",
+        },
+      ],
+      submitLabel: "Create wallet",
+      // Cross-field: import requires a valid seed (per-field validators are skipped
+      // for a blank optional field, so enforce it here where it always runs).
+      validate: (vals) => {
+        if (vals.mode === "import") {
+          const m = String(vals.mnemonic ?? "").trim();
+          if (!m) return "Import needs a seed phrase.";
+          if (!Mnemonic.isValidMnemonic(m)) return "Enter a valid 12 / 24-word seed phrase.";
+        }
+        return undefined;
+      },
+      submit: async (vals) => {
+        const info = buildWalletInfo({
+          mode: vals.mode === "import" ? "import" : "new",
+          walletName: String(vals.name ?? ""),
+          mnemonic: vals.mnemonic ? String(vals.mnemonic) : undefined,
+        });
+        if (!info) return { ok: false, error: "Invalid wallet details." };
+        built = info;
+        return { ok: true, message: vals.mode === "import" ? "Importing wallet…" : "Creating wallet…" };
+      },
+    };
+    const res = await runFormCard(blessed, screen, spec, { mode: "new" });
+    return res?.ok ? built : undefined;
+  };
+
+  return {
+    promptPassword: (message) => promptPasswordModal(message),
+    confirm: (message) => promptConfirm(message),
+    // Transient: show the message, then revert to the prior status after 10s
+    // (if nothing else has changed it in the meantime) so notices don't stick.
+    notify: (message) => {
+      const prev = getState().status;
+      setState({ status: message });
+      setTimeout(() => {
+        if (getState().status === message) setState({ status: prev });
+      }, 10_000);
+    },
+    promptNewWallet,
+    select: (message, choices) => promptSelect(message, choices),
+    input: (message, opts) =>
+      promptText(message, opts?.password ?? false, opts?.hint),
+  };
+};
