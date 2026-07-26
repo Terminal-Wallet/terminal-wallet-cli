@@ -22,6 +22,7 @@ import { initializeWalletSystems } from "../src/railgun/wallet/wallet-init";
 import { refreshBalances } from "@railgun-community/wallet";
 import { getCurrentNetwork } from "../src/railgun/engine/engine";
 import { getPrivateERC20BalancesForChain } from "../src/railgun/balance/balance-util";
+import { getERC20TokenInfosForChain } from "../src/railgun/balance/token-util";
 import { getSaltedPassword } from "../src/railgun/wallet/wallet-password";
 import { getCurrentRailgunID } from "../src/railgun/wallet/wallet-util";
 import {
@@ -82,11 +83,18 @@ const main = async () => {
     for (const b of balances) console.log(`  ${b.symbol}`);
     process.exit(1);
   }
-  const buy = balances.find((b) => b.symbol === buySymbol) ?? {
-    tokenAddress: buySymbol,
-    symbol: buySymbol,
-    decimals: 18,
-  };
+  // The buy token comes from the chain's token database — the same list the
+  // builder offers — not from spendable balances. You do not hold what you are
+  // buying. A raw 0x address is accepted too.
+  const known = await getERC20TokenInfosForChain(chainName);
+  const buy = buySymbol.startsWith("0x")
+    ? known.find((t) => t.tokenAddress.toLowerCase() === buySymbol.toLowerCase())
+    : known.find((t) => t.symbol === buySymbol);
+  if (!buy) {
+    console.log(`buy token ${buySymbol} is not in the token database. Known:`);
+    console.log(`  ${known.map((t) => t.symbol).sort().join(", ")}`);
+    process.exit(1);
+  }
 
   const wrapped = getWrappedTokenInfoForChain(chainName);
   const { index, address } = await getCurrentEphemeralInfo(chainName, encryptionKey);
