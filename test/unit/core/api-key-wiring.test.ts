@@ -65,3 +65,39 @@ test("the selftest reports presence, never the key itself", () => {
     "the diagnostic would print the API key",
   );
 });
+
+/**
+ * The version floor.
+ *
+ * `versionCheck` is the operator's kill switch: a build below
+ * `remoteConfig.minVersionNumber` is not allowed to run. It was dead for the
+ * same reason the API key was — main.ts was rewritten without it — so a build
+ * marked unusable would have started anyway.
+ */
+
+test("the deck enforces the version floor at boot", () => {
+  const entry = read("tui/entry.ts");
+  assert.match(entry, /versionCheck\(version\)/);
+  assert.match(entry, /process\.exit\(69\)/, "the floor is checked but not enforced");
+});
+
+test("it tears the screen down before reporting and exiting", () => {
+  // Otherwise the reason goes into a log pane that is about to stop existing
+  // and the app simply vanishes.
+  const entry = read("tui/entry.ts");
+  const block = entry.slice(entry.indexOf("const verdict = versionCheck("));
+  const guard = block.slice(0, block.indexOf("process.exit(69)"));
+  assert.match(guard, /releaseDeckLogSink\(\)/, "log sink still holds the output");
+  assert.match(guard, /screen\.destroy\(\)/, "blessed still owns the terminal");
+});
+
+test("versionCheck returns a verdict rather than exiting itself", async () => {
+  // A config module that calls process.exit cannot be tested and gives the
+  // renderer no chance to clean up.
+  const source = read("config/config-overrides.ts");
+  const fn = source.slice(source.indexOf("export const versionCheck"));
+  assert.ok(
+    !/process\.exit/.test(fn.slice(0, fn.indexOf("\n};"))),
+    "versionCheck exits the process directly",
+  );
+});

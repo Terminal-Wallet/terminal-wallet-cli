@@ -113,21 +113,37 @@ export const overrideMainConfig = async (_version: string) => {
   }
 };
 
-export const versionCheck = (version: string) => {
+export type VersionVerdict =
+  | { ok: true; newer?: string }
+  | { ok: false; message: string };
+
+/**
+ * Compare the running build against the remote config's version floor.
+ *
+ * Returns a verdict rather than exiting. This is the operator's kill switch for
+ * a build with a known problem, and a config module that calls process.exit
+ * cannot be tested, cannot tear a renderer down first, and gives whatever is on
+ * screen no chance to say why it vanished. The caller decides.
+ */
+export const versionCheck = (version: string): VersionVerdict => {
   log.debug(`version ${version}`);
 
   if (version < remoteConfig.minVersionNumber) {
-    log.error(
-      `this build (${version}) is older than the minimum supported version ` +
+    return {
+      ok: false,
+      message:
+        `this build (${version}) is older than the minimum supported version ` +
         `(${remoteConfig.minVersionNumber}). Download a current build from ` +
         `https://www.terminal-wallet.com`,
-    );
-    process.exit(69);
+    };
   }
   if (version < remoteConfig.currentVersionNumber) {
-    log.warn(
-      `a newer version is available (${remoteConfig.currentVersionNumber}); ` +
+    return {
+      ok: true,
+      newer:
+        `a newer version is available (${remoteConfig.currentVersionNumber}); ` +
         `you are on ${version}. https://www.terminal-wallet.com`,
-    );
+    };
   }
+  return { ok: true };
 };

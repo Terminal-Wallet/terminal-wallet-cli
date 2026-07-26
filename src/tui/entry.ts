@@ -72,7 +72,7 @@ import {
 import { getCurrentNetwork } from "../railgun/engine/engine";
 import { getWrappedTokenInfoForChain } from "../railgun/network/network-util";
 import { initializeWalletSystems } from "../railgun/wallet/wallet-init";
-import { overrideMainConfig } from "../config/config-overrides";
+import { overrideMainConfig, versionCheck } from "../config/config-overrides";
 import { updateApiKey } from "../railgun/transaction/zeroX/0x-swap";
 import { configuredDefaultNetwork } from "../config/config-manager";
 import { installProcessHandlers } from "../platform/lifecycle";
@@ -577,6 +577,21 @@ export const runDeck = async (): Promise<void> => {
 
   try {
     await overrideMainConfig(version);
+
+    // The operator's version floor. Below it this build is not allowed to run,
+    // so tear the screen down and release the log sink first — otherwise the
+    // reason goes into a pane that is about to stop existing, and the app just
+    // disappears.
+    const verdict = versionCheck(version);
+    if (!verdict.ok) {
+      releaseDeckLogSink();
+      feeders.stopPolling();
+      screen.destroy();
+      log.error(verdict.message);
+      process.exit(69);
+    }
+    if (verdict.newer) setState({ status: verdict.newer });
+
     // After the remote config lands and before anything can quote: that fetch
     // is what fills configDefaults.apiKeys, and this is what hands the 0x key
     // to the SDK. Without it every swap quote fails with "no API key
