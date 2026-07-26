@@ -133,11 +133,11 @@ const autoBestBroadcaster = async (
   for (const b of balances) {
     try {
       const token = b.tokenAddress.toLowerCase();
-      for (const candidate of waku.findBroadcastersForToken(chain, token, relayAdapt) ?? []) {
+      for (const candidate of waku.findBroadcastersForToken(chain, token, relayAdapt, relayAdapt) ?? []) {
         if (!blocked.has(candidate.railgunAddress)) reachable.push(candidate);
       }
       if (!fallback) {
-        const best = waku.findBestBroadcaster(chain, token, relayAdapt);
+        const best = waku.findBestBroadcaster(chain, token, relayAdapt, relayAdapt);
         if (best && !blocked.has(best.railgunAddress)) fallback = best;
       }
     } catch {
@@ -302,9 +302,22 @@ export const collectFeeMode = async (
   const chain = getChainForName(chainName);
 
   // Only offer fee tokens that actually have broadcasters.
+  //
+  // For a relay-adapt flow the lookups below are already restricted to
+  // 7702-capable broadcasters, so a token no such broadcaster advertises is a
+  // dead end: it would list, and then finding a broadcaster for it would return
+  // nothing. Intersect up front with what the 7702 set actually accepts.
   const balances = await getPrivateERC20BalancesForChain(chainName); // Spendable only
+  const accepted = relayAdapt
+    ? new Set(
+        (waku.findAllBroadcastersForChain(chain, true, true) ?? []).map((b) =>
+          b.tokenAddress.toLowerCase(),
+        ),
+      )
+    : undefined;
   const withBrokers: RailgunDisplayBalance[] = [];
   for (const b of balances) {
+    if (accepted && !accepted.has(b.tokenAddress.toLowerCase())) continue;
     try {
       // The client returns undefined rather than an empty list when it knows of
       // no broadcasters for a token, so treat that as "none" explicitly.
@@ -312,6 +325,7 @@ export const collectFeeMode = async (
         (waku.findBroadcastersForToken(
           chain,
           b.tokenAddress.toLowerCase(),
+          relayAdapt,
           relayAdapt,
         ) ?? []).length
       )
@@ -338,7 +352,12 @@ export const collectFeeMode = async (
   }
 
   const gasDetails = await nominalGasDetails(chainName, gasUnits);
-  const best = waku.findBestBroadcaster(chain, tokenAddr.toLowerCase(), relayAdapt);
+  const best = waku.findBestBroadcaster(
+    chain,
+    tokenAddr.toLowerCase(),
+    relayAdapt,
+    relayAdapt,
+  );
   if (!best) {
     provider.notify(`No broadcaster found for ${token.symbol}.`);
     return undefined;
@@ -348,7 +367,12 @@ export const collectFeeMode = async (
   // now. Offered FIRST and chosen by default: having ranked them, being asked
   // again every time defeats the point of ranking them.
   const forToken =
-    waku.findBroadcastersForToken(chain, tokenAddr.toLowerCase(), relayAdapt) ?? [];
+    waku.findBroadcastersForToken(
+      chain,
+      tokenAddr.toLowerCase(),
+      relayAdapt,
+      relayAdapt,
+    ) ?? [];
   const favoriteAddress = preferredFavorite(
     getBroadcasterFavorites(),
     forToken.map((b) => b.railgunAddress),
@@ -384,8 +408,12 @@ export const collectFeeMode = async (
   // Comparison modal — broadcasters for THIS fee token: blocked hidden,
   // favorites first, then cheapest. Loops so managing prefs refreshes the list.
   const all =
-    waku.findBroadcastersForToken(chain, tokenAddr.toLowerCase(), relayAdapt) ??
-    [];
+    waku.findBroadcastersForToken(
+      chain,
+      tokenAddr.toLowerCase(),
+      relayAdapt,
+      relayAdapt,
+    ) ?? [];
   const computed: BroadcasterRow[] = await Promise.all(
     all.map(async (b) => {
       const { amount, readable } = await computeFee(b, token.decimals, gasDetails);
