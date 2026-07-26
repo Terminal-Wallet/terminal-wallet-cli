@@ -63,12 +63,55 @@ export const formatFeeHistory = (
   return blocks;
 };
 
+/**
+ * Priority-fee percentiles behind the slow / average / fast tiers.
+ *
+ * The distribution of tips in a block is steeply skewed and effectively
+ * bimodal: most transactions pay almost nothing, and a large cohort pays
+ * whatever their wallet defaults to — 2 gwei, overwhelmingly. Measured on
+ * mainnet at a 0.062 gwei base fee, the median tip per percentile ran
+ * p25 0.001 · p50 0.025 · p75 0.29 · p80 0.60 · p90 1.42 · p95 2.00.
+ *
+ * So anything at or above p80 samples the defaults cohort rather than the
+ * market, and p95 lands on exactly 2 gwei almost regardless of conditions —
+ * a fixed price wearing a percentile's clothes. These three sit below that
+ * cliff, and put "slow" at roughly what public trackers quote as low.
+ */
+export const REWARD_PERCENTILES = [25, 50, 75];
+
+/**
+ * Inclusion floor. A percentile can be 0 when most sampled blocks report no
+ * tip at it, and a transaction offering no tip may never be mined. Small on
+ * purpose: blocks demonstrably include tips of 0.001 gwei, and the floor only
+ * bites when the network is quiet — which is exactly when a small tip works.
+ */
+export const MIN_PRIORITY_FEE = parseUnits("0.005", "gwei");
+
+/**
+ * The three tiers, from one reward-percentile column per tier. The median
+ * across sampled blocks — not the mean, which a few spike blocks drag far
+ * above the fee a normal transaction needs.
+ */
+export const tiersFromRewards = (
+  rewardsPerBlock: bigint[][],
+): { slow: bigint; average: bigint; fast: bigint } => {
+  const atPercentile = (index: number): bigint => {
+    const column = median(rewardsPerBlock.map((r) => r[index]));
+    return column > MIN_PRIORITY_FEE ? column : MIN_PRIORITY_FEE;
+  };
+  return {
+    slow: atPercentile(0),
+    average: atPercentile(1),
+    fast: atPercentile(2),
+  };
+};
+
 export const getGasEstimates = async (
   chainName: NetworkName,
 ): Promise<CustomGasEstimate> => {
   const historicalBlocks = 40;
   const currentBlockNumber = "latest";
-  const rewardPercentiles = [60, 80, 95];
+  const rewardPercentiles = REWARD_PERCENTILES;
   const provider = getFirstPollingProviderForChain(chainName);
 
   const gasPricePromise = await promiseTimeout(
@@ -117,17 +160,12 @@ export const getGasEstimates = async (
     false,
     historicalBlocks,
   );
-  const slow = median(blocks.map((b) => b.priorityFeePerGas[0] as bigint));
-  const average = median(blocks.map((b) => b.priorityFeePerGas[1] as bigint));
-  const fast = median(blocks.map((b) => b.priorityFeePerGas[2] as bigint));
+  const { slow, average, fast } = tiersFromRewards(
+    blocks.map((b) => b.priorityFeePerGas),
+  );
 
-  // Inclusion floor: the median can collapse to 0 when most sampled blocks report no tip at the
-  // percentile, which would leave a tx with a 0 priority fee (starved, may never mine). Keep a
-  // small minimum so the auto-default is always mineable.
-  const MIN_PRIORITY_FEE = parseUnits("0.02", "gwei");
-  const maxPriorityFeePerGas =
-    average > MIN_PRIORITY_FEE ? average : MIN_PRIORITY_FEE;
-
+  // The auto-default is the middle tier: the tip a normal transaction pays.
+  const maxPriorityFeePerGas = average;
   const maxFeePerGas = maxPriorityFeePerGas + baseFeePerGas;
 
   return {

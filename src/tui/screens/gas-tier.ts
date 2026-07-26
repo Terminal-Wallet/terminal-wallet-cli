@@ -19,9 +19,9 @@ import { tag } from "../format/tags";
 const gwei = (value: bigint): string => formatUnits(value, "gwei");
 
 const TIER_LABELS: Record<GasTierKey, string> = {
-  slow: "Slow  (60%)",
-  average: "Average (80%)",
-  fast: "Fast  (95%)",
+  slow: "Slow  (25%)",
+  average: "Average (50%)",
+  fast: "Fast  (75%)",
 };
 
 export type CustomTier =
