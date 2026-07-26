@@ -53,12 +53,16 @@ const short = (a: string) => (a && a.length > 16 ? `${a.slice(0, 8)}…${a.slice
 const nominalGasDetails = async (
   chainName: NetworkName,
   gasUnits: bigint,
+  relayAdapt = false,
 ): Promise<TransactionGasDetails | undefined> => {
   try {
-    const evmGasType = evmGasTypeForChain(chainName);
+    // A relay-adapt transaction is submitted as type 4 and priced by
+    // maxFeePerGas, so the fee preview must be shaped the same way — on a
+    // legacy-default chain the chain type would price it by gasPrice.
+    const evmGasType = relayAdapt ? EVMGasType.Type4 : evmGasTypeForChain(chainName);
     const est = await getGasEstimates(chainName);
     return (
-      evmGasType === EVMGasType.Type2
+      evmGasType === EVMGasType.Type2 || evmGasType === EVMGasType.Type4
         ? {
             evmGasType,
             gasEstimate: gasUnits,
@@ -186,8 +190,9 @@ export const approxBroadcasterFee = async (
   b: SelectedBroadcaster,
   chainName: NetworkName,
   gasUnits: bigint,
+  relayAdapt = false,
 ): Promise<{ amount: bigint; symbol: string; decimals: number } | undefined> => {
-  const gasDetails = await nominalGasDetails(chainName, gasUnits);
+  const gasDetails = await nominalGasDetails(chainName, gasUnits, relayAdapt);
   if (!gasDetails) return undefined;
   try {
     const res = await calculateBroadcasterFeeERC20Amount(
@@ -351,7 +356,7 @@ export const collectFeeMode = async (
     return undefined;
   }
 
-  const gasDetails = await nominalGasDetails(chainName, gasUnits);
+  const gasDetails = await nominalGasDetails(chainName, gasUnits, relayAdapt);
   const best = waku.findBestBroadcaster(
     chain,
     tokenAddr.toLowerCase(),

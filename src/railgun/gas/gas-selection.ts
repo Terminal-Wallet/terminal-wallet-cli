@@ -31,6 +31,8 @@ export const evmGasTypeForChain = (chainName: NetworkName): EVMGasType =>
   NETWORK_CONFIG[chainName].defaultEVMGasType;
 
 /** The per-gas price an override charges (maxFee for Type2, gasPrice for legacy). */
+// GasOverride is Type0|Type1 or Type2 by construction — a Type4 request is
+// built as Type2, since both carry the same 1559 fields.
 export const priceField = (o: GasOverride): bigint =>
   o.evmGasType === EVMGasType.Type2 ? o.maxFeePerGas : o.gasPrice;
 

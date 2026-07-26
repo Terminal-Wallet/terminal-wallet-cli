@@ -8,6 +8,7 @@
  * just: build its RecipeOutput → CrossContractInputs → run.
  */
 import {
+  EVMGasType,
   NetworkName,
   RailgunERC20Recipient,
   RailgunPopulateTransactionResponse,
@@ -208,6 +209,10 @@ export const getProvedCrossContractTransaction = async (
         overallBatchMinGasPrice,
         estimatedGasDetails,
       );
+    // Relay-adapt executes from an ephemeral account under EIP-7702; the
+    // populated transaction has to carry the type so ethers and the broadcaster
+    // send it as one, authorization list included.
+    transaction.type = EVMGasType.Type4;
     return { transaction, nullifiers, preTransactionPOIsPerTxidLeafPerList };
   } catch (err) {
     log.error("proved cross-contract tx failed", err);

@@ -438,6 +438,7 @@ export const createBuilder = (host: BuilderHost): Builder => {
       broadcaster,
       cfg.chainName,
       cfg.gasUnitsHint,
+      cfg.relayAdapt ?? false,
     );
     if (!approx) return;
     // Reserve the estimated fee against the same-token balance so the overspend

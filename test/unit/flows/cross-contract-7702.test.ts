@@ -79,3 +79,23 @@ test("the model still marks the relay-adapt flows as ephemeral-7702", () => {
   assert.equal(executionMode(RailgunTransaction.Transfer).kind, "direct");
   assert.equal(executionMode(RailgunTransaction.Unshield).kind, "direct");
 });
+
+test("the populated transaction is marked type 4", () => {
+  // ethers and the broadcaster decide how to send from transaction.type. The
+  // other two 7702 paths set it; the shared cross-contract path did not, so a
+  // relay-adapt batch was populated without its type or authorization list.
+  const contract = read("railgun/transaction/cross-contract.ts");
+  assert.match(contract, /transaction\.type = EVMGasType\.Type4;/);
+  const at = contract.indexOf("await populateProvedCrossContractCalls(");
+  const set = contract.indexOf("transaction.type = EVMGasType.Type4;");
+  assert.ok(at > 0 && set > at, "the type is set before the transaction is populated");
+});
+
+test("the other 7702 paths still mark it too", () => {
+  for (const rel of [
+    "railgun/wallet/ephemeral-recovery.ts",
+    "railgun/transaction/zeroX/0x-swap.ts",
+  ]) {
+    assert.match(read(rel), /transaction\.type = EVMGasType\.Type4/, `${rel} lost it`);
+  }
+});
