@@ -64,7 +64,6 @@ import { loadTransactionHistory } from "../../railgun/transaction-history";
 import { confirmPassword } from "../../railgun/wallet/wallet-password";
 import { processDestroyExit } from "../../platform/lifecycle";
 import { openEphemeralAdmin } from "./ephemeral-admin";
-import { emoji } from "../widgets/unicode-width";
 
 const network = (): NetworkName => getState().network as NetworkName;
 
@@ -374,10 +373,10 @@ const openCardMenu = async (
 };
 
 export const openWalletMenu = (ctx: DeckContext) =>
-  openCardMenu(ctx, `${emoji("👤")} Wallet`, walletMenu());
+  openCardMenu(ctx, "◆ Wallet", walletMenu());
 export const openNetworkMenu = (ctx: DeckContext) =>
-  openCardMenu(ctx, `${emoji("⬢")} Network`, networkMenu());
+  openCardMenu(ctx, "○ Network", networkMenu());
 export const openStatusMenu = (ctx: DeckContext) =>
-  openCardMenu(ctx, `${emoji("📡")} Sync & maintenance`, statusMenu());
+  openCardMenu(ctx, "↻ Sync & maintenance", statusMenu());
 export const openUtilitiesMenu = (ctx: DeckContext) =>
-  openCardMenu(ctx, `${emoji("⚙")} Utilities`, utilitiesMenu(shouldShowSender()));
+  openCardMenu(ctx, "▸ Utilities", utilitiesMenu(shouldShowSender()));

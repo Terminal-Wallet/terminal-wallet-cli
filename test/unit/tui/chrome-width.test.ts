@@ -1,33 +1,28 @@
 /**
- * Emoji on borders, and the width patch that makes them safe.
+ * Border chrome must not contain a glyph whose width the terminal decides.
  *
- * blessed measures text with a hardcoded range check written before the emoji
- * blocks existed. Every emoji comes back as one cell while the terminal draws
- * two, so blessed places the border a column early, the glyph's second half
- * lands on it, and the frame breaks. That is the wonky card row and the
- * password prompt bleeding past its own edge.
+ * blessed lays a frame out by measuring its label with its own width table, and
+ * the terminal then draws it. When the two disagree by a cell the frame breaks:
+ * either the glyph's second half lands on the border, or blessed reserves a
+ * column the terminal never fills and the text after it is eaten.
  *
- * The fix is `installEmojiWidth`, which widens the one function both the
- * measurement path (`strWidth`) and the renderer's two skip-a-cell branches go
- * through. These assert the two things that have to stay true for it to hold:
- * the patch is installed before any screen exists, and every glyph the chrome
- * actually uses is one the patch recognises. An emoji outside its table would
- * still measure 1 and still break the frame — silently, since it renders fine
- * in blessed's own buffer.
+ * Both directions have now been seen in this app. Emoji were once measured as
+ * one cell and drawn as two, which broke the card row and let the password
+ * prompt bleed past its own edge. The fix widened blessed's table and marked
+ * each glyph with VARIATION SELECTOR-16 to force emoji presentation — and on a
+ * terminal that draws those same glyphs narrow, that inverted the error: the
+ * title bar rendered "TWALLET" as "WALLET" and every label lost its spaces.
  *
- * What cannot be asserted here: whether a real terminal draws these at two
- * cells. `screen.screenshot()` returns blessed's internal grid, which is
- * self-consistent either way. That part is verified by looking at it.
+ * There is no static width that is right on every terminal, so the rule is not
+ * "measure emoji correctly" but "do not put a glyph of arguable width on a
+ * border". What remains is an allowlist of marks with no emoji presentation,
+ * which every terminal draws in one cell. That is checkable here, unlike the
+ * question of what any particular terminal does.
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, resolve, relative } from "node:path";
-import {
-  isWideEmoji,
-  emoji,
-  installEmojiWidth,
-} from "../../../src/tui/widgets/unicode-width";
 import unicode from "blessed/lib/unicode";
 
 const SRC = resolve(process.cwd(), "src");
@@ -45,10 +40,8 @@ const walk = (dir: string): string[] =>
 /**
  * `label:` / `title:` / `content:` values — quoted or templated.
  *
- * Templates matter: the chrome interpolates `emoji()`, and a quote-only pattern
- * would match nothing and pass for the wrong reason. Content matters because a
- * wide glyph in a modal body overflows the frame the same way a label does —
- * the title bar's shield was missed by a label-only rule.
+ * Content matters as much as label: a wide glyph in a modal body overflows the
+ * frame the same way a label does.
  */
 const CHROME = /\b(?:label|title|content):\s*(["'`])((?:\\.|(?!\1).)*)\1/g;
 
@@ -61,86 +54,88 @@ const chromeLiterals = (): { file: string; text: string }[] =>
   );
 
 /**
- * Single-cell marks the layout is built from. They share a block with the
- * emoji, so they are named rather than range-excluded.
+ * Marks with no emoji presentation, so no terminal has cause to widen them.
+ * Anything added here should be checked against the emoji data first — U+25AA
+ * looks like a peer of these and is not one, because ▪️ exists.
  */
-const SAFE_SINGLE_CELL = new Set(
-  [..."·—…▲▼✕▸→─│┌┐└┘├┤┬┴┼░▒▓■□●○◆◇«»‹›✓✔✗"].map((c) => c.codePointAt(0)!),
-);
+const NARROW_MARKS = "·—…▲▼▸◂✕→↻─│┌┐└┘├┤┬┴┼░▒▓■□●○◆◇«»‹›✓✔✗";
+const ALLOWED = new Set([...NARROW_MARKS].map((c) => c.codePointAt(0) as number));
 
-/** Anything the terminal is liable to draw wide, and so must be in the table. */
-const suspicious = (codePoint: number): boolean =>
-  !SAFE_SINGLE_CELL.has(codePoint) &&
-  (codePoint > 0xffff || (codePoint >= 0x2300 && codePoint <= 0x2bff));
+/** Codepoints a terminal may legitimately draw at two cells. */
+const argubleWidth = (codePoint: number): boolean =>
+  !ALLOWED.has(codePoint) &&
+  (codePoint > 0xffff || // every emoji block
+    codePoint === 0xfe0f || // VS16 — forces emoji (wide) presentation
+    (codePoint >= 0x2300 && codePoint <= 0x2bff)); // symbols, mixed narrow/emoji
 
 test("the pattern actually finds the chrome (guarding the guard)", () => {
   const found = chromeLiterals();
   assert.ok(found.length > 20, `only matched ${found.length} labels/titles`);
   assert.ok(
     found.some((l) => l.text.includes("wallet")),
-    "did not match the card labels, which are template literals",
+    "did not match the card labels",
   );
 });
 
-test("every emoji used in border chrome is one the width patch knows", () => {
-  const unknown: string[] = [];
+test("no border chrome carries a glyph of arguable width", () => {
+  const offenders: string[] = [];
   for (const { file, text } of chromeLiterals()) {
     for (const char of text) {
       const point = char.codePointAt(0);
-      if (point === undefined || !suspicious(point)) continue;
-      if (point === 0xfe0f) continue; // variation selector, width 0
-      if (!isWideEmoji(point)) {
-        unknown.push(`${file}: ${char} (U+${point.toString(16).toUpperCase()})`);
-      }
+      if (point === undefined || !argubleWidth(point)) continue;
+      offenders.push(`${file}: ${char} (U+${point.toString(16).toUpperCase()})`);
     }
   }
   assert.deepEqual(
-    unknown,
+    offenders,
     [],
-    `not in the patch's table, so still measured as one cell:\n  ${unknown.join("\n  ")}`,
+    `the terminal decides how wide these are, so the frame is not safe:\n  ${offenders.join("\n  ")}`,
   );
 });
 
-test("the deck installs the patch before it builds a screen", () => {
-  // Order matters: blessed caches nothing, but a screen created first would
-  // measure its own chrome with the unpatched function.
-  const entry = readFileSync(join(SRC, "tui/entry.ts"), "utf-8");
-  const install = entry.indexOf("installEmojiWidth()");
-  const screen = entry.indexOf("blessed.screen({");
-  assert.ok(install > 0, "installEmojiWidth is never called");
-  assert.ok(screen > 0);
-  assert.ok(install < screen, "the screen is built before the patch is installed");
+test("nothing blessed draws forces emoji presentation", () => {
+  // VARIATION SELECTOR-16 is how a narrow glyph becomes a wide one. It is the
+  // mechanism behind the second failure, not merely a symptom of it.
+  //
+  // Scoped to the renderer: the OS window title (platform/console.ts) is drawn
+  // by the terminal emulator in its own title bar, not laid out by blessed, so
+  // a wide glyph there cannot land on a frame.
+  const offenders = walk(join(SRC, "tui"))
+    .filter((f) => readFileSync(f, "utf-8").includes("️"))
+    .map((f) => relative(process.cwd(), f));
+  assert.deepEqual(offenders, [], "U+FE0F present");
 });
 
-test("the patch makes blessed measure emoji as two cells", () => {
-  installEmojiWidth();
-  assert.equal(unicode.charWidth("👤"), 2, "astral emoji");
-  assert.equal(unicode.charWidth(emoji("⚙")), 2, "ambiguous BMP emoji");
-  // The whole label, which is what the border is positioned against.
-  assert.equal(unicode.strWidth(` ${emoji("⚙")} utilities `), 14);
+test("blessed's width table is left alone", () => {
+  // The patch that used to live here wrapped unicode.charWidth. Any future
+  // version of that idea is a compensation for a glyph that should not be on a
+  // border in the first place.
+  const offenders = walk(SRC)
+    .filter((f) => {
+      const src = readFileSync(f, "utf-8");
+      return src.includes("blessed/lib/unicode") || src.includes("charWidth");
+    })
+    .map((f) => relative(process.cwd(), f));
+  assert.deepEqual(offenders, [], "blessed's unicode tables are being patched");
 });
 
-test("the patch leaves single-cell glyphs alone", () => {
-  // Widening these would break the frames it exists to fix — they are the
-  // box-drawing and arrows the layout is built from.
-  installEmojiWidth();
-  for (const glyph of ["·", "—", "…", "▲", "▼", "✕", "▸", "→", "─", "a"]) {
-    assert.equal(unicode.charWidth(glyph), 1, `${glyph} should stay one cell`);
+test("every allowed mark measures one cell", () => {
+  // blessed agreeing is necessary but not sufficient — it was already the
+  // agreeing party when the terminal drew two cells. This catches an addition
+  // that even blessed considers wide.
+  for (const glyph of NARROW_MARKS) {
+    assert.equal(unicode.charWidth(glyph), 1, `${glyph} is not one cell to blessed`);
   }
 });
 
-test("emoji() marks a glyph as emoji-presentation, and is idempotent", () => {
-  // Without VS16 an ambiguous codepoint is one cell to some terminals and two
-  // to others, and no static answer is right for both.
-  const marked = emoji("⚙");
-  assert.equal(marked, "⚙️");
-  assert.equal(emoji(marked), marked, "double-marking would add a second selector");
-});
-
-test("installEmojiWidth is idempotent", () => {
-  // It wraps a module-level function; wrapping twice would double-count and
-  // report 4 cells for one glyph.
-  installEmojiWidth();
-  installEmojiWidth();
-  assert.equal(unicode.charWidth("👤"), 2);
+test("the marks the chrome actually uses are all allowed", () => {
+  // Guards the guard the other way: a rule that permits everything would pass
+  // the offender check while permitting nothing useful.
+  const used = new Set<string>();
+  for (const { text } of chromeLiterals()) {
+    for (const char of text) {
+      if (ALLOWED.has(char.codePointAt(0) as number)) used.add(char);
+    }
+  }
+  assert.ok(used.size >= 5, `chrome uses only ${used.size} of the allowed marks`);
 });

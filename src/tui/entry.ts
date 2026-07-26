@@ -50,7 +50,6 @@ import {
   TOP,
 } from "./layout";
 import { copyToClipboard } from "./widgets/clipboard";
-import { installEmojiWidth, emoji } from "./widgets/unicode-width";
 import { createPalette } from "./screens/palette";
 import { createBuilder } from "./screens/builder";
 import { showLogs, showTxReview } from "./screens/popout";
@@ -90,7 +89,6 @@ export const runDeck = async (): Promise<void> => {
   installProcessHandlers();
   // Before any screen: blessed measures emoji as one cell and terminals draw
   // two, which breaks every border a glyph sits on.
-  installEmojiWidth();
 
   const screen = blessed.screen({
     smartCSR: true,
@@ -159,14 +157,14 @@ export const runDeck = async (): Promise<void> => {
   const cardDefs: CardDef[] = [
     {
       key: "wallet",
-      label: ` ${emoji("👤")} wallet `,
+      label: " ◆ wallet ",
       render: (s) =>
         [tag(s.walletName, "white"), tag(short(s.publicAddress), "gray"), tag("click → wallet", "gray")].join("\n"),
       click: () => void openWalletMenu(ctx),
     },
     {
       key: "network",
-      label: ` ${emoji("⬢")} network `,
+      label: " ○ network ",
       render: (s) =>
         [
           tag(s.network, "cyan"),
@@ -179,7 +177,7 @@ export const runDeck = async (): Promise<void> => {
     },
     {
       key: "status",
-      label: ` ${emoji("📡")} sync `,
+      label: " ↻ sync ",
       render: (s) =>
         [
           syncTreeLine("utxo", s.utxoTree, s.utxoLeaves, s.utxoProgress, s.utxoReady, tag),
@@ -190,7 +188,7 @@ export const runDeck = async (): Promise<void> => {
     },
     {
       key: "gas",
-      label: ` ${emoji("⛽")} gas `,
+      label: " ▲ gas ",
       render: () => {
         const estimate = feeders.gasEstimate();
         return [
@@ -203,7 +201,7 @@ export const runDeck = async (): Promise<void> => {
     },
     {
       key: "utilities",
-      label: ` ${emoji("⚙")} utilities `,
+      label: " ▸ utilities ",
       render: () =>
         [tag("sender privacy", "gray"), tag("wipe data", "gray"), tag("click → open (u)", "yellow")].join("\n"),
       click: () => void openUtilitiesMenu(ctx),
@@ -369,7 +367,7 @@ export const runDeck = async (): Promise<void> => {
     const s = getState();
 
     titleBar.setContent(
-      `${tag(`${emoji("🛡")} TWALLET`, "green")}${tag("  · RAILGUN privacy wallet", "gray")}`,
+      `${tag("◆ TWALLET", "green")}${tag("  · RAILGUN privacy wallet", "gray")}`,
     );
 
     const present = (a: string) => a && a !== "—";

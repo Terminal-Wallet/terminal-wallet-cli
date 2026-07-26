@@ -9,7 +9,6 @@
 import blessed from "blessed";
 import { DeckContext } from "../context";
 import { createModal, modalWidth } from "../widgets/modal";
-import { emoji } from "../widgets/unicode-width";
 import { copyToClipboard } from "../widgets/clipboard";
 import { layoutMnemonic } from "./mnemonic-layout";
 import { tag } from "../format/tags";
@@ -35,7 +34,7 @@ export const showMnemonic = async (
   );
 
   const { box, guardFocus, close } = createModal(blessed, ctx.screen, {
-    title: `${emoji("🔑")} Recovery phrase — keep it secret`,
+    title: "◆ Recovery phrase — keep it secret",
     widthPct,
     height: lines.length + 6,
     accent: "red",
