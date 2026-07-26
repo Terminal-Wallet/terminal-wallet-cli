@@ -41,13 +41,10 @@ import { getOutputGasEstimate } from "./private/unshield-tx";
  * action data as `require(gasleft() > minGasLimitForContract)`. So the offset
  * is what "no floor" costs: 150_000n in gives exactly 0 out.
  *
- * Passing a literal `0n` yields -150_000n, which is not encodable as the
- * contract's unsigned parameter and fails before it reaches the chain:
- * `value out-of-bounds (argument="minGasLimit", value=-150000)`.
- *
- * Passing `undefined` is worse in the other direction — the SDK substitutes its
- * own multi-million default, which forces the transaction to CARRY that much
- * gas and reverts the estimate on the floor check itself.
+ * Both neighbouring values are wrong. A literal `0n` yields -150_000n, which is
+ * not encodable as the contract's unsigned parameter. `undefined` makes the SDK
+ * substitute its own multi-million default, which forces the transaction to
+ * CARRY that much gas and reverts the estimate on the floor check.
  *
  * With the floor at zero the estimate reflects real execution, and the
  * submitted limit is `calculateGasLimit(estimate)` — estimate x1.2 — which

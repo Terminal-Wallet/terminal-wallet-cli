@@ -76,14 +76,8 @@ const loadBuyTokens = async (chainName: NetworkName): Promise<RailgunDisplayBala
  *
  * The last argument is the wallet ENCRYPTION KEY, and only a private swap needs
  * it: the 7702 relay-adapt executes from an ephemeral account derived from it,
- * and the quote has to name that account as taker.
- *
- * It used to be passed a 0zk destination address instead. Both are strings, so
- * nothing complained — and the ephemeral derivation then tried to decrypt the
- * wallet record with an address as its key, which is where "Unable to decrypt
- * ciphertext." came from. The recipe forces the wallet's own address as the
- * recipient regardless, so the destination it was passing had no effect even
- * when it worked.
+ * and the quote has to name that account as taker. Passing anything else here
+ * derives the wrong account and fails to decrypt the wallet record.
  */
 export const buildSwapInputs = async (
   chainName: NetworkName,
@@ -452,9 +446,7 @@ export const txBuilderConfigs: Record<
     chainName,
     verb: "Swap",
     // No destination field: the relay-adapt recipe forces the wallet's own 0zk
-    // address as the recipient, so an editable destination was a control that
-    // did nothing — and the value it collected was being passed as the
-    // encryption key, which is what broke the send.
+    // address as the recipient, so there is nothing for one to set.
     fields: ["token", "buyToken", "amount", "fee", "showSender", "gas"],
     // Spend flow: Spendable-bucket only (see private-transfer).
     loadTokens: () => getPrivateERC20BalancesForChain(chainName),

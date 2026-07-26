@@ -1,9 +1,8 @@
 /**
  * Drain a queue to empty, with at most one pass in flight.
  *
- * Written to make one property explicit, because a timer used to paper over it:
- * work that arrives *while* a drain is running is still picked up, without
- * anything polling for it.
+ * Work that arrives *while* a drain is running is still picked up, with nothing
+ * polling for it.
  *
  * The loop takes the whole queue and clears it BEFORE awaiting, so arrivals
  * during that await accumulate in a fresh queue and the next round collects

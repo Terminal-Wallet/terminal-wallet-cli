@@ -72,17 +72,12 @@ const miniBar = (pct: number): string => {
  * which reads as something being wrong.
  */
 /**
- * Whether a merkletree is caught up.
+ * Whether a merkletree is caught up. The single rule — the sync card and the
+ * builder's proof warning both call this, and must agree.
  *
- * One definition, because there were two. The sync card treated "has leaves and
- * is not mid-scan" as done, while the builder's proof warning required the
- * `ready` latch — so a tree could show ✓ on the card and still be called
- * unsynced in the transaction window. The engine emits a progress-0 callback
- * after a scan completes, which is what drove them apart: 0 is not "scanning",
- * but it is also not the `< 0 || >= 100` the latch waits for.
- *
- * A progress of 0 therefore means "not scanning", not "no progress" — the only
- * state that counts as in-flight is a percentage strictly between the ends.
+ * A progress of 0 means "not scanning", not "no progress": the engine emits one
+ * once a scan completes. Only a percentage strictly between the ends counts as
+ * in flight.
  */
 export const treeSynced = (tree: {
   leaves: number;

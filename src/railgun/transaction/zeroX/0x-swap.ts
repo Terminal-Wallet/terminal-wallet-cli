@@ -204,10 +204,9 @@ export const getZer0XSwapInputs = async (
       nfts: [],
     };
     // No on-chain gas floor, like every other cross-contract call. The recipe's
-    // figure comes from the cookbook's non-7702 assumptions and is large enough
-    // that the estimate reverts on the floor check itself — a revert with no
-    // sub-call index, reported as "multicall failed at index UNKNOWN".
-    // See NO_CROSS_CONTRACT_GAS_FLOOR for why this is not literally zero.
+    // own figure assumes non-7702 execution and is high enough to revert the
+    // estimate on the floor check. See NO_CROSS_CONTRACT_GAS_FLOOR for why this
+    // is not literally zero.
     const minGasLimit = NO_CROSS_CONTRACT_GAS_FLOOR;
     const recipeOutput: RecipeOutput = await swap.getRecipeOutput(recipeInput);
     const { crossContractCalls, erc20AmountRecipients } = recipeOutput;
