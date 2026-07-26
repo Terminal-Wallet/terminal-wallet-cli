@@ -60,13 +60,12 @@ test("the offset still matches the SDK on all three contracts", () => {
   }
 });
 
-test("the private swap uses it rather than the recipe's floor", () => {
+test("the private swap carries the recipe's floor", () => {
+  // Its external 0x call is variable and the estimate under-shoots the real
+  // relay-adapt execution, so the submitted transaction needs the floor. Only
+  // the deterministic ops can go without one.
   const swap = read("railgun/transaction/zeroX/0x-swap.ts");
-  assert.match(swap, /const minGasLimit = NO_CROSS_CONTRACT_GAS_FLOOR;/);
-  assert.ok(
-    !/minGasLimit\s*\}\s*=\s*swap\.config/.test(swap),
-    "back to the recipe's floor, which reverts the estimate",
-  );
+  assert.match(swap, /const \{ minGasLimit \} = swap\.config;/);
 });
 
 test("recovery uses it too", () => {

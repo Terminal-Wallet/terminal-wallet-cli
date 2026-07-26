@@ -52,7 +52,6 @@ import { getTransactionGasDetails } from "../private/private-tx";
 import { getCurrentEthersWallet } from "../../wallet/public-utils";
 import { emitCoreEvent } from "../../../core/events";
 import { createLogger } from "../../../platform/logger";
-import { NO_CROSS_CONTRACT_GAS_FLOOR } from "../cross-contract";
 
 const swapLog = createLogger("swap");
 
@@ -203,11 +202,11 @@ export const getZer0XSwapInputs = async (
       erc20Amounts: relayAdaptUnshieldERC20Amounts,
       nfts: [],
     };
-    // No on-chain gas floor, like every other cross-contract call. The recipe's
-    // own figure assumes non-7702 execution and is high enough to revert the
-    // estimate on the floor check. See NO_CROSS_CONTRACT_GAS_FLOOR for why this
-    // is not literally zero.
-    const minGasLimit = NO_CROSS_CONTRACT_GAS_FLOOR;
+    // The swap's external 0x call is variable and its estimate under-shoots the
+    // real relay-adapt execution (~1.3M against ~2.7M needed), so the recipe's
+    // floor is what the submitted transaction must carry. Deterministic ops
+    // (recovery) use NO_CROSS_CONTRACT_GAS_FLOOR instead.
+    const { minGasLimit } = swap.config;
     const recipeOutput: RecipeOutput = await swap.getRecipeOutput(recipeInput);
     const { crossContractCalls, erc20AmountRecipients } = recipeOutput;
 
