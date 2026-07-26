@@ -1,0 +1,275 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+/**
+ * Live transaction-builder page (blessed). Instead of a forced wizard of modal
+ * prompts, the whole transaction is ONE persistent page: every field (token,
+ * amount, recipient, memo, gas) is visible and editable in any order, a live
+ * summary updates as you go, and "Build & Send" runs the tested pipeline — the
+ * only staged step is the proof/broadcast progress on the dashboard.
+ *
+ * Field editors reuse the input-provider modals + the gas selector, popped over
+ * the builder which stays underneath (webapp-like). Pure state/validation logic
+ * lives in ui/tx-builder-core.ts.
+ */
+import { NetworkName } from "@railgun-community/shared-models";
+import { formatUnits } from "ethers";
+import { getInputProvider } from "../../core/input";
+import { setState } from "../store";
+import { collectGasSelection } from "../../flows/collect/gas";
+import { collectFeeMode, resolveDefaultFeeAsync } from "../../flows/collect/fee";
+import { evmGasTypeForChain } from "../../railgun/gas/gas-selection";
+import { RailgunDisplayBalance } from "../../models/balance-models";
+import { createModal } from "../widgets/modal";
+import {
+  FieldKey,
+  BuilderState,
+  fieldDisplay,
+  validate,
+  summarize,
+} from "./tx-builder-core";
+
+export interface TxBuilderConfig {
+  title: string;
+  chainName: NetworkName;
+  verb: string; // "Send" | "Shield" | "Unshield" …
+  fields: FieldKey[]; // editable rows, in display order
+  // Sync or async: some balance accessors read a cache and return directly.
+  // The caller awaits either way.
+  loadTokens?: () =>
+    | RailgunDisplayBalance[]
+    | Promise<RailgunDisplayBalance[]>; // for a token field
+  fixedToken?: () =>
+    | RailgunDisplayBalance
+    | undefined
+    | Promise<RailgunDisplayBalance | undefined>; // base flows
+  fixedAddress?: string; // shield flows (recipient is our own railgun address)
+  addressLabel?: string;
+  gasSymbol: string;
+  gasDecimals: number;
+  gasUnitsHint: bigint; // nominal gas units for the cost preview in the selector
+  relayAdapt?: boolean; // for the fee field's broadcaster lookup (private flows)
+  multiLeg?: boolean; // token/amount/recipient come from a multi-leg model (deck only)
+  flowId?: string; // identifies the flow for the capability matrix (builder-legs.flowCaps)
+  loadBuyTokens?: () =>
+    | RailgunDisplayBalance[]
+    | Promise<RailgunDisplayBalance[]>; // swaps: buy-token options
+  defaultAddress?: string; // seeds (editable) the address field, e.g. swap 0zk destination
+  submit: (state: BuilderState) => Promise<{ ok: boolean; error?: string }>;
+}
+
+type Row = FieldKey | "__send" | "__cancel";
+
+const FIELD_LABELS: Record<FieldKey, string> = {
+  token: "Token",
+  buyToken: "Buy token",
+  amount: "Amount",
+  address: "Recipient",
+  memo: "Memo",
+  gas: "Gas",
+  fee: "Fee",
+  showSender: "Sender",
+};
+
+export const runTxBuilder = async (
+  blessed: any,
+  screen: any,
+  cfg: TxBuilderConfig,
+): Promise<void> => {
+  const provider = getInputProvider();
+  const state: BuilderState = { gas: undefined };
+  if (cfg.fields.includes("fee")) state.fee = await resolveDefaultFeeAsync(cfg.chainName, cfg.relayAdapt ?? false);
+  if (cfg.fixedToken) {
+    // The loader may be sync or async, and a failure here just means the field
+    // starts empty rather than the builder refusing to open.
+    try {
+      state.token = await cfg.fixedToken();
+    } catch {
+      state.token = undefined;
+    }
+  }
+  if (cfg.fixedAddress) state.address = cfg.fixedAddress;
+
+  const rows: Row[] = [...cfg.fields, "__send", "__cancel"];
+
+  return new Promise<void>((resolve) => {
+    const { box, guardFocus, close: closeChrome } = createModal(blessed, screen, {
+      title: cfg.title,
+      widthPct: 70,
+      height: rows.length + 7,
+      accent: "cyan",
+    });
+    const list = blessed.list({
+      parent: box,
+      top: 0,
+      left: 0,
+      right: 0,
+      height: rows.length,
+      tags: true,
+      keys: true,
+      mouse: true,
+      vi: true,
+      style: { selected: { bg: "cyan", fg: "black" }, item: { fg: "white" } },
+    });
+    const summary = blessed.text({
+      parent: box,
+      bottom: 2,
+      left: 1,
+      right: 1,
+      tags: true,
+    });
+    blessed.text({
+      parent: box,
+      bottom: 0,
+      left: 1,
+      right: 1,
+      tags: true,
+      content: "{gray-fg}↑/↓ field · Enter edit · S send · Esc cancel{/}",
+    });
+
+    const rowLabel = (r: Row): string => {
+      if (r === "__send") return "{green-fg}▶ Build & Send{/}";
+      if (r === "__cancel") return "{gray-fg}✕ Cancel{/}";
+      const label = r === "address" ? cfg.addressLabel ?? "Recipient" : FIELD_LABELS[r];
+      return `${label.padEnd(13)}{cyan-fg}${fieldDisplay(r, state)}{/}`;
+    };
+
+    const refresh = () => {
+      list.setItems(rows.map(rowLabel));
+      const v = validate(cfg.fields, state);
+      const line = summarize({ verb: cfg.verb, fixedAddress: cfg.fixedAddress }, state);
+      summary.setContent(
+        v.ok
+          ? `{green-fg}${line}{/}`
+          : `{yellow-fg}${line}{/}  {gray-fg}(need: ${v.missing.join(", ")}){/}`,
+      );
+      screen.render();
+    };
+
+    // Keep grabKeys ours between edits so the dashboard menu keys don't fire;
+    // sub-modals manage their own grabKeys and we re-assert on return.
+    const reclaim = () => {
+      screen.grabKeys = true;
+      list.focus();
+      refresh();
+    };
+
+    const close = () => {
+      closeChrome();
+      resolve();
+    };
+    guardFocus(list);
+
+    const editToken = async () => {
+      if (!cfg.loadTokens) return;
+      const balances = await cfg.loadTokens();
+      if (!balances.length) {
+        provider.notify("No token balances available.");
+        return;
+      }
+      const addr = await provider.select(
+        "Select token",
+        balances.map((b) => ({
+          label: b.symbol,
+          value: b.tokenAddress,
+          hint: formatUnits(b.amount, b.decimals),
+        })),
+      );
+      if (addr) state.token = balances.find((b) => b.tokenAddress === addr);
+    };
+
+    const edit = async (key: FieldKey) => {
+      switch (key) {
+        case "token":
+          await editToken();
+          break;
+        case "amount": {
+          const a = await provider.input(
+            `Amount${state.token ? ` of ${state.token.symbol}` : ""}`,
+            state.token
+              ? { hint: `have ${formatUnits(state.token.amount, state.token.decimals)}` }
+              : undefined,
+          );
+          if (a) state.amount = a;
+          break;
+        }
+        case "address": {
+          const a = await provider.input(cfg.addressLabel ?? "Recipient address", {
+            hint: /0zk/i.test(cfg.addressLabel ?? "")
+              ? "RAILGUN 0zk… address"
+              : "Ethereum 0x… address",
+          });
+          if (a) state.address = a;
+          break;
+        }
+        case "memo": {
+          const m = await provider.input("Memo (optional)");
+          if (m !== undefined) state.memo = m;
+          break;
+        }
+        case "gas": {
+          const g = await collectGasSelection(
+            cfg.chainName,
+            evmGasTypeForChain(cfg.chainName),
+            cfg.gasUnitsHint,
+            cfg.gasSymbol,
+            cfg.gasDecimals,
+          );
+          if (g !== undefined) state.gas = g;
+          break;
+        }
+        // Neither is edited through this list: the buy token is chosen inside
+        // the swap flow, and the sender toggle is flipped in place rather than
+        // opening an editor. Named explicitly so adding a field cannot slip
+        // through unhandled.
+        case "buyToken":
+        case "showSender":
+          break;
+        case "fee": {
+          const fee = await collectFeeMode(
+            cfg.chainName,
+            cfg.relayAdapt ?? false,
+            cfg.gasUnitsHint,
+          );
+          if (fee !== undefined) state.fee = fee;
+          break;
+        }
+      }
+      reclaim();
+    };
+
+    const trySend = async () => {
+      const v = validate(cfg.fields, state);
+      if (!v.ok) {
+        provider.notify(`Incomplete — need: ${v.missing.join(", ")}.`);
+        return;
+      }
+      // Close the builder; proving/broadcast progress shows on the dashboard.
+      closeChrome();
+      setState({ status: `${cfg.verb}…` });
+      const res = await cfg
+        .submit(state)
+        .catch((e: Error) => ({ ok: false, error: e.message }));
+      if (
+        !res.ok &&
+        res.error &&
+        !["simulated", "cancelled"].includes(res.error)
+      ) {
+        setState({ status: `Failed: ${res.error}` });
+      }
+      resolve();
+    };
+
+    list.on("select", (_item: any, idx: number) => {
+      const r = rows[idx];
+      if (r === "__send") void trySend();
+      else if (r === "__cancel") close();
+      else void edit(r as FieldKey);
+    });
+    list.key(["escape"], close);
+    list.key(["s", "S"], () => void trySend());
+
+    screen.grabKeys = true;
+    refresh();
+    list.focus();
+    screen.render();
+  });
+};
