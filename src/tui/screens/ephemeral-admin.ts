@@ -186,7 +186,7 @@ const runRecover = async (
       estimatedCost: `${proved.estimatedCost}`,
       feeSymbol: proved.feeSymbol,
     });
-    showText(ctx, "recovery · review", lines.join("\n"), "yellow");
+    await showText(ctx, "recovery · review", lines.join("\n"), "yellow");
     if (!(await provider.confirm("Send this recovery?"))) return;
 
     setState({ status: "Submitting recovery…" });
@@ -215,7 +215,7 @@ const dispatch = async (
   const provider = getInputProvider();
   switch (verb) {
     case "show":
-      showText(
+      await showText(
         ctx,
         "7702 ephemeral · current",
         [
@@ -230,7 +230,7 @@ const dispatch = async (
         setState({ status: "Scanning ephemeral balances…" });
         const scan = await scanEphemeralAssets(chainName, info.address);
         setState({ status: "Ephemeral balances loaded." });
-        showText(
+        await showText(
           ctx,
           "7702 ephemeral · balances",
           balanceLines(info.index, info.address, scan).join("\n"),
@@ -250,7 +250,7 @@ const dispatch = async (
           chainName,
           encryptionKey,
         );
-        showText(
+        await showText(
           ctx,
           `7702 ephemeral · history — ${chainName}`,
           historyLines(currentIndex, earlierOmitted, entries).join("\n"),

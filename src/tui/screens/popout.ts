@@ -31,6 +31,14 @@ interface ScrollModalOptions {
   selectable?: boolean;
 }
 
+/**
+ * Resolves when the modal closes.
+ *
+ * A caller in a menu loop has to be able to wait: the ephemeral console opened
+ * its history this way, got a void back, looped, and drew its own menu on top
+ * of the popup it had just opened — which then had to be closed twice, in the
+ * wrong order.
+ */
 const openScrollModal = (
   ctx: DeckContext,
   {
@@ -42,7 +50,8 @@ const openScrollModal = (
     copy,
     selectable = false,
   }: ScrollModalOptions,
-): void => {
+): Promise<void> =>
+  new Promise<void>((resolveClosed) => {
   let done: () => void = () => undefined;
   const footer = selectable
     ? "↑/↓ select · c copy line · a copy all · Esc close"
@@ -121,6 +130,7 @@ const openScrollModal = (
   done = () => {
     unsubscribe?.();
     close();
+    resolveClosed();
   };
 
   if (selectable) {
@@ -153,7 +163,7 @@ const openScrollModal = (
   guardFocus(body);
   body.focus();
   ctx.screen.render();
-};
+  });
 
 /** A static, scrollable block of already-formatted text. */
 export const showText = (
@@ -161,7 +171,7 @@ export const showText = (
   title: string,
   body: string,
   accent = "cyan",
-): void =>
+): Promise<void> =>
   openScrollModal(ctx, {
     title,
     getContent: () => body,
@@ -171,7 +181,7 @@ export const showText = (
   });
 
 /** The engine and SDK log stream, live. */
-export const showLogs = (ctx: DeckContext): void =>
+export const showLogs = (ctx: DeckContext): Promise<void> =>
   openScrollModal(ctx, {
     title: "logs · engine + SDK + status (live)",
     getContent: () => getState().logs.join("\n") || "…",
@@ -184,7 +194,7 @@ export const showLogs = (ctx: DeckContext): void =>
 export const showTxReview = (
   ctx: DeckContext,
   item: CoreHistoryItem,
-): void =>
+): Promise<void> =>
   openScrollModal(ctx, {
     title: `transaction · ${item.category}`,
     getContent: () => txReviewBody(item, getState().network as NetworkName),

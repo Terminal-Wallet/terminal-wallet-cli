@@ -498,10 +498,10 @@ export const runDeck = async (): Promise<void> => {
 
   activity.on("select", (_item: unknown, index: number) => {
     const entry = history[index];
-    if (entry) showTxReview(ctx, entry);
+    if (entry) void showTxReview(ctx, entry);
   });
 
-  logsBox.on("click", () => showLogs(ctx));
+  logsBox.on("click", () => void showLogs(ctx));
   cmdBtn.on("click", () => openPalette());
 
   // --- keys ------------------------------------------------------------------
@@ -520,7 +520,7 @@ export const runDeck = async (): Promise<void> => {
   screen.key([":", "C-k"], () => openPalette());
   screen.key(["u"], () => void openUtilitiesMenu(ctx));
   screen.key(["t"], () => void openStatusMenu(ctx));
-  screen.key(["l"], () => showLogs(ctx));
+  screen.key(["l"], () => void showLogs(ctx));
   screen.key(["b"], () => {
     wantLeft = !wantLeft;
     relayout(false);

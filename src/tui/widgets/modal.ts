@@ -55,6 +55,12 @@ export interface ModalOptions {
   hardened?: boolean;
 }
 
+/** How many modals are currently up. See the grab in `createModal`. */
+let openModals = 0;
+
+/** For tests and teardown — the count is process-wide, like `screen.grabKeys`. */
+export const openModalCount = (): number => openModals;
+
 export const createModal = (
   blessed: any,
   screen: any,
@@ -108,10 +114,19 @@ export const createModal = (
     });
   }
 
+  // Counted rather than set, because modals nest: a notify over a select, a
+  // review over a menu. Releasing the grab when the inner one closes would hand
+  // the deck's global keys back while a modal was still up, so `q` would quit
+  // the app from inside a dialog.
+  openModals += 1;
   screen.grabKeys = true;
 
+  let closed = false;
   const close = () => {
-    screen.grabKeys = false;
+    if (closed) return; // a double close would decrement for a modal already gone
+    closed = true;
+    openModals = Math.max(0, openModals - 1);
+    if (openModals === 0) screen.grabKeys = false;
     box.destroy();
     scrim.destroy();
     screen.render();
