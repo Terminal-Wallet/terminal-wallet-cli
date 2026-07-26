@@ -103,50 +103,80 @@ const makeMerkletreeScanCallback =
 export const utxoMerkletreeScanCallback = makeMerkletreeScanCallback("utxo");
 export const txidMerkletreeScanCallback = makeMerkletreeScanCallback("txid");
 
-export const formatLatestBalancesEvent = async () => {
-  const currentPrivateBalances = walletManager.latestPrivateBalanceEvents;
-  if (!isDefined(currentPrivateBalances)) {
-    walletManager.latestPrivateBalanceEvents = [];
-    return;
-  }
-  if (!isDefined(walletManager.latestPrivateBalanceEvents)) {
-    return;
-  }
+/** Guards against the poller and an immediate drain running at the same time. */
+let draining = false;
 
-  // sort into each balance bucket, only take the latest one.
+const drainBalanceQueue = async (queued: RailgunBalancesEvent[]) => {
+  // Dedupe to the latest event per bucket.
   const buckets: MapType<RailgunBalancesEvent> = {};
-  for (const balanceEvent of walletManager.latestPrivateBalanceEvents) {
+  for (const balanceEvent of queued) {
     buckets[balanceEvent.balanceBucket] = balanceEvent;
   }
 
   // Applied as they arrive rather than gated on merkelScanComplete: these
   // events are authoritative from the engine, and under a cold sync the
-  // merkletree scan churns Incomplete → rescan and may not report Complete for
-  // a long time. Gating on it meant balances stayed empty for the whole of it.
+  // merkletree scan churns Incomplete -> rescan and may not report Complete for
+  // a long time. Gating on it left balances queued for the whole of it.
   let updated = false;
   for (const bucketType in buckets) {
     const balanceEvent = buckets[bucketType];
-    const { chain } = balanceEvent;
-    const chainName = ChainIDToNameMap[chain.id];
-    await updatePrivateBalancesForChain(chainName, balanceEvent);
-    await updatePublicBalancesForChain(chainName);
-    updated = true;
-    if (!walletManager.menuLoaded) {
+    const chainName = ChainIDToNameMap[balanceEvent.chain.id];
+    try {
+      await updatePrivateBalancesForChain(chainName, balanceEvent);
+      await updatePublicBalancesForChain(chainName);
       walletManager.menuLoaded = true;
+      updated = true;
+    } catch (err) {
+      // One bad bucket must not take the others down with it.
+      log(
+        `[balance] apply failed (bucket ${bucketType}): ${(err as Error).message}`,
+        "error",
+      );
     }
   }
 
-  delete walletManager.latestPrivateBalanceEvents;
-  walletManager.latestPrivateBalanceEvents = [];
-
-  // The cache moved — whoever derives balances from it should re-read.
+  // The queue is snapshotted and cleared by the caller BEFORE this await-heavy
+  // drain, so events arriving mid-drain accumulate in the fresh queue and the
+  // caller's next round picks them up. Do NOT clear it here.
   if (updated) emitCoreEvent({ type: "balances:refreshed", chain: currentChain() });
+};
+
+/**
+ * Drain the queued balance events into the cache.
+ *
+ * Each round snapshots and clears the queue before awaiting. The previous
+ * version built its bucket map once, awaited, and cleared the queue at the end
+ * — so any event that landed during the drain was wiped unread. In practice
+ * that lost the non-Spendable buckets (ShieldPending, POI) and left the
+ * portfolio showing spendable balances only.
+ */
+export const formatLatestBalancesEvent = async () => {
+  if (draining) return;
+  draining = true;
+  try {
+    for (;;) {
+      const queued = walletManager.latestPrivateBalanceEvents;
+      if (!isDefined(queued) || queued.length === 0) {
+        walletManager.latestPrivateBalanceEvents = [];
+        return;
+      }
+      walletManager.latestPrivateBalanceEvents = []; // swap before awaiting
+      await drainBalanceQueue(queued);
+    }
+  } finally {
+    draining = false;
+  }
 };
 
 export const scanBalancesCallback = async (
   tokenBalances: RailgunBalancesEvent,
 ) => {
   walletManager.latestPrivateBalanceEvents?.push(tokenBalances);
+  // Drained now rather than up to a full poll interval later — balances that
+  // the engine already has should not wait on a timer to be shown. The poller
+  // stays as a backstop for anything queued while a drain was in flight, and
+  // the `draining` guard keeps the two from double-applying.
+  void formatLatestBalancesEvent();
 };
 
 export const latestBalancePoller = async (pollingInterval: number) => {
