@@ -52,7 +52,7 @@ import {
 } from "./tx-flow-helpers";
 import { RunResult, SendOutcome } from "../../flows/run";
 import { TxBuilderConfig } from "./tx-builder";
-import { BuilderState } from "./tx-builder-core";
+import { BuilderState, swapQuoteKey } from "./tx-builder-core";
 import { Leg, toRecipients } from "../../flows/caps";
 import { isNativeChoice, makeNativeEntry } from "../../flows/native-token";
 import { parseUnits } from "ethers";
@@ -95,6 +95,27 @@ export const buildSwapInputs = async (
 };
 
 type SubmitResult = { ok: boolean; error?: string };
+
+/**
+ * The quote to spend against: the one the review was built from, if it was
+ * fetched for these exact inputs, otherwise a fresh one.
+ *
+ * The key covers sell token, buy token, amount and destination — change any of
+ * them and the carried quote is for a different trade, so it is discarded
+ * rather than reused.
+ */
+type SwapInputs = Awaited<ReturnType<typeof buildSwapInputs>>["inputs"];
+
+const quoteForSubmit = async (
+  s: BuilderState,
+  fetch: () => Promise<{ inputs: SwapInputs }>,
+): Promise<SwapInputs> => {
+  const carried = s.swapQuote;
+  if (carried && carried.forKey === swapQuoteKey(s)) {
+    return carried.inputs as SwapInputs;
+  }
+  return (await fetch()).inputs;
+};
 
 const toResult = (r: RunResult<SendOutcome>): SubmitResult =>
   r.ok ? { ok: true } : { ok: false, error: r.error };
@@ -430,7 +451,14 @@ export const txBuilderConfigs: Record<
       if (!s.token || !s.buyToken || !s.amount) return { ok: false, error: "incomplete" };
       const encryptionKey = await requireEncryptionKey();
       if (!encryptionKey) return { ok: false, error: "cancelled" };
-      const { inputs } = await buildSwapInputs(chainName, s.token, s.buyToken, s.amount, false, s.address);
+      // Prove against the quote the review was built from. Re-quoting here
+      // meant the figure on screen and the figure being spent came from two
+      // different fetches, and a miss on the second one failed a send the user
+      // had already approved.
+      const { token: sell, buyToken: buy, amount: amountStr } = s;
+      const inputs = await quoteForSubmit(s, () =>
+        buildSwapInputs(chainName, sell, buy, amountStr, false, s.address),
+      );
       if (!inputs?.quote) return { ok: false, error: "no swap quote for that pair" };
       const spec: PrivateSwapSpec = {
         type: RailgunTransaction.Private0XSwap,
@@ -454,7 +482,11 @@ export const txBuilderConfigs: Record<
     gasUnitsHint: PUBLIC_GAS_UNITS,
     submit: async (s: BuilderState) => {
       if (!s.token || !s.buyToken || !s.amount) return { ok: false, error: "incomplete" };
-      const { inputs, amount, sellIsBase } = await buildSwapInputs(chainName, s.token, s.buyToken, s.amount, true);
+      const { token: sell, buyToken: buy, amount: amountStr } = s;
+      const { amount, sellIsBase } = await buildSwapInputs(chainName, sell, buy, amountStr, true);
+      const inputs = await quoteForSubmit(s, () =>
+        buildSwapInputs(chainName, sell, buy, amountStr, true),
+      );
       if (!inputs?.quote) return { ok: false, error: "no swap quote for that pair" };
       if (!sellIsBase) {
         const approved = await runErc20Approvals(

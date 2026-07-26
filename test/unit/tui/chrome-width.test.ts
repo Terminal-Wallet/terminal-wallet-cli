@@ -42,10 +42,15 @@ const walk = (dir: string): string[] =>
         : [];
   });
 
-/** `label:` / `title:` values — quoted or templated. Templates matter: the
- *  chrome uses them to interpolate `emoji()`, and a quote-only pattern would
- *  match nothing and pass for the wrong reason. */
-const CHROME = /\b(?:label|title):\s*(["'`])((?:\\.|(?!\1).)*)\1/g;
+/**
+ * `label:` / `title:` / `content:` values — quoted or templated.
+ *
+ * Templates matter: the chrome interpolates `emoji()`, and a quote-only pattern
+ * would match nothing and pass for the wrong reason. Content matters because a
+ * wide glyph in a modal body overflows the frame the same way a label does —
+ * the title bar's shield was missed by a label-only rule.
+ */
+const CHROME = /\b(?:label|title|content):\s*(["'`])((?:\\.|(?!\1).)*)\1/g;
 
 const chromeLiterals = (): { file: string; text: string }[] =>
   walk(SRC).flatMap((file) =>

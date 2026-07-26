@@ -37,6 +37,7 @@ import {
   validate,
   requireReauthBeforeSend,
   preflight,
+  swapQuoteKey,
 } from "./tx-builder-core";
 import {
   Leg,
@@ -405,8 +406,14 @@ export const createBuilder = (host: BuilderHost): Builder => {
       if (inputs?.readableSwapPrices) {
         swapPreview = toSwapPreview(inputs.readableSwapPrices);
       }
+      // Kept so the send proves against the quote that was reviewed, rather
+      // than a second one fetched after the user has already approved.
+      if (inputs?.quote) {
+        state.swapQuote = { inputs, forKey: swapQuoteKey(state) };
+      }
     } catch {
       swapPreview = undefined;
+      state.swapQuote = undefined;
     }
   };
 

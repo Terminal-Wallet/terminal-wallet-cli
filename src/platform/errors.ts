@@ -29,6 +29,28 @@ export const errMessage = (err: unknown): string => {
 };
 
 /**
+ * An error's message plus the chain of causes behind it.
+ *
+ * The RAILGUN engine reports failures as `new Error("Unable to decrypt
+ * ciphertext.", { cause })`, where every fact worth having is in the cause. A
+ * bare `.message` therefore says only that something did not decrypt — not
+ * which record, or why — which is a diagnosis nobody can act on.
+ *
+ * Depth-limited because causes can be cyclic, and each link is truncated so one
+ * enormous RPC body cannot bury the message it is attached to.
+ */
+export const errDetail = (err: unknown, depth = 3): string => {
+  const head = errMessage(err);
+  if (depth <= 0 || !(err instanceof Error) || err.cause === undefined) {
+    return head;
+  }
+  const cause = errDetail(err.cause, depth - 1);
+  if (!cause || cause === head) return head;
+  const trimmed = cause.length > 300 ? `${cause.slice(0, 300)}…` : cause;
+  return `${head} ← ${trimmed}`;
+};
+
+/**
  * Run `work`, or reject with `${label} timed out after ${ms}ms`. Used to bound
  * shutdown so a hung teardown cannot wedge the exit path, but general enough to
  * bound anything that talks to the network or a native module.

@@ -24,7 +24,22 @@ export interface BuilderState {
   fee?: FeeMode; // private-spend fee mode; undefined = self-send default
   showSender?: boolean; // reveal sender 0zk to the recipient (private transfers)
   legs?: LegsState; // multi-token/multi-recipient flows (token/amount/recipient live here)
+  /**
+   * Swaps: the 0x quote the preview was built from, carried through to submit.
+   *
+   * Without this the builder quotes once to show you a rate and submit quotes
+   * again to spend against — two different quotes, and the second one decides
+   * whether the send happens at all. Reused when it still matches the inputs on
+   * screen; re-fetched when they have moved.
+   */
+  swapQuote?: { inputs: unknown; forKey: string };
 }
+
+/** Identifies the inputs a swap quote was fetched for. */
+export const swapQuoteKey = (s: BuilderState): string =>
+  [s.token?.tokenAddress, s.buyToken?.tokenAddress, s.amount, s.address]
+    .map((part) => part ?? "")
+    .join("|");
 
 const short = (a?: string): string =>
   a && a.length > 16 ? `${a.slice(0, 8)}…${a.slice(-6)}` : a ?? "";

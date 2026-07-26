@@ -9,6 +9,10 @@
  * `spec` and lives in the UI layer — it is NOT this module's concern.
  */
 import { CoreEvent, emitCoreEvent } from "../core/events";
+import { errDetail } from "../platform/errors";
+import { createLogger } from "../platform/logger";
+
+const log = createLogger("tx");
 
 /** Progress callback handed to `prove` (0..100, optional note). */
 export type TxProgress = (pct: number, note?: string) => void;
@@ -115,9 +119,16 @@ export const runTransaction = async <
     emit({ type: "tx:result", ok: true, hash: result.hash, url: result.url });
     return { ok: true, result };
   } catch (e) {
-    const error = (e as Error).message;
+    // The cause chain, not just the message. The engine reports failures as
+    // Error("Unable to decrypt ciphertext.", { cause }) and everything that
+    // identifies WHICH record and why is in the cause — dropping it leaves a
+    // message nobody can act on.
+    const error = errDetail(e);
     emit({ type: "tx:progress", phase: "failed", message: error });
     emit({ type: "tx:result", ok: false, error });
+    // Full object to the log pane, so the stack survives even though the
+    // status line only has room for the chain.
+    log.error("transaction failed", e);
     return { ok: false, error };
   }
 };
