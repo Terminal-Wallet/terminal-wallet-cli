@@ -15,7 +15,7 @@
 import { Mnemonic } from "ethers";
 import { WalletInputProvider, InputChoice } from "../core/input";
 import { TMPWalletInfo } from "../models/wallet-models";
-import { setState, getState } from "./store";
+import { emitCoreEvent } from "../core/events";
 import { buildWalletInfo } from "../flows/new-wallet";
 import { FormSpec } from "./form-core";
 import { runFormCard } from "./widgets/form-card";
@@ -402,15 +402,14 @@ export const createBlessedInputProvider = (
   return {
     promptPassword: (message) => promptPasswordModal(message),
     confirm: (message) => promptConfirm(message),
-    // Transient: show the message, then revert to the prior status after 10s
-    // (if nothing else has changed it in the meantime) so notices don't stick.
-    notify: (message) => {
-      const prev = getState().status;
-      setState({ status: message });
-      setTimeout(() => {
-        if (getState().status === message) setState({ status: prev });
-      }, 10_000);
-    },
+    // Emitted rather than written straight to the store. The bar decides when a
+    // message is stale from `statusUntil`, so a direct write leaves whatever
+    // expiry the previous message set — and once that passed, every later
+    // notification was discarded as stale before it was ever drawn. Going
+    // through the event also puts notices in the log, where they can be read
+    // back and copied.
+    notify: (message) =>
+      emitCoreEvent({ type: "status:message", text: message, durationMs: 10_000 }),
     promptNewWallet,
     select: (message, choices) => promptSelect(message, choices),
     multiSelect: (message, choices, opts) =>

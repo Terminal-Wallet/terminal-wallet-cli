@@ -12,8 +12,15 @@ import { emitCoreEvent } from "../../../src/core/events";
 import { attachCoreAdapter } from "../../../src/tui/adapter";
 import { getState, setState } from "../../../src/tui/store";
 import { statusLive } from "../../../src/tui/format/footer";
+import blessed from "blessed";
+import { createBlessedInputProvider } from "../../../src/tui/input-provider";
 
 attachCoreAdapter();
+
+// notify() only emits now, so the provider needs no real screen to exercise it.
+const notifier = createBlessedInputProvider(blessed, {
+  render: () => undefined,
+} as never);
 
 beforeEach(() => {
   setState({ status: "", statusUntil: undefined, scanProgress: -1, scanLabel: "" });
@@ -75,5 +82,34 @@ test("a message reaches the log as well as the bar", () => {
   assert.ok(
     getState().logs.some((l) => l.includes("something worth keeping")),
     "the status was displayed but not recorded",
+  );
+});
+
+test("a notification is visible even after an earlier message expired", () => {
+  // The regression this guards: notify() wrote `status` straight to the store
+  // and left whatever `statusUntil` the previous message had set. Once that
+  // passed, every later notification was discarded as stale before it was
+  // drawn — which is how "Nothing stranded at this ephemeral" turned into the
+  // console appearing to do nothing at all.
+  emitCoreEvent({ type: "status:message", text: "Scanning…", durationMs: 1 });
+  const afterExpiry = Date.now() + 5_000;
+
+  notifier.notify("Nothing stranded at this ephemeral.");
+
+  const s = getState();
+  assert.equal(s.status, "Nothing stranded at this ephemeral.");
+  assert.equal(
+    statusLive(s, afterExpiry),
+    true,
+    "the notification was treated as stale on arrival",
+  );
+});
+
+test("a notification is recorded, not just shown", () => {
+  setState({ logs: [] });
+  notifier.notify("something the user should be able to re-read");
+  assert.ok(
+    getState().logs.some((l) => l.includes("re-read")),
+    "notifications do not reach the log",
   );
 });
