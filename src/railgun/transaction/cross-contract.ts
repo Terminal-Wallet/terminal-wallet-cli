@@ -60,6 +60,16 @@ import { getOutputGasEstimate } from "./private/unshield-tx";
  * With the floor at zero the estimate reflects real execution, and the
  * submitted limit is `calculateGasLimit(estimate)` — estimate x1.2 — which
  * `setGasDetailsForTransaction` writes over whatever populate had set.
+ *
+ * A clean estimate is NOT a prediction that the batch will do what it says.
+ * The SDK builds the action data with `requireSuccess = false` on both the
+ * estimate and the proof path
+ * (`@railgun-community/wallet/dist/services/transactions/tx-cross-contract-calls-7702.js`),
+ * so a batch whose inner calls revert still mines: the unshield has run, and
+ * whatever it produced sits at the ephemeral account instead of coming back
+ * shielded. The engine reports this as a `CallError` in the receipt logs, via
+ * `RelayAdaptVersionedSmartContracts.getRelayAdaptCallError` — which nothing
+ * here calls yet, so today that failure is silent on every cross-contract flow.
  */
 export const NO_CROSS_CONTRACT_GAS_FLOOR = 150_000n;
 
