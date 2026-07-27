@@ -34,6 +34,7 @@ import {
   getCurrentRailgunID,
 } from "./wallet-util";
 import { getEphemeralAddressForIndex } from "./ephemeral-util";
+import { withEphemeralOverride } from "./ephemeral-override";
 import { getCurrentEthersWallet } from "./public-utils";
 import {
   getBroadcasterTranaction,
@@ -374,15 +375,10 @@ const buildProved7702Batch = async (
   // and the submitted limit is that estimate x1.2.
   const recoveryMinGasLimit = NO_CROSS_CONTRACT_GAS_FLOOR;
 
-  const wallet = fullWalletForID(railgunWalletID);
-  const keyManager = new EphemeralKeyManager(wallet, encryptionKey);
-  const targetAccount = await keyManager.getAccount(chainId, targetIndex);
-  try {
-    // The override is process-global for the whole proof window. INVARIANT: no other fund flow
-    // may run concurrently with a recovery build (the recover prompt is modal; only read-only
-    // balance pollers run alongside, which don't touch the ephemeral signer).
-    await wallet.setCurrentEphemeralWallet(targetAccount.signer);
-
+  // The override is process-wide for the whole estimate -> prove -> populate
+  // window; withEphemeralOverride serialises them, refuses nesting, and always
+  // clears. The persisted index is untouched, so callers MUST NOT ratchet.
+  return withEphemeralOverride(chainName, encryptionKey, targetIndex, async () => {
     const { gasEstimate } = await gasEstimateForUnprovenCrossContractCalls7702(
       txIDVersion,
       chainName,
@@ -464,13 +460,7 @@ const buildProved7702Batch = async (
       estimatedCost: privateGasEstimate.estimatedCost,
       feeSymbol: privateGasEstimate.symbol,
     };
-  } finally {
-    // Always clear the override so normal flows resume on the live index. The engine clears the
-    // override when passed undefined at runtime; its type only admits HDNodeWallet, so cast.
-    await (
-      wallet.setCurrentEphemeralWallet as (w?: unknown) => Promise<void>
-    )(undefined);
-  }
+  });
 };
 
 // funding: pass a broadcasterSelection to have a broadcaster pay gas (fee in its token), or

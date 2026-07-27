@@ -2,12 +2,12 @@ import { NetworkName } from "@railgun-community/shared-models";
 import {
   EphemeralKeyManager,
   fullWalletForID,
-  getCurrentEphemeralAddress,
   ratchetEphemeralAddress,
 } from "@railgun-community/wallet";
 import { ContractTransaction } from "ethers";
 import { getChainForName } from "../network/network-util";
 import { getCurrentRailgunID } from "./wallet-util";
+import { overriddenEphemeralIndex } from "./ephemeral-override";
 
 import { createLogger } from "../../platform/logger";
 
@@ -93,19 +93,6 @@ export const getEphemeralIndex = async (
   return wallet.getEphemeralKeyIndex(ephemeralChainId(chainName));
 };
 
-export const getCurrentEphemeralInfo = async (
-  chainName: NetworkName,
-  encryptionKey: string,
-): Promise<{ index: number; address: string }> => {
-  const index = await getEphemeralIndex(chainName);
-  const address = await getCurrentEphemeralAddress(
-    getCurrentRailgunID(),
-    encryptionKey,
-    chainName,
-  );
-  return { index, address };
-};
-
 // Derive the ephemeral address for a SPECIFIC index without touching the persisted current
 // index (recovery inspection/targeting). Read-only: derives locally from the wallet keys.
 export const getEphemeralAddressForIndex = async (
@@ -121,6 +108,28 @@ export const getEphemeralAddressForIndex = async (
   return account.address;
 };
 
+/**
+ * The ephemeral account the next batch will execute as.
+ *
+ * The address is derived FROM the index this returns, rather than read
+ * separately. Reading them from two places gave a torn pair whenever an
+ * override was installed — the index came from the persisted counter and the
+ * address from the override, which are different accounts — and every caller
+ * bakes that address into recipe calldata. A torn pair is a batch built for one
+ * account and executed as another.
+ */
+export const getCurrentEphemeralInfo = async (
+  chainName: NetworkName,
+  encryptionKey: string,
+): Promise<{ index: number; address: string }> => {
+  const index = overriddenEphemeralIndex() ?? (await getEphemeralIndex(chainName));
+  const address = await getEphemeralAddressForIndex(
+    chainName,
+    encryptionKey,
+    index,
+  );
+  return { index, address };
+};
 
 // Realign the index against the wallet's on-chain history (unshield recipients only — a
 // shield leaves no trace here, so the per-broadcast ratchet remains the authority for those).
