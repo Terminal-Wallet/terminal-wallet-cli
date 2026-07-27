@@ -78,19 +78,24 @@ export const getTokenInfo = async (
 ): Promise<ERC20Token> => {
   const chain = getChainForName(chainName);
   initTokenDatabase(chainName);
-  const token = tokenDatabase[chain.type][chain.id][tokenAddress];
+  // The engine reports addresses lowercased and the cookbook reports them
+  // EIP-55 checksummed. Keying on the caller's spelling makes the two miss each
+  // other, so every checksummed lookup re-reads the chain and writes a second
+  // entry for the same token into the persisted keychain.
+  const cacheKey = tokenAddress.toLowerCase();
+  const token = tokenDatabase[chain.type][chain.id][cacheKey];
   if (token) {
     return token;
   }
 
-  if (tokenAddress.toLowerCase() === ZERO_X_PROXY_BASE_TOKEN_ADDRESS) {
+  if (cacheKey === ZERO_X_PROXY_BASE_TOKEN_ADDRESS) {
     const wrappedInfo = getWrappedTokenInfoForChain(chainName);
     const wrappedInsert = {
       name: wrappedInfo.shortPublicName,
       symbol: wrappedInfo.symbol,
       decimals: wrappedInfo.decimals,
     };
-    tokenDatabase[chain.type][chain.id][tokenAddress] = wrappedInsert;
+    tokenDatabase[chain.type][chain.id][cacheKey] = wrappedInsert;
     return wrappedInsert;
   }
   const provider = getProviderForChain(chainName);
@@ -98,7 +103,7 @@ export const getTokenInfo = async (
     return undefined;
   });
   if (result) {
-    tokenDatabase[chain.type][chain.id][tokenAddress] = result;
+    tokenDatabase[chain.type][chain.id][cacheKey] = result;
     updateCachedTokenData();
     return result;
   }
