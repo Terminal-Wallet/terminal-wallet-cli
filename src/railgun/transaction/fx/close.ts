@@ -21,12 +21,16 @@ import {
 import {
   FX_ADDRESSES,
   FxMintCloseRecipe,
+  FxMintClose_ZeroXSwap_ComboMeal,
   FxMintPoolRef,
   RecipeERC20Amount,
+  RecipeERC20Info,
   RecipeInput,
+  RecipeOutput,
   computeFxClose,
   getFxPool,
   getFxPosition,
+  makeEphemeralExecutor,
   resolvePool,
 } from "@railgun-community/cookbook";
 import { CrossContractInputs, toShieldNFTRecipients } from "../cross-contract";
@@ -37,12 +41,23 @@ import {
 } from "../../wallet/ephemeral-util";
 import { getProviderForChain } from "../../network/network-util";
 import { getRailgunFeeBasisPoints } from "../../engine/engine";
-import { FXMINT_GAS_FLOOR, isFxSupportedNetwork } from "./mint";
+import {
+  FXMINT_GAS_FLOOR,
+  FXMINT_SWAP_SLIPPAGE_BPS,
+  isFxSupportedNetwork,
+} from "./mint";
+import { needsSwapLeg } from "../morpho/vault";
 import { createLogger } from "../../../platform/logger";
 
 const log = createLogger("fxmint-close");
 
 export interface FxMintCloseBuild extends CrossContractInputs {
+  /**
+   * What the batch would do, step by step, as the recipe reported it. Returned
+   * rather than formatted here: the renderer decides how to show it, and the
+   * transaction layer must not import the renderer.
+   */
+  steps: RecipeOutput["stepOutputs"];
   pool: ReturnType<typeof resolvePool>;
   positionId: bigint;
   /** fxUSD the batch will repay. */
@@ -54,6 +69,8 @@ export interface FxMintCloseBuild extends CrossContractInputs {
    * back; a full close burns it, so nothing comes back on the NFT side.
    */
   partialClose: boolean;
+  /** Whether the released collateral was swapped on the way back. */
+  swapped: boolean;
 }
 
 /**
@@ -62,6 +79,14 @@ export interface FxMintCloseBuild extends CrossContractInputs {
  * `shieldedFxUSD` is what the wallet can put toward the debt. Passing less than
  * the full debt is how a partial close is asked for — the recipe works out the
  * rest, including whether the position survives.
+ *
+ * `receiveAs` swaps the released collateral before it is shielded, so the
+ * proceeds come back as something other than wstETH or WBTC. Naming the
+ * collateral itself is the same as omitting it.
+ *
+ * Note the asymmetry: the debt is ALWAYS repaid in fxUSD. The cookbook's close
+ * combo swaps on the way OUT only, so a wallet holding no fxUSD cannot close a
+ * position here regardless of what else it holds.
  */
 export const getFxMintCloseInputs = async (
   chainName: NetworkName,
@@ -69,6 +94,7 @@ export const getFxMintCloseInputs = async (
   positionId: bigint,
   shieldedFxUSD: bigint,
   encryptionKey: string,
+  receiveAs?: { tokenAddress: string; decimals: number },
 ): Promise<FxMintCloseBuild> => {
   if (!isFxSupportedNetwork(chainName)) {
     throw new Error(`f(x) is Ethereum-only; this wallet is on ${chainName}.`);
@@ -134,14 +160,21 @@ export const getFxMintCloseInputs = async (
     },
   ];
 
-  const recipe = new FxMintCloseRecipe({
+  const fxOpts = {
     pool: poolRef,
     positionId,
     repayAmount: amounts.repayAmount,
     withdrawColl: amounts.withdrawColl,
     approveAmount: amounts.approveAmount,
     partialClose: amounts.partialClose,
-  });
+  };
+  const swapTo = needsSwapLeg(receiveAs?.tokenAddress, pool.collateralToken)
+    ? receiveAs
+    : undefined;
+  const buyERC20Info: RecipeERC20Info | undefined = swapTo && {
+    tokenAddress: swapTo.tokenAddress,
+    decimals: BigInt(swapTo.decimals),
+  };
   const recipeInput: RecipeInput = {
     networkName: chainName,
     railgunAddress,
@@ -151,7 +184,14 @@ export const getFxMintCloseInputs = async (
     // unshield puts it there.
     nfts: [{ ...positionNFT, recipient: railgunAddress }],
   };
-  const recipeOutput = await recipe.getRecipeOutput(recipeInput);
+  const recipeOutput = buyERC20Info
+    ? await new FxMintClose_ZeroXSwap_ComboMeal({
+        ...fxOpts,
+        buyERC20Info,
+        swapSlippageBasisPoints: FXMINT_SWAP_SLIPPAGE_BPS,
+        recipient: makeEphemeralExecutor(ephemeralAddress, "fxmint close"),
+      }).getComboMealOutput(recipeInput)
+    : await new FxMintCloseRecipe(fxOpts).getRecipeOutput(recipeInput);
 
   const relayAdaptShieldERC20Addresses: RailgunERC20Recipient[] =
     recipeOutput.erc20AmountRecipients.map(({ tokenAddress }) => ({
@@ -165,6 +205,7 @@ export const getFxMintCloseInputs = async (
     repayAmount: amounts.repayAmount,
     withdrawColl: amounts.withdrawColl,
     partialClose: amounts.partialClose,
+    swapped: Boolean(swapTo),
     relayAdaptUnshieldERC20Amounts,
     relayAdaptUnshieldNFTAmounts: [positionNFT],
     // A full close burns the position, so the recipe declares no NFT output and
@@ -173,6 +214,7 @@ export const getFxMintCloseInputs = async (
       recipeOutput.nftRecipients,
     ),
     relayAdaptShieldERC20Addresses,
+    steps: recipeOutput.stepOutputs,
     crossContractCalls: recipeOutput.crossContractCalls,
     minGasLimit:
       recipeOutput.minGasLimit > FXMINT_GAS_FLOOR

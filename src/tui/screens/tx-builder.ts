@@ -19,6 +19,7 @@ import { collectFeeMode, resolveDefaultFeeAsync } from "../../flows/collect/fee"
 import { evmGasTypeForChain } from "../../railgun/gas/gas-selection";
 import { RailgunDisplayBalance } from "../../models/balance-models";
 import { createModal, shifted } from "../widgets/modal";
+import { DefiLeg } from "../format/defi-legs";
 import {
   FieldKey,
   BuilderState,
@@ -77,6 +78,15 @@ export interface TxBuilderConfig {
    * holds, read from the shielded NFT set.
    */
   loadPositions?: () => Promise<PositionChoice[]>;
+  /**
+   * The steps this build would run, for the clear-signing breakdown.
+   *
+   * A combo meal is several recipes chained, so one signature can be a swap,
+   * two approvals, a protocol call and a shield. This builds the recipe to ask
+   * it what it would do — the same work submit does, so it is only run when the
+   * form is complete and re-run only when the inputs move.
+   */
+  previewLegs?: (state: BuilderState) => Promise<DefiLeg[]>;
   defaultAddress?: string; // seeds (editable) the address field, e.g. swap 0zk destination
   submit: (state: BuilderState) => Promise<{ ok: boolean; error?: string }>;
 }

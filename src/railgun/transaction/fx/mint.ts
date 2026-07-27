@@ -20,6 +20,7 @@ import {
   RecipeERC20Amount,
   RecipeERC20Info,
   RecipeInput,
+  RecipeOutput,
   ZeroXSwap_FxMintOpen_ComboMeal,
   getFxPool,
   makeEphemeralExecutor,
@@ -66,6 +67,12 @@ export const FXMINT_GAS_FLOOR = 2_700_000n;
 export const FXMINT_SWAP_SLIPPAGE_BPS = 320;
 
 export interface FxMintOpenBuild extends CrossContractInputs {
+  /**
+   * What the batch would do, step by step, as the recipe reported it. Returned
+   * rather than formatted here: the renderer decides how to show it, and the
+   * transaction layer must not import the renderer.
+   */
+  steps: RecipeOutput["stepOutputs"];
   pool: ReturnType<typeof resolvePool>;
   /** The id the batch expects the pool to mint. */
   positionId: bigint;
@@ -198,6 +205,7 @@ export const getFxMintOpenInputs = async (
     // unshielded on the NFT side.
     relayAdaptUnshieldNFTAmounts: [] as RailgunNFTAmount[],
     relayAdaptShieldNFTRecipients,
+    steps: recipeOutput.stepOutputs,
     crossContractCalls: recipeOutput.crossContractCalls,
     minGasLimit:
       recipeOutput.minGasLimit > FXMINT_GAS_FLOOR

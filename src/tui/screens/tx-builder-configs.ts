@@ -68,6 +68,8 @@ import { MorphoVaultAPI } from "@railgun-community/cookbook";
 import { getProviderForChain } from "../../railgun/network/network-util";
 import { getTokenInfo } from "../../railgun/balance/token-util";
 import { runCrossContractTransaction } from "../../flows/deps/cross-contract";
+import { DefiLeg, defiLegs } from "../format/defi-legs";
+import { getCachedEncryptionKey } from "../../railgun/wallet/wallet-password";
 import {
   FXMINT_GAS_FLOOR,
   getFxMintOpenInputs,
@@ -191,6 +193,32 @@ const loadVaultChoices = async (
 };
 
 type SubmitResult = { ok: boolean; error?: string };
+
+/**
+ * Resolve a token address to a ticker for the batch breakdown.
+ *
+ * The private balances are what the wallet already knows about; anything else
+ * — a swap's intermediate, a vault's share token on first use — falls back to
+ * a short address rather than being dropped from the display.
+ */
+const symbolResolver = async (
+  chainName: NetworkName,
+): Promise<(tokenAddress: string) => string | undefined> => {
+  let balances: RailgunDisplayBalance[] = [];
+  try {
+    balances = await getPrivateERC20BalancesForChain(chainName);
+  } catch {
+    // A ticker is a nicety; a missing one degrades to a short address.
+  }
+  const bySymbol = new Map<string, string>(
+    balances.map((b) => [b.tokenAddress.toLowerCase(), b.symbol]),
+  );
+  bySymbol.set(FX_ADDRESSES.fxUSD.toLowerCase(), "fxUSD");
+  for (const pool of KNOWN_POOLS) {
+    bySymbol.set(pool.collateralToken.toLowerCase(), pool.name.split("-")[0]);
+  }
+  return (address: string) => bySymbol.get(address.toLowerCase());
+};
 
 /**
  * The build as a LegsState, for the fee gate. Multi-token flows have real legs;
@@ -389,6 +417,77 @@ const loadPositionChoices = async (
       return [{ nft, pool, positionId: BigInt(nft.tokenSubID) }];
     },
   );
+};
+
+/**
+ * Building the batch is how it is described — there is no cheaper source of
+ * truth for what a chained recipe does. Each of these does exactly what its
+ * submit does, minus the send.
+ */
+const previewVaultLegs = async (
+  chainName: NetworkName,
+  action: MorphoVaultAction,
+  s: BuilderState,
+): Promise<DefiLeg[]> => {
+  const encryptionKey = getCachedEncryptionKey();
+  if (!encryptionKey || !s.vault || !s.amount) return [];
+  const denomination = action === "deposit" ? (s.token ?? s.vault.token) : s.vault.token;
+  const counterpart =
+    action === "deposit"
+      ? s.token && { tokenAddress: s.token.tokenAddress, decimals: s.token.decimals, amount: 0n }
+      : s.buyToken && {
+          tokenAddress: s.buyToken.tokenAddress,
+          decimals: s.buyToken.decimals,
+          amount: 0n,
+        };
+  const build = await getMorphoVaultInputs(
+    chainName,
+    action,
+    s.vault.vault,
+    parseUnits(s.amount, denomination.decimals),
+    VAULT_SLIPPAGE_BPS,
+    encryptionKey,
+    counterpart,
+  );
+  return defiLegs({ stepOutputs: build.steps } as never, await symbolResolver(chainName));
+};
+
+const previewFxOpenLegs = async (
+  chainName: NetworkName,
+  s: BuilderState,
+): Promise<DefiLeg[]> => {
+  const encryptionKey = getCachedEncryptionKey();
+  if (!encryptionKey || !s.pool || !s.amount || !s.debt) return [];
+  const payWith = s.token ?? s.pool.token;
+  const build = await getFxMintOpenInputs(
+    chainName,
+    s.pool.pool.name,
+    parseUnits(s.amount, payWith.decimals),
+    parseUnits(s.debt, 18),
+    encryptionKey,
+    { tokenAddress: payWith.tokenAddress, decimals: payWith.decimals },
+  );
+  return defiLegs({ stepOutputs: build.steps } as never, await symbolResolver(chainName));
+};
+
+const previewFxCloseLegs = async (
+  chainName: NetworkName,
+  s: BuilderState,
+): Promise<DefiLeg[]> => {
+  const encryptionKey = getCachedEncryptionKey();
+  if (!encryptionKey || !s.position || !s.amount) return [];
+  const build = await getFxMintCloseInputs(
+    chainName,
+    s.position.pool.name,
+    s.position.positionId,
+    parseUnits(s.amount, 18),
+    encryptionKey,
+    s.buyToken && {
+      tokenAddress: s.buyToken.tokenAddress,
+      decimals: s.buyToken.decimals,
+    },
+  );
+  return defiLegs({ stepOutputs: build.steps } as never, await symbolResolver(chainName));
 };
 
 const submitFxMintClose = async (
@@ -804,6 +903,7 @@ export const txBuilderConfigs: Record<
     fields: ["vault", "token", "amount", "fee", "gas"],
     loadVaults: () => loadVaultChoices(chainName, "deposit"),
     loadTokens: () => getPrivateERC20BalancesForChain(chainName),
+    previewLegs: (s) => previewVaultLegs(chainName, "deposit", s),
     ...gasInfo(chainName),
     gasUnitsHint: VAULT_DEPOSIT_GAS_UNITS,
     relayAdapt: true,
@@ -822,6 +922,7 @@ export const txBuilderConfigs: Record<
     fields: ["pool", "token", "collateralPct", "debtRatio", "fee", "gas"],
     loadPools: () => loadPoolChoices(chainName),
     loadTokens: () => getPrivateERC20BalancesForChain(chainName),
+    previewLegs: (s) => previewFxOpenLegs(chainName, s),
     ...gasInfo(chainName),
     gasUnitsHint: FXMINT_GAS_FLOOR,
     relayAdapt: true,
@@ -834,8 +935,13 @@ export const txBuilderConfigs: Record<
     verb: "Close",
     // The amount is fxUSD put toward the debt: enough covers it and the
     // position is burnt, less makes it a partial close.
-    fields: ["position", "amount", "fee", "gas"],
+    // The buy token is what the released collateral comes back AS; naming the
+    // collateral itself means no swap. The debt is always repaid in fxUSD —
+    // the cookbook's close combo swaps on the way out only.
+    fields: ["position", "amount", "buyToken", "fee", "gas"],
     loadPositions: () => loadPositionChoices(chainName),
+    loadBuyTokens: () => loadBuyTokens(chainName),
+    previewLegs: (s) => previewFxCloseLegs(chainName, s),
     // Only fxUSD repays an f(x) debt, so there is nothing to pick.
     fixedToken: async () => {
       const balances = await getPrivateERC20BalancesForChain(chainName);
@@ -859,6 +965,7 @@ export const txBuilderConfigs: Record<
     fields: ["vault", "amount", "buyToken", "fee", "gas"],
     loadVaults: () => loadVaultChoices(chainName, "redeem"),
     loadBuyTokens: () => loadBuyTokens(chainName),
+    previewLegs: (s) => previewVaultLegs(chainName, "redeem", s),
     ...gasInfo(chainName),
     gasUnitsHint: VAULT_REDEEM_GAS_UNITS,
     relayAdapt: true,

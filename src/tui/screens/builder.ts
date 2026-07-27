@@ -86,6 +86,7 @@ import {
 } from "../../railgun/transaction/fx/risk";
 import { clampFraction } from "../format/slider";
 import { fxRiskLines } from "../format/fx-position";
+import { DefiLeg, defiLegLines } from "../format/defi-legs";
 import { getFxPool } from "@railgun-community/cookbook";
 import { getProviderForChain } from "../../railgun/network/network-util";
 import { balanceUSD, formatUSD } from "../../price/portfolio";
@@ -178,6 +179,8 @@ export const createBuilder = (host: BuilderHost): Builder => {
    */
   let loadedBalances: RailgunDisplayBalance[] = [];
   let swapPreview: SwapQuotePreview | undefined;
+  /** The steps the current build would run, and what they were built for. */
+  let legsPreview: { legs: DefiLeg[]; forKey: string } | undefined;
   /**
    * The chosen pool's risk thresholds, read from the chain when it is picked.
    * They are governance parameters — the long pools rebalance at 0.88 and the
@@ -289,6 +292,38 @@ export const createBuilder = (host: BuilderHost): Builder => {
     }
   };
 
+  /**
+   * Ask the flow what its batch would do, once there is a complete build to
+   * ask about.
+   *
+   * Keyed on the inputs so moving a slider does not re-quote on every keypress
+   * — for a combo this reaches 0x, which is rate-limited and slow.
+   */
+  const computeLegsPreview = async () => {
+    if (!cfg?.previewLegs) return;
+    if (!validate(cfg.fields, state).ok) {
+      legsPreview = undefined;
+      return;
+    }
+    const forKey = [
+      state.vault?.vault.vaultAddress,
+      state.pool?.pool.address,
+      state.position?.nft.tokenSubID,
+      state.token?.tokenAddress,
+      state.buyToken?.tokenAddress,
+      state.amount,
+      state.debt,
+    ].join("|");
+    if (legsPreview?.forKey === forKey) return;
+    try {
+      legsPreview = { legs: await cfg.previewLegs(state), forKey };
+    } catch {
+      // A preview that cannot be built is not an error the user has to act on
+      // — submit will surface the real failure with its real message.
+      legsPreview = undefined;
+    }
+  };
+
   // --- rows ------------------------------------------------------------------
 
   const buildRows = () => {
@@ -393,6 +428,12 @@ export const createBuilder = (host: BuilderHost): Builder => {
       lines.push(
         `${tag("buy", "gray")}    ${swapBuyLine(state.buyToken.symbol, swapPreview, (s) => fmtAmount(s, 6))}`,
       );
+    }
+
+    if (legsPreview?.legs.length) {
+      lines.push("");
+      lines.push(tag("this batch", "gray"));
+      lines.push(...defiLegLines(legsPreview.legs, tag));
     }
 
     // What the position would actually be, next to the controls that set it.
@@ -1069,6 +1110,7 @@ export const createBuilder = (host: BuilderHost): Builder => {
     ) {
       await computeSwapPreview();
     }
+    await computeLegsPreview();
     buildRows();
     list.focus();
     ctx.render();
@@ -1203,6 +1245,11 @@ export const createBuilder = (host: BuilderHost): Builder => {
     nudge(row, delta);
     buildRows();
     void computeFeePreview();
+    // The batch changes with the amounts, so the breakdown has to follow.
+    void computeLegsPreview().then(() => {
+      buildRows();
+      ctx.render();
+    });
     ctx.render();
   };
   list.key(["right"], sliderKey(0.05));

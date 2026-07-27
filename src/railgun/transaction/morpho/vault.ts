@@ -101,6 +101,12 @@ export interface MorphoVaultLeg {
 }
 
 export interface MorphoVaultBuild extends CrossContractInputs {
+  /**
+   * What the batch would do, step by step, as the recipe reported it. Returned
+   * rather than formatted here: the renderer decides how to show it, and the
+   * transaction layer must not import the renderer.
+   */
+  steps: RecipeOutput["stepOutputs"];
   action: MorphoVaultAction;
   vault: MorphoVaultRef;
   /** Whether a 0x swap was folded into the same batch. */
@@ -317,6 +323,7 @@ export const getMorphoVaultInputs = async (
     receive: receivedLeg(recipeOutput, receiveTokenAddress),
     relayAdaptUnshieldERC20Amounts,
     relayAdaptShieldERC20Addresses,
+    steps: recipeOutput.stepOutputs,
     crossContractCalls: recipeOutput.crossContractCalls,
     minGasLimit: recipeOutput.minGasLimit,
   };
