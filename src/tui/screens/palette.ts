@@ -82,13 +82,13 @@ export const createPalette = (host: PaletteHost): Palette => {
       if (e.id.startsWith("__h_")) continue;
       const disabled = isDisabled(e.id);
       const selected = e.id === cursor && !disabled;
+      // The border carries it, not a fill. These cards are large, and a solid
+      // background on one is a lot of colour to say "the cursor is here" —
+      // which is all it means. Bold picks the text up with it.
       e.el.style.border.fg = disabled ? "gray" : selected ? "cyan" : "gray";
-      // Cyan on black, which is what selection looks like everywhere else in
-      // the deck — the portfolio rail's row, the stepper's current step. The
-      // blue this used to be matched nothing and read as a different kind of
-      // state.
-      e.el.style.bg = selected ? "cyan" : undefined;
-      e.el.style.fg = selected ? "black" : undefined;
+      e.el.style.bold = selected;
+      e.el.style.bg = undefined;
+      e.el.style.fg = disabled ? "gray" : undefined;
     }
   };
 
@@ -190,10 +190,11 @@ export const createPalette = (host: PaletteHost): Palette => {
         clickable: true,
         border: { type: "line" },
         padding: { left: 1, right: 1 },
-        style: {
-          border: { fg: "gray" },
-          hover: { border: { fg: card.disabled ? "gray" : "cyan" } },
-        },
+        // No hover style: `mouseover` below moves the CURSOR onto the card,
+        // and `highlight` styles the cursor. Having both meant two different
+        // rules painting the same card for the same reason, and the mouse one
+        // could not tell you which card Enter would actually take.
+        style: { border: { fg: "gray" } },
         content: face(card),
       });
       el.on("click", () => {
