@@ -11,6 +11,7 @@ import { RailgunDisplayBalance } from "../../models/balance-models";
 import { LegsState, FlowCaps, validateLegs } from "../../flows/caps";
 import { TokenOverspend } from "../../flows/balance";
 import { FxPoolEntry } from "@railgun-community/cookbook";
+import { RailgunDisplayNFT } from "../../models/balance-models";
 import { MorphoVaultRef } from "../../railgun/transaction/morpho/vault";
 import { asPercent, sliderBar } from "../format/slider";
 import { fmtAmount } from "../format/deck";
@@ -20,6 +21,7 @@ export type FieldKey =
   | "buyToken"
   | "vault"
   | "pool"
+  | "position"
   | "amount"
   | "collateralPct"
   | "debt"
@@ -52,11 +54,23 @@ export interface PoolChoice {
   token: RailgunDisplayBalance;
 }
 
+/**
+ * A position the builder can act on: the shielded NFT, and the pool it belongs
+ * to. Both are needed — the NFT says which position, the pool says how to
+ * reach it and what collateral it holds.
+ */
+export interface PositionChoice {
+  nft: RailgunDisplayNFT;
+  pool: FxPoolEntry;
+  positionId: bigint;
+}
+
 export interface BuilderState {
   token?: RailgunDisplayBalance; // for swaps: the SELL token
   buyToken?: RailgunDisplayBalance; // swaps: the BUY token
   vault?: VaultChoice; // vault flows: the vault, and the token it spends
   pool?: PoolChoice; // fx flows: the pool, and the collateral it takes
+  position?: PositionChoice; // fx flows acting on a position the wallet holds
   debt?: string; // fx flows: how much fxUSD to mint against the collateral
   /**
    * Slider positions, 0..1.
@@ -153,6 +167,8 @@ export const fieldDisplay = (key: FieldKey, s: BuilderState): string => {
       return s.vault ? s.vault.vault.name : "‹select vault›";
     case "pool":
       return s.pool ? s.pool.pool.name : "‹select pool›";
+    case "position":
+      return s.position ? s.position.nft.label : "‹select position›";
     case "debt":
       return s.debt ? s.debt : "‹enter amount to mint›";
     case "collateralPct":
@@ -195,6 +211,7 @@ export const validate = (
   if (fields.includes("buyToken") && !s.buyToken) missing.push("buy token");
   if (fields.includes("vault") && !s.vault) missing.push("vault");
   if (fields.includes("pool") && !s.pool) missing.push("pool");
+  if (fields.includes("position") && !s.position) missing.push("position");
   if (fields.includes("debt")) {
     const n = Number(s.debt);
     if (!s.debt || !isFinite(n) || n <= 0) missing.push("an amount to mint");

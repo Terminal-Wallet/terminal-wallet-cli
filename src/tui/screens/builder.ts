@@ -140,6 +140,7 @@ const FIELD_LABELS: Record<FieldKey, string> = {
   buyToken: "Buy token",
   vault: "Vault",
   pool: "Pool",
+  position: "Position",
   amount: "Amount",
   collateralPct: "Collateral",
   debt: "Mint",
@@ -945,6 +946,37 @@ export const createBuilder = (host: BuilderHost): Builder => {
               "Could not read the pool's risk thresholds — the position meter is unavailable.",
             );
           }
+        }
+      }
+    } else if (key === "position" && cfg.loadPositions) {
+      const choices = await cfg.loadPositions();
+      if (!choices.length) {
+        // Positions come from the shielded NFT set, so an unscanned wallet has
+        // none yet — worth saying, since "none" and "not scanned" look alike.
+        provider.notify("No positions held on this network.");
+      } else {
+        const picked = await provider.select(
+          "Select position",
+          choices.map((c) => ({
+            label: c.nft.label,
+            value: c.nft.tokenSubID,
+            hint: c.pool.name,
+          })),
+        );
+        const choice = choices.find((c) => c.nft.tokenSubID === picked);
+        if (choice) {
+          state.position = choice;
+          // Its pool decides the collateral and the risk thresholds, exactly as
+          // picking a pool does when opening.
+          fxThresholds = await getFxPool(
+            choice.pool.name,
+            getProviderForChain(cfg.chainName),
+          )
+            .then((pool) => ({
+              rebalanceDebtRatio: pool.rebalanceDebtRatio,
+              liquidationDebtRatio: pool.liquidationDebtRatio,
+            }))
+            .catch(() => undefined);
         }
       }
     } else if (key === "debt") {

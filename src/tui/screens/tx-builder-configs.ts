@@ -52,7 +52,12 @@ import {
 } from "./tx-flow-helpers";
 import { RunResult, SendOutcome } from "../../flows/run";
 import { TxBuilderConfig } from "./tx-builder";
-import { BuilderState, VaultChoice, PoolChoice } from "./tx-builder-core";
+import {
+  BuilderState,
+  VaultChoice,
+  PoolChoice,
+  PositionChoice,
+} from "./tx-builder-core";
 import {
   MORPHO_VAULTS,
   MorphoVaultAction,
@@ -68,7 +73,11 @@ import {
   getFxMintOpenInputs,
   isFxSupportedNetwork,
 } from "../../railgun/transaction/fx/mint";
-import { KNOWN_POOLS } from "@railgun-community/cookbook";
+import { FX_ADDRESSES, KNOWN_POOLS } from "@railgun-community/cookbook";
+import { getFxMintCloseInputs } from "../../railgun/transaction/fx/close";
+import { getPrivateNFTsForChain } from "../../railgun/balance/balance-cache";
+import { describeNFTs } from "../../railgun/balance/nft-util";
+import { fxPositionCollections } from "../../railgun/transaction/fx/position";
 import {
   LegsState, Leg, toRecipients } from "../../flows/caps";
 import { isNativeChoice, makeNativeEntry } from "../../flows/native-token";
@@ -356,6 +365,61 @@ const loadPoolChoices = async (
     });
   }
   return choices;
+};
+
+/**
+ * The fx positions the wallet actually holds, from the shielded NFT set.
+ *
+ * An f(x) pool is the ERC-721 collection and the token id is the position id,
+ * so a shielded NFT from a known pool IS a position and nothing else has to be
+ * read to list them.
+ */
+const loadPositionChoices = async (
+  chainName: NetworkName,
+): Promise<PositionChoice[]> => {
+  if (!isFxSupportedNetwork(chainName)) return [];
+  const collections = fxPositionCollections();
+  return describeNFTs(getPrivateNFTsForChain(chainName), collections).flatMap(
+    (nft) => {
+      if (nft.kind !== "fx-position") return [];
+      const pool = KNOWN_POOLS.find(
+        (p) => p.address.toLowerCase() === nft.nftAddress.toLowerCase(),
+      );
+      if (!pool) return [];
+      return [{ nft, pool, positionId: BigInt(nft.tokenSubID) }];
+    },
+  );
+};
+
+const submitFxMintClose = async (
+  chainName: NetworkName,
+  s: BuilderState,
+): Promise<SubmitResult> => {
+  if (!s.position || !s.amount) return { ok: false, error: "incomplete" };
+  const encryptionKey = await requireEncryptionKey();
+  if (!encryptionKey) return { ok: false, error: "cancelled" };
+  // The amount is the fxUSD put toward the debt; how much of it can actually be
+  // repaid after both fees is the recipe's arithmetic, not the form's.
+  const shieldedFxUSD = parseUnits(s.amount, 18);
+  const inputs = await getFxMintCloseInputs(
+    chainName,
+    s.position.pool.name,
+    s.position.positionId,
+    shieldedFxUSD,
+    encryptionKey,
+  );
+  return toResult(
+    await runCrossContractTransaction(
+      {
+        type: RailgunTransaction.FxMintClose,
+        chainName,
+        inputs,
+        encryptionKey,
+        fee: s.fee ?? resolveDefaultFee(),
+      },
+      applyGasDetailsConfirm(s.gas, legsView(s)),
+    ),
+  );
 };
 
 const submitFxMintOpen = async (
@@ -762,6 +826,28 @@ export const txBuilderConfigs: Record<
     gasUnitsHint: FXMINT_GAS_FLOOR,
     relayAdapt: true,
     submit: (s: BuilderState) => submitFxMintOpen(chainName, s),
+  }),
+
+  "fx-mint-close": (chainName) => ({
+    title: "Close an f(x) position — Privately",
+    chainName,
+    verb: "Close",
+    // The amount is fxUSD put toward the debt: enough covers it and the
+    // position is burnt, less makes it a partial close.
+    fields: ["position", "amount", "fee", "gas"],
+    loadPositions: () => loadPositionChoices(chainName),
+    // Only fxUSD repays an f(x) debt, so there is nothing to pick.
+    fixedToken: async () => {
+      const balances = await getPrivateERC20BalancesForChain(chainName);
+      return balances.find(
+        (b) =>
+          b.tokenAddress.toLowerCase() === FX_ADDRESSES.fxUSD.toLowerCase(),
+      );
+    },
+    ...gasInfo(chainName),
+    gasUnitsHint: FXMINT_GAS_FLOOR,
+    relayAdapt: true,
+    submit: (s: BuilderState) => submitFxMintClose(chainName, s),
   }),
 
   "morpho-vault-redeem": (chainName) => ({

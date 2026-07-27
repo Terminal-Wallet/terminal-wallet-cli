@@ -44,6 +44,7 @@ const OPENABLE = new Set([
   "morpho-vault-deposit",
   "morpho-vault-redeem",
   "fx-mint-open",
+  "fx-mint-close",
 ]);
 
 const CATEGORY_OF: Partial<Record<MenuGroup, PaletteCategory>> = {

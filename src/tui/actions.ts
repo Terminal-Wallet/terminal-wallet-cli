@@ -49,6 +49,7 @@ export const buildActions = (baseSymbol: string): MenuAction[] => [
   { id: "morpho-vault-redeem", label: "Withdraw", hint: "to private", group: "Morpho" },
 
   { id: "fx-mint-open", label: "Mint fxUSD", hint: "on collateral", group: "f(x)" },
+  { id: "fx-mint-close", label: "Close", hint: "repay, unwind", group: "f(x)" },
 
   { id: "activity", label: "Activity / History", group: "Utilities" },
   { id: "wallet-tools", label: "Wallet Tools", group: "Utilities" },

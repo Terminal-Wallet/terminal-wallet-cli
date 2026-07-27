@@ -24,6 +24,7 @@ import {
   BuilderState,
   VaultChoice,
   PoolChoice,
+  PositionChoice,
   fieldDisplay,
   validate,
   summarize,
@@ -71,6 +72,11 @@ export interface TxBuilderConfig {
    * takes. Same shape as loadVaults and for the same reason.
    */
   loadPools?: () => Promise<PoolChoice[]>;
+  /**
+   * fx flows acting on an existing position: the ones the wallet actually
+   * holds, read from the shielded NFT set.
+   */
+  loadPositions?: () => Promise<PositionChoice[]>;
   defaultAddress?: string; // seeds (editable) the address field, e.g. swap 0zk destination
   submit: (state: BuilderState) => Promise<{ ok: boolean; error?: string }>;
 }
@@ -82,6 +88,7 @@ const FIELD_LABELS: Record<FieldKey, string> = {
   buyToken: "Buy token",
   vault: "Vault",
   pool: "Pool",
+  position: "Position",
   amount: "Amount",
   collateralPct: "Collateral",
   debt: "Mint",
@@ -263,6 +270,20 @@ export const runTxBuilder = async (
         case "pool":
           await editPool();
           break;
+        case "position": {
+          const choices = (await cfg.loadPositions?.()) ?? [];
+          if (!choices.length) {
+            provider.notify("No positions held.");
+            break;
+          }
+          const picked = await provider.select(
+            "Select position",
+            choices.map((c) => ({ label: c.nft.label, value: c.nft.tokenSubID })),
+          );
+          const choice = choices.find((c) => c.nft.tokenSubID === picked);
+          if (choice) state.position = choice;
+          break;
+        }
         case "debt":
         case "debtRatio": {
           // This renderer has no slider, so the loan is typed here.

@@ -71,6 +71,7 @@ test("a public token gates every action that spends the private balance", () => 
   const cards = buildPaletteCards("ETH", "public");
   const gated = cards.filter((c) => c.disabled).map((c) => c.id);
   assert.deepEqual(gated.sort(), [
+    "fx-mint-close",
     "fx-mint-open",
     "morpho-vault-deposit",
     "morpho-vault-redeem",

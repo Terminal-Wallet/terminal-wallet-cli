@@ -34,4 +34,5 @@ export enum RailgunTransaction {
   MorphoVaultDeposit = "MORPHO VAULT DEPOSIT",
   MorphoVaultRedeem = "MORPHO VAULT REDEEM",
   FxMintOpen = "FXMINT OPEN POSITION",
+  FxMintClose = "FXMINT CLOSE POSITION",
 }
