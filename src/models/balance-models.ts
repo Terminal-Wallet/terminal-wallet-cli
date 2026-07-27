@@ -16,6 +16,23 @@ export type RailgunDisplayBalance = {
   tokenAddress: string;
 };
 
+/**
+ * A shielded NFT, as the rail shows it.
+ *
+ * `label` is resolved when the collection is one the wallet knows — an f(x)
+ * pool is a position, and "wstETH-Long #1981" is what the holder calls it —
+ * and falls back to a shortened address otherwise. Without it the rail would
+ * show a raw contract address and a hex token id, which names nothing.
+ */
+export type RailgunDisplayNFT = {
+  nftAddress: string;
+  tokenSubID: string;
+  amount: bigint;
+  label: string;
+  /** Set when the collection is recognised, so a picker can filter on it. */
+  kind?: "fx-position";
+};
+
 export type RailgunBalanceCache = {
   timestamp: number;
   balance: RailgunBalance;

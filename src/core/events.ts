@@ -59,6 +59,8 @@ export type CoreEvent =
       bucket?: RailgunWalletBalanceBucket;
       private: CoreTokenBalance[];
       public: CoreTokenBalance[];
+      /** Shielded NFTs — protocol positions, not fungible balances. */
+      nfts?: { label: string; amount: string; kind?: string }[];
       privateUSD?: string; // formatted portfolio totals, if prices are known
       publicUSD?: string;
     }

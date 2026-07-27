@@ -11,7 +11,8 @@
  * and reduce this module to a re-export.
  */
 import { Provider, Contract } from "ethers";
-import { FxMintPoolRef, resolvePool } from "@railgun-community/cookbook";
+import { FxMintPoolRef, KNOWN_POOLS, resolvePool } from "@railgun-community/cookbook";
+import { KnownCollection } from "../../balance/nft-util";
 import { createLogger } from "../../../platform/logger";
 
 const log = createLogger("fx-position");
@@ -25,6 +26,20 @@ const log = createLogger("fx-position");
 const FX_NEXT_POSITION_ID_ABI = [
   "function getNextPositionId() view returns (uint256)",
 ];
+
+/**
+ * The pools, as NFT collections.
+ *
+ * An f(x) pool is an ERC-721 whose tokens are its positions, so a shielded NFT
+ * from one of these addresses is a position in that pool and the rail can say
+ * so by name.
+ */
+export const fxPositionCollections = (): KnownCollection[] =>
+  KNOWN_POOLS.map((pool) => ({
+    address: pool.address,
+    name: pool.name,
+    kind: "fx-position" as const,
+  }));
 
 /**
  * The id the pool will assign to the next position it mints.

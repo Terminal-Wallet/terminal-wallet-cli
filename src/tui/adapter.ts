@@ -144,6 +144,7 @@ const fold = (e: CoreEvent): void => {
     case "balances:updated":
       setState({
         privateBalances: e.private,
+        privateNFTs: e.nfts ?? [],
         publicBalances: e.public,
         privateUSD: e.privateUSD ?? "—",
         publicUSD: e.publicUSD ?? "—",

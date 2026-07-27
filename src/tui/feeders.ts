@@ -17,6 +17,9 @@
 import { NetworkName, delay } from "@railgun-community/shared-models";
 import { formatUnits } from "ethers";
 import { emitCoreEvent } from "../core/events";
+import { getPrivateNFTsForChain } from "../railgun/balance/balance-cache";
+import { describeNFTs } from "../railgun/balance/nft-util";
+import { fxPositionCollections } from "../railgun/transaction/fx/position";
 import { getState, setState } from "./store";
 import { pushSeries } from "./format/deck";
 import { RailgunDisplayBalance } from "../models/balance-models";
@@ -137,6 +140,17 @@ export const createFeeders = (render: () => void): Feeders => {
         chain: network,
         private: priv.map((b) => ({ ...format(b), bucket: b.bucket })),
         public: pub.map(format),
+        // A position is one indivisible thing, so it carries a count rather
+        // than a formatted balance, and no USD — an fx position is worth its
+        // collateral minus its debt, which is a read the rail does not do.
+        nfts: describeNFTs(
+          getPrivateNFTsForChain(network),
+          fxPositionCollections(),
+        ).map((nft) => ({
+          label: nft.label,
+          amount: nft.amount.toString(),
+          kind: nft.kind,
+        })),
         // Omitted rather than zero when no price is known — a portfolio total of
         // $0.00 is a claim, and the wrong one.
         privateUSD: havePrices

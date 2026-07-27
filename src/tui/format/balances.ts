@@ -7,7 +7,7 @@
  * index mapping so the blessed shell stays a thin renderer (and unit-testable).
  */
 import { RailgunWalletBalanceBucket } from "@railgun-community/shared-models";
-import { TokenBalance } from "../store";
+import { NftBalance, TokenBalance } from "../store";
 
 /** A rendered rail row. `token`/`kind` are set only on clickable balance rows. */
 export interface PortfolioRow {
@@ -115,6 +115,7 @@ export interface PortfolioRenderers {
   // a token's total header cell; `spendable` flags whether to tag it Spendable
   privHeader: (g: TokenGroup, spendable: boolean) => string;
   privBucket: (b: TokenBalance) => string; // an indented per-bucket sub-row
+  nftRow: (n: NftBalance) => string; // a shielded position
 }
 
 /**
@@ -134,6 +135,8 @@ export const buildPortfolioRows = (
   r: PortfolioRenderers,
   /** Appended to the pending summary; see format/shield-timer.ts. */
   pendingNote: (summary: string) => string = (summary) => summary,
+  /** Shielded NFTs. Omitted entirely when there are none, rather than shown empty. */
+  nfts: NftBalance[] = [],
 ): PortfolioRow[] => {
   const rows: PortfolioRow[] = [];
   const sectionHead = (name: string, total: string, note = "") => {
@@ -161,6 +164,14 @@ export const buildPortfolioRows = (
     }
   } else {
     rows.push({ text: r.tag("  no private balances", "gray") });
+  }
+
+  if (nfts.length) {
+    rows.push({ text: "" });
+    // Its own section rather than a row among the tokens: a position is not a
+    // balance, it has no USD figure here, and it is not spendable by amount.
+    rows.push({ text: r.tag("POSITIONS", "white") });
+    for (const nft of nfts) rows.push({ text: r.nftRow(nft) });
   }
 
   rows.push({ text: "" });

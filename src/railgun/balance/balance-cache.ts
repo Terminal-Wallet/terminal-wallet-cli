@@ -1,6 +1,7 @@
 import {
   NetworkName,
   RailgunBalancesEvent,
+  RailgunNFTAmount,
   RailgunWalletBalanceBucket,
 } from "@railgun-community/shared-models";
 import {
@@ -25,6 +26,23 @@ const CACHE_TIMEOUT = 10 * 1000; // 5 minutes;
 
 export const publicERC20BalanceCache: BalanceCacheMap = {};
 export const privateERC20BalanceCache: BalanceBucketCacheMap = {};
+
+/**
+ * Shielded NFTs, keyed chain.type > chain.id > walletID > collection:tokenID.
+ *
+ * The engine has reported these on every balance event all along; the wallet
+ * destructured the event and dropped them, which is why it could not say what
+ * positions it held. Not bucketed like the ERC20 cache: an NFT is one
+ * indivisible thing, and the question asked of it is "do I hold it", not "how
+ * much of it is spendable".
+ */
+export const privateNFTCache: NumMapType<
+  NumMapType<MapType<MapType<RailgunNFTAmount>>>
+> = {};
+
+/** An NFT's identity — a collection plus a token id within it. */
+export const nftKey = (nft: RailgunNFTAmount): string =>
+  `${nft.nftAddress.toLowerCase()}:${BigInt(nft.tokenSubID).toString()}`;
 
 //not currently used
 export const getBalanceCaches = () => {
@@ -94,6 +112,9 @@ export const initPrivateBalanceCachesForChain = (
   privateERC20BalanceCache[chain.type][chain.id][balanceBucket][
     railgunWalletID
   ] ??= {};
+  privateNFTCache[chain.type] ??= {};
+  privateNFTCache[chain.type][chain.id] ??= {};
+  privateNFTCache[chain.type][chain.id][railgunWalletID] ??= {};
 };
 
 export const resetPublicBalanceCachesForChain = (chainName: NetworkName) => {
@@ -106,6 +127,18 @@ export const resetPrivateBalanceCachesForChain = (chainName: NetworkName) => {
   const chain = getChainForName(chainName);
   privateERC20BalanceCache[chain.type] = {};
   privateERC20BalanceCache[chain.type][chain.id] = {};
+  privateNFTCache[chain.type] = {};
+  privateNFTCache[chain.type][chain.id] = {};
+};
+
+/** The shielded NFTs this wallet holds on a chain. */
+export const getPrivateNFTsForChain = (
+  chainName: NetworkName,
+  railgunWalletID: string = getCurrentRailgunID(),
+): RailgunNFTAmount[] => {
+  const chain = getChainForName(chainName);
+  const owned = privateNFTCache[chain.type]?.[chain.id]?.[railgunWalletID];
+  return owned ? Object.values(owned) : [];
 };
 
 export const resetBalanceCachesForChain = (chainName: NetworkName) => {
@@ -157,8 +190,21 @@ export const updatePrivateBalancesForChain = async (
 ): Promise<void> => {
   const chain = getChainForName(chainName);
 
-  const { erc20Amounts, balanceBucket, railgunWalletID } = erc20Balances;
+  const { erc20Amounts, nftAmounts, balanceBucket, railgunWalletID } =
+    erc20Balances;
   initPrivateBalanceCachesForChain(chainName, balanceBucket, railgunWalletID);
+
+  // The engine reports the wallet's whole NFT set on each event, so this is a
+  // replacement rather than a merge — an NFT that has been spent since the last
+  // event has to disappear, and merging would keep showing a position the
+  // wallet no longer holds.
+  if (nftAmounts) {
+    const owned: MapType<RailgunNFTAmount> = {};
+    for (const nft of nftAmounts) {
+      if (nft.amount > 0n) owned[nftKey(nft)] = nft;
+    }
+    privateNFTCache[chain.type][chain.id][railgunWalletID] = owned;
+  }
 
   for (const erc20Amount of erc20Amounts) {
     const { tokenAddress, amount } = erc20Amount;

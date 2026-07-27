@@ -11,6 +11,14 @@ import { CoreHistoryItem } from "../core/events";
 
 export type BroadcasterStatus = "available" | "disconnected";
 
+/** A shielded NFT row — a protocol position, named. */
+export interface NftBalance {
+  label: string;
+  amount: string;
+  /** Set when the collection is recognised, so a picker can filter on it. */
+  kind?: string;
+}
+
 export interface TokenBalance {
   symbol: string;
   amount: string; // pre-formatted display string
@@ -28,6 +36,8 @@ export interface WalletState {
   showPrivate: boolean;
   publicBalances: TokenBalance[];
   privateBalances: TokenBalance[];
+  /** Shielded NFTs. The engine has always reported these; the wallet now keeps them. */
+  privateNFTs: NftBalance[];
   scanProgress: number; // 0..100, -1 = idle (overall; legacy UIs)
   scanLabel: string;
   /** Epoch ms after which `status` is stale. Undefined means it never expires. */
@@ -69,6 +79,7 @@ const initialState: WalletState = {
   showPrivate: true,
   publicBalances: [],
   privateBalances: [],
+  privateNFTs: [],
   scanProgress: -1,
   scanLabel: "",
   utxoProgress: -1,

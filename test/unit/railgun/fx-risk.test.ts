@@ -20,19 +20,24 @@ const REBALANCE = 880_000_000_000_000_000n;
 const LIQUIDATION = 950_000_000_000_000_000n;
 
 /**
- * Position 1980 as the chain reports it, and the price implied by the pool's
- * own `getPositionDebtRatio` of 0.485253811342188183.
+ * Position 1980 as the chain reports it.
+ *
+ * `getPositionDebtRatio` is kept as the WAD bigint the pool actually returned —
+ * written as a float it has more significant digits than a double holds, so the
+ * literal would silently become a different number than the chain's.
  */
 const POSITION = {
   collateralAmount: 1_993_186_870_026_208_618n,
   collateralDecimals: 18,
   debtAmount: 1_880_030_086_474_238_325_175n,
-  onChainDebtRatio: 0.485253811342188183,
+  onChainDebtRatioWad: 485_253_811_342_188_183n,
 };
+const ON_CHAIN_DEBT_RATIO =
+  Number(POSITION.onChainDebtRatioWad) / Number(10n ** 18n);
 const IMPLIED_PRICE =
   Number(POSITION.debtAmount) /
   1e18 /
-  ((Number(POSITION.collateralAmount) / 1e18) * POSITION.onChainDebtRatio);
+  ((Number(POSITION.collateralAmount) / 1e18) * ON_CHAIN_DEBT_RATIO);
 
 const risk = (over: Partial<Parameters<typeof fxPositionRisk>[0]> = {}) =>
   fxPositionRisk({
@@ -48,8 +53,8 @@ const risk = (over: Partial<Parameters<typeof fxPositionRisk>[0]> = {}) =>
 test("the debt ratio matches what the pool computes for a real position", () => {
   // If this drifts, the formula is wrong — not the tolerance.
   assert.ok(
-    Math.abs(risk().debtRatio - POSITION.onChainDebtRatio) < 1e-9,
-    `got ${risk().debtRatio}, pool says ${POSITION.onChainDebtRatio}`,
+    Math.abs(risk().debtRatio - ON_CHAIN_DEBT_RATIO) < 1e-9,
+    `got ${risk().debtRatio}, pool says ${ON_CHAIN_DEBT_RATIO}`,
   );
 });
 
@@ -81,7 +86,7 @@ test("the zone follows the thresholds, not a guess", () => {
   // threshold is spot x (currentRatio / threshold). Derived rather than picked,
   // because a guessed multiplier can sit in the wrong band and still pass.
   const priceAtRatio = (target: number) =>
-    IMPLIED_PRICE * (POSITION.onChainDebtRatio / target);
+    IMPLIED_PRICE * (ON_CHAIN_DEBT_RATIO / target);
 
   assert.equal(risk().zone, "safe");
   assert.equal(risk({ collateralPriceUsd: priceAtRatio(0.87) }).zone, "safe");
@@ -105,7 +110,7 @@ test("an empty collateral field does not read as a safe position", () => {
 });
 
 test("debt at or above the collateral value has no finite leverage", () => {
-  const r = risk({ collateralPriceUsd: POSITION.onChainDebtRatio * IMPLIED_PRICE });
+  const r = risk({ collateralPriceUsd: ON_CHAIN_DEBT_RATIO * IMPLIED_PRICE });
   assert.equal(r.leverage, Infinity);
 });
 

@@ -386,6 +386,13 @@ export const runDeck = async (): Promise<void> => {
     `${(g.totalUsd !== undefined ? formatUSD(g.totalUsd) : "").padStart(8)} ${trend(g.symbol)}` +
     `${spendable ? ` ${tag("spendable", "green")}` : ""}`;
 
+  // A position has a name and a count, not an amount and a price — the columns
+  // the token rows use would all be empty.
+  const nftRow = (n: WalletState["privateNFTs"][number]) =>
+    `  ${tag("◆", "magenta")} ${n.label.slice(0, 28).padEnd(28)}${
+      n.amount === "1" ? "" : tag(` x${n.amount}`, "gray")
+    }`;
+
   const privBucket = (b: WalletState["privateBalances"][number]) => {
     const bucket = bucketTag(b.bucket);
     return `  ${tag("└", "gray")}${fmtAmount(b.amount, 5).padStart(12)}  ${
@@ -421,13 +428,15 @@ export const runDeck = async (): Promise<void> => {
       s.publicBalances,
       s.privateUSD,
       s.publicUSD,
-      { tag, publicRow, privHeader, privBucket },
+      { tag, publicRow, privHeader, privBucket, nftRow },
       // A shield is pending for an hour. The bucket says only that funds are
       // waiting, which reads as indefinite; history has the timestamps.
       (summary) =>
         pendingNote(summary, nextShieldMaturity(history, Math.floor(Date.now() / 1000))),
+      s.privateNFTs,
     );
-    const empty = !s.privateBalances.length && !s.publicBalances.length;
+    const empty =
+      !s.privateBalances.length && !s.publicBalances.length && !s.privateNFTs.length;
     leftRail.setLabel(empty ? " portfolio · waiting for scan… " : " portfolio ");
     leftRail.setItems(rows.map((r) => r.text));
 
