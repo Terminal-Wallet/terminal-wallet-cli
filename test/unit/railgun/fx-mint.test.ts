@@ -89,6 +89,19 @@ test("the minted fxUSD is shielded back alongside the position", async () => {
   assert.ok(fxUSD.amount > 0n);
 });
 
+test("the fx card is registered at all three gates that must agree", async () => {
+  const { readFileSync } = await import("node:fs");
+  const { join, resolve } = await import("node:path");
+  const SRC = resolve(process.cwd(), "src");
+  const read = (rel: string) => readFileSync(join(SRC, rel), "utf-8");
+  // Miss the builder config and the centre pane goes blank with no error —
+  // builder.ts looks the id up and returns after the host has already switched
+  // into build mode.
+  assert.match(read("tui/actions.ts"), /id: "fx-mint-open"/);
+  assert.match(read("tui/screens/palette-grid.ts"), /"fx-mint-open",/);
+  assert.match(read("tui/screens/tx-builder-configs.ts"), /"fx-mint-open": \(chainName\)/);
+});
+
 test("the wallet's floor is above the recipe's unmeasured one", async () => {
   const { output } = await openOutput();
   // The recipe declares 1.5M, carried over from a pre-7702 version and never

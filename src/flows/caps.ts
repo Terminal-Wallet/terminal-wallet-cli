@@ -244,6 +244,7 @@ export const allowedFeeKinds = (
     case RailgunTransaction.Private0XSwap:
     case RailgunTransaction.MorphoVaultDeposit:
     case RailgunTransaction.MorphoVaultRedeem:
+    case RailgunTransaction.FxMintOpen:
       // A private spend can be relayed or paid for from a public wallet.
       return ["broadcaster", "self-signer", "external-signer"];
     default:
@@ -260,4 +261,5 @@ export const requiresProof = (type: RailgunTransaction): boolean =>
   type === RailgunTransaction.UnshieldBase ||
   type === RailgunTransaction.Private0XSwap ||
   type === RailgunTransaction.MorphoVaultDeposit ||
-  type === RailgunTransaction.MorphoVaultRedeem;
+  type === RailgunTransaction.MorphoVaultRedeem ||
+  type === RailgunTransaction.FxMintOpen;

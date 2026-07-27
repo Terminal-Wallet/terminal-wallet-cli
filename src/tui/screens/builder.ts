@@ -128,7 +128,9 @@ const FIELD_LABELS: Record<FieldKey, string> = {
   token: "Token",
   buyToken: "Buy token",
   vault: "Vault",
+  pool: "Pool",
   amount: "Amount",
+  debt: "Mint",
   address: "Recipient",
   memo: "Memo",
   gas: "Gas",
@@ -812,6 +814,32 @@ export const createBuilder = (host: BuilderHost): Builder => {
           state.amount = undefined;
         }
       }
+    } else if (key === "pool" && cfg.loadPools) {
+      const choices = await cfg.loadPools();
+      if (!choices.length) provider.notify("No f(x) pools available on this network.");
+      else {
+        const picked = await provider.select(
+          "Select pool",
+          choices.map((c) => ({
+            label: c.pool.name,
+            value: c.pool.address,
+            hint: `${formatUnits(c.token.amount, c.token.decimals)} ${c.token.symbol}`,
+          })),
+        );
+        const choice = choices.find((c) => c.pool.address === picked);
+        if (choice) {
+          // The pool decides the collateral, so picking one also settles what
+          // the amount field and the overspend check measure.
+          state.pool = choice;
+          state.token = choice.token;
+          state.amount = undefined;
+        }
+      }
+    } else if (key === "debt") {
+      const debt = await provider.input("Amount of fxUSD to mint", {
+        hint: "the debt this position will owe, before the pool's borrow fee",
+      });
+      if (debt) state.debt = debt;
     } else if (key === "amount") {
       const single: LegsState = { legs: [{ id: "__single", token: state.token }], seq: 1 };
       let hint: { hint: string } | undefined;

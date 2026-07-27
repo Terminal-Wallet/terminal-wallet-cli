@@ -52,7 +52,7 @@ import {
 } from "./tx-flow-helpers";
 import { RunResult, SendOutcome } from "../../flows/run";
 import { TxBuilderConfig } from "./tx-builder";
-import { BuilderState, VaultChoice } from "./tx-builder-core";
+import { BuilderState, VaultChoice, PoolChoice } from "./tx-builder-core";
 import {
   MORPHO_VAULTS,
   MorphoVaultAction,
@@ -63,6 +63,12 @@ import { MorphoVaultAPI } from "@railgun-community/cookbook";
 import { getProviderForChain } from "../../railgun/network/network-util";
 import { getTokenInfo } from "../../railgun/balance/token-util";
 import { runCrossContractTransaction } from "../../flows/deps/cross-contract";
+import {
+  FXMINT_GAS_FLOOR,
+  getFxMintOpenInputs,
+  isFxSupportedNetwork,
+} from "../../railgun/transaction/fx/mint";
+import { KNOWN_POOLS } from "@railgun-community/cookbook";
 import {
   LegsState, Leg, toRecipients } from "../../flows/caps";
 import { isNativeChoice, makeNativeEntry } from "../../flows/native-token";
@@ -292,6 +298,75 @@ function baseSym(chainName: NetworkName): string {
   return NETWORK_CONFIG[chainName].baseToken.symbol;
 }
 
+
+/**
+ * The f(x) pools on offer, each paired with the collateral balance it takes. A
+ * pool the wallet holds no collateral for is still listed, showing zero, so the
+ * option is discoverable rather than silently absent.
+ */
+const loadPoolChoices = async (
+  chainName: NetworkName,
+): Promise<PoolChoice[]> => {
+  if (!isFxSupportedNetwork(chainName)) return [];
+  const balances = await getPrivateERC20BalancesForChain(chainName);
+  const choices: PoolChoice[] = [];
+  for (const pool of KNOWN_POOLS) {
+    const held = balances.find(
+      (b) => b.tokenAddress.toLowerCase() === pool.collateralToken.toLowerCase(),
+    );
+    if (held) {
+      choices.push({ pool, token: held });
+      continue;
+    }
+    const info = await getTokenInfo(chainName, pool.collateralToken).catch(
+      () => undefined,
+    );
+    if (!info) continue;
+    choices.push({
+      pool,
+      token: {
+        symbol: info.symbol,
+        name: info.name,
+        tokenAddress: pool.collateralToken,
+        decimals: info.decimals,
+        amount: 0n,
+      },
+    });
+  }
+  return choices;
+};
+
+const submitFxMintOpen = async (
+  chainName: NetworkName,
+  s: BuilderState,
+): Promise<SubmitResult> => {
+  if (!s.pool || !s.amount || !s.debt) return { ok: false, error: "incomplete" };
+  const encryptionKey = await requireEncryptionKey();
+  if (!encryptionKey) return { ok: false, error: "cancelled" };
+  const collateral = parseUnits(s.amount, s.pool.token.decimals);
+  // fxUSD is an 18-decimal token; the debt is denominated in it, not in the
+  // pool's collateral.
+  const targetDebt = parseUnits(s.debt, 18);
+  const inputs = await getFxMintOpenInputs(
+    chainName,
+    s.pool.pool.name,
+    collateral,
+    targetDebt,
+    encryptionKey,
+  );
+  return toResult(
+    await runCrossContractTransaction(
+      {
+        type: RailgunTransaction.FxMintOpen,
+        chainName,
+        inputs,
+        encryptionKey,
+        fee: s.fee ?? resolveDefaultFee(),
+      },
+      applyGasDetailsConfirm(s.gas, legsView(s)),
+    ),
+  );
+};
 
 export const txBuilderConfigs: Record<
   string,
@@ -642,6 +717,19 @@ export const txBuilderConfigs: Record<
     relayAdapt: true,
     submit: (s: BuilderState) =>
       submitVault(chainName, "deposit", RailgunTransaction.MorphoVaultDeposit, s),
+  }),
+
+  "fx-mint-open": (chainName) => ({
+    title: "Mint fxUSD against collateral — Privately",
+    chainName,
+    verb: "Mint",
+    // No token row: the pool decides which collateral this takes.
+    fields: ["pool", "amount", "debt", "fee", "gas"],
+    loadPools: () => loadPoolChoices(chainName),
+    ...gasInfo(chainName),
+    gasUnitsHint: FXMINT_GAS_FLOOR,
+    relayAdapt: true,
+    submit: (s: BuilderState) => submitFxMintOpen(chainName, s),
   }),
 
   "morpho-vault-redeem": (chainName) => ({

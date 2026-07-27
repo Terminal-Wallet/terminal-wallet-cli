@@ -1,7 +1,7 @@
 /**
  * The transaction matrix, as a contract rather than a table in a document.
  *
- * Eleven transaction types, four execution shapes. The properties below decide
+ * Twelve transaction types, four execution shapes. The properties below decide
  * whether a flow needs a proof, whether it runs as an EIP-7702 bundle, whether
  * a broadcaster must advertise 7702 support to carry it, and which fee modes it
  * can offer. They used to be re-derived by hand at each branch of a 1600-line
@@ -58,6 +58,8 @@ const MATRIX: Row[] = [
   { type: RailgunTransaction.MorphoVaultDeposit,
     proof: true,  relayAdapt: true,  ephemeral7702: true,  needs7702Broadcaster: true,  broadcastable: true },
   { type: RailgunTransaction.MorphoVaultRedeem,
+    proof: true,  relayAdapt: true,  ephemeral7702: true,  needs7702Broadcaster: true,  broadcastable: true },
+  { type: RailgunTransaction.FxMintOpen,
     proof: true,  relayAdapt: true,  ephemeral7702: true,  needs7702Broadcaster: true,  broadcastable: true },
 ];
 

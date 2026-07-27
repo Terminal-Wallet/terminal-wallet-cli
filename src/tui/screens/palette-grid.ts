@@ -4,8 +4,9 @@
  * a responsive grid layout and 2D keyboard navigation. No blessed imports — the
  * deck renders this; the logic stays unit-testable.
  *
- * Categories: PRIVATE / PUBLIC / SWAP / OTHER. OTHER is a synthetic card that
- * opens the cookbook extension point.
+ * Categories: PRIVATE / PUBLIC / SWAP / DEFI / OTHER. DEFI is the protocol
+ * actions — Morpho vaults, f(x) minting — all of which spend the private
+ * balance. OTHER is a synthetic card that opens the cookbook extension point.
  */
 import { buildActions, MenuGroup } from "../actions";
 
@@ -33,6 +34,7 @@ const OPENABLE = new Set([
   "public-swap",
   "morpho-vault-deposit",
   "morpho-vault-redeem",
+  "fx-mint-open",
 ]);
 
 const CATEGORY_OF: Partial<Record<MenuGroup, PaletteCategory>> = {
@@ -40,6 +42,7 @@ const CATEGORY_OF: Partial<Record<MenuGroup, PaletteCategory>> = {
   "Public Actions": "PUBLIC",
   "0x Swap Tools": "SWAP",
   "Morpho Vaults": "DEFI",
+  "f(x) Mint": "DEFI",
 };
 
 export const CATEGORY_ORDER: PaletteCategory[] = [

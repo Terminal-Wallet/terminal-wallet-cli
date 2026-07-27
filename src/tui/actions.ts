@@ -8,6 +8,7 @@ export type MenuGroup =
   | "Public Actions"
   | "0x Swap Tools"
   | "Morpho Vaults"
+  | "f(x) Mint"
   | "Utilities";
 
 export interface MenuAction {
@@ -22,6 +23,7 @@ export const GROUP_ORDER: MenuGroup[] = [
   "Public Actions",
   "0x Swap Tools",
   "Morpho Vaults",
+  "f(x) Mint",
   "Utilities",
 ];
 
@@ -42,6 +44,8 @@ export const buildActions = (baseSymbol: string): MenuAction[] => [
 
   { id: "morpho-vault-deposit", label: `Deposit into Vault`, group: "Morpho Vaults" },
   { id: "morpho-vault-redeem", label: `Redeem from Vault`, group: "Morpho Vaults" },
+
+  { id: "fx-mint-open", label: `Mint fxUSD`, group: "f(x) Mint" },
 
   { id: "activity", label: "Activity / History", group: "Utilities" },
   { id: "wallet-tools", label: "Wallet Tools", group: "Utilities" },

@@ -10,6 +10,7 @@ import { FeeMode } from "../../flows/spec";
 import { RailgunDisplayBalance } from "../../models/balance-models";
 import { LegsState, FlowCaps, validateLegs } from "../../flows/caps";
 import { TokenOverspend } from "../../flows/balance";
+import { FxPoolEntry } from "@railgun-community/cookbook";
 import { MorphoVaultRef } from "../../railgun/transaction/morpho/vault";
 import { fmtAmount } from "../format/deck";
 
@@ -17,7 +18,9 @@ export type FieldKey =
   | "token"
   | "buyToken"
   | "vault"
+  | "pool"
   | "amount"
+  | "debt"
   | "address"
   | "memo"
   | "gas"
@@ -36,10 +39,22 @@ export interface VaultChoice {
   token: RailgunDisplayBalance;
 }
 
+/**
+ * An f(x) pool the builder can open a position in, paired with the collateral
+ * balance it takes. Picked together for the same reason a vault is: the pool
+ * decides the collateral token, so there is nothing separate to choose.
+ */
+export interface PoolChoice {
+  pool: FxPoolEntry;
+  token: RailgunDisplayBalance;
+}
+
 export interface BuilderState {
   token?: RailgunDisplayBalance; // for swaps: the SELL token
   buyToken?: RailgunDisplayBalance; // swaps: the BUY token
   vault?: VaultChoice; // vault flows: the vault, and the token it spends
+  pool?: PoolChoice; // fx flows: the pool, and the collateral it takes
+  debt?: string; // fx flows: how much fxUSD to mint against the collateral
   amount?: string;
   address?: string;
   memo?: string;
@@ -123,6 +138,10 @@ export const fieldDisplay = (key: FieldKey, s: BuilderState): string => {
       return s.buyToken ? s.buyToken.symbol : "‹select token›";
     case "vault":
       return s.vault ? s.vault.vault.name : "‹select vault›";
+    case "pool":
+      return s.pool ? s.pool.pool.name : "‹select pool›";
+    case "debt":
+      return s.debt ? s.debt : "‹enter amount to mint›";
     case "amount":
       return s.amount ? s.amount : "‹enter amount›";
     case "address":
@@ -152,6 +171,11 @@ export const validate = (
   if (fields.includes("token") && !s.token) missing.push("token");
   if (fields.includes("buyToken") && !s.buyToken) missing.push("buy token");
   if (fields.includes("vault") && !s.vault) missing.push("vault");
+  if (fields.includes("pool") && !s.pool) missing.push("pool");
+  if (fields.includes("debt")) {
+    const n = Number(s.debt);
+    if (!s.debt || !isFinite(n) || n <= 0) missing.push("an amount to mint");
+  }
   if (fields.includes("amount")) {
     const n = Number(s.amount);
     if (!s.amount || !isFinite(n) || n <= 0) missing.push("a valid amount");

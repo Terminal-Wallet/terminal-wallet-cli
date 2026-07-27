@@ -23,6 +23,7 @@ import {
   FieldKey,
   BuilderState,
   VaultChoice,
+  PoolChoice,
   fieldDisplay,
   validate,
   summarize,
@@ -65,6 +66,11 @@ export interface TxBuilderConfig {
    * metadata, so it happens here rather than in the picker.
    */
   loadVaults?: () => Promise<VaultChoice[]>;
+  /**
+   * fx flows: the pools on offer, each paired with the collateral balance it
+   * takes. Same shape as loadVaults and for the same reason.
+   */
+  loadPools?: () => Promise<PoolChoice[]>;
   defaultAddress?: string; // seeds (editable) the address field, e.g. swap 0zk destination
   submit: (state: BuilderState) => Promise<{ ok: boolean; error?: string }>;
 }
@@ -75,7 +81,9 @@ const FIELD_LABELS: Record<FieldKey, string> = {
   token: "Token",
   buyToken: "Buy token",
   vault: "Vault",
+  pool: "Pool",
   amount: "Amount",
+  debt: "Mint",
   address: "Recipient",
   memo: "Memo",
   gas: "Gas",
@@ -217,6 +225,31 @@ export const runTxBuilder = async (
       }
     };
 
+    const editPool = async () => {
+      if (!cfg.loadPools) return;
+      const choices = await cfg.loadPools();
+      if (!choices.length) {
+        provider.notify("No f(x) pools available on this network.");
+        return;
+      }
+      const picked = await provider.select(
+        "Select pool",
+        choices.map((c) => ({
+          label: c.pool.name,
+          value: c.pool.address,
+          hint: `${formatUnits(c.token.amount, c.token.decimals)} ${c.token.symbol}`,
+        })),
+      );
+      const choice = choices.find((c) => c.pool.address === picked);
+      if (choice) {
+        // The pool decides the collateral, so picking one also settles what the
+        // amount field measures against.
+        state.pool = choice;
+        state.token = choice.token;
+        state.amount = undefined;
+      }
+    };
+
     const edit = async (key: FieldKey) => {
       switch (key) {
         case "token":
@@ -225,6 +258,14 @@ export const runTxBuilder = async (
         case "vault":
           await editVault();
           break;
+        case "pool":
+          await editPool();
+          break;
+        case "debt": {
+          const d = await provider.input("Amount of fxUSD to mint");
+          if (d) state.debt = d;
+          break;
+        }
         case "amount": {
           const a = await provider.input(
             `Amount${state.token ? ` of ${state.token.symbol}` : ""}`,
