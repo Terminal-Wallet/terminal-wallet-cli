@@ -438,7 +438,13 @@ export const runDeck = async (): Promise<void> => {
     // should stop LOOKING like it takes input. Refusing a click with a message
     // explains it once; the borders explain it every time you glance at them.
     const dim = mode === "build";
-    for (const card of cards) card.box.style.border.fg = dim ? "black" : "gray";
+    for (const card of cards) {
+      card.box.style.border.fg = dim ? "black" : "gray";
+      // And the hover with it. A card that lights up under the pointer is
+      // saying it can be clicked, which while the builder is up it cannot —
+      // the dim border and the bright hover were telling opposite stories.
+      card.box.style.hover.border.fg = dim ? "black" : "cyan";
+    }
     leftRail.style.border.fg = dim ? "black" : "gray";
     activity.style.border.fg = dim ? "black" : "gray";
 

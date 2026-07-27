@@ -83,7 +83,12 @@ export const createPalette = (host: PaletteHost): Palette => {
       const disabled = isDisabled(e.id);
       const selected = e.id === cursor && !disabled;
       e.el.style.border.fg = disabled ? "gray" : selected ? "cyan" : "gray";
-      e.el.style.bg = selected ? "blue" : undefined;
+      // Cyan on black, which is what selection looks like everywhere else in
+      // the deck — the portfolio rail's row, the stepper's current step. The
+      // blue this used to be matched nothing and read as a different kind of
+      // state.
+      e.el.style.bg = selected ? "cyan" : undefined;
+      e.el.style.fg = selected ? "black" : undefined;
     }
   };
 
