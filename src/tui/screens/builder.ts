@@ -153,6 +153,12 @@ export const createBuilder = (host: BuilderHost): Builder => {
   let prices: Record<string, number> = {};
   let feePreview: { text: string; usd?: number } | undefined;
   let feeReservation: FeeReservation | undefined;
+  /**
+   * The balances this flow loaded, kept so a FEE token can be weighed against
+   * what the wallet actually holds of it. Without them the fee is only ever
+   * checked against the tokens being sent.
+   */
+  let loadedBalances: RailgunDisplayBalance[] = [];
   let swapPreview: SwapQuotePreview | undefined;
 
   const caps = () => flowCaps(cfg?.flowId ?? "");
@@ -483,6 +489,13 @@ export const createBuilder = (host: BuilderHost): Builder => {
     feeReservation = {
       tokenAddress: broadcaster.tokenAddress,
       amount: approx.amount,
+      // Only when we know it. A fee token missing from this list is not
+      // evidence of a zero balance — the broadcaster's fee-token list is built
+      // from its own query — and inventing one would refuse a send that is
+      // fine. Absent simply means the check this enables does not run.
+      token: loadedBalances.find((b) =>
+        b.tokenAddress.toLowerCase() === broadcaster.tokenAddress.toLowerCase(),
+      ),
     };
     const usd = balanceUSD(
       {
@@ -510,6 +523,7 @@ export const createBuilder = (host: BuilderHost): Builder => {
     swapPreview = undefined;
     feePreview = undefined;
     feeReservation = undefined;
+    loadedBalances = [];
 
     // Best-effort: USD figures are an aid, and a price outage must not stop a
     // send. Unknown tokens simply show no USD.
@@ -517,6 +531,7 @@ export const createBuilder = (host: BuilderHost): Builder => {
     try {
       if (cfg.loadTokens) {
         const tokens = await cfg.loadTokens();
+        loadedBalances = tokens;
         seed = resolveSeedToken(seed, tokens);
         prices = await getTokenPricesUSD(
           cfg.chainName,

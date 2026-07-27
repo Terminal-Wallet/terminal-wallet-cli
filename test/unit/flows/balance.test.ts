@@ -19,6 +19,7 @@ import {
 
 const USDC = "0x" + "a".repeat(40);
 const WETH = "0x" + "b".repeat(40);
+const WBTC = "0x" + "c".repeat(40);
 
 const TOK = (sym: string, addr: string, amount: bigint, decimals = 18) => ({
   symbol: sym,
@@ -226,4 +227,68 @@ test("formatExpected renders headroom and over-by suffix", () => {
   assert.equal(formatExpected(over, token), "expected 10.0 USDC · over by 2.0 USDC");
   const ok = checkAmount(token, "5", legs, { editingLegId: "leg-0" });
   assert.equal(formatExpected(ok, token), "expected 10.0 USDC");
+});
+
+// --- the fee's own balance ----------------------------------------------
+
+test("a fee in a token no leg carries is still weighed against its balance", () => {
+  // The reported failure: 0.00001 WBTC held, a 0.000146 WBTC fee, and nothing
+  // said a word until the proof. `overspentTokens` walked the tokens being
+  // SENT, so a fee drawing on a balance of its own was never checked at all.
+  const legs = legsOf({
+    id: "a",
+    token: TOK("USDC", USDC, parseUnits("100", 6), 6),
+    amount: "10",
+    recipient: "0zk1abc",
+  });
+  const feeToken = TOK("WBTC", WBTC, parseUnits("0.00001", 8), 8);
+  const over = overspentTokens(legs, {
+    tokenAddress: WBTC,
+    amount: parseUnits("0.000146", 8),
+    token: feeToken,
+  });
+
+  assert.equal(over.length, 1, "a fee larger than its own balance went unnoticed");
+  assert.equal(over[0].token.symbol, "WBTC");
+  assert.equal(over[0].causedByFee, true);
+  assert.equal(over[0].feeShare, parseUnits("0.000146", 8));
+  assert.equal(over[0].overBy, parseUnits("0.000136", 8));
+});
+
+test("without the fee token's balance nothing is claimed about it", () => {
+  // A fee token missing from the flow's list is not evidence of a zero
+  // balance, and inventing one would refuse a send that is fine.
+  const legs = legsOf({
+    id: "a",
+    token: TOK("USDC", USDC, parseUnits("100", 6), 6),
+    amount: "10",
+    recipient: "0zk1abc",
+  });
+  const over = overspentTokens(legs, {
+    tokenAddress: WBTC,
+    amount: parseUnits("0.000146", 8),
+  });
+  assert.deepEqual(over, [], "a fee with no known balance was reported as an overspend");
+});
+
+test("the cause is named: the amount, or the fee that took it over", () => {
+  // Two different problems with two different answers — send less, or pay the
+  // fee in something else — and "over by X" alone says neither.
+  const spendable = TOK("USDC", USDC, parseUnits("100", 6), 6);
+
+  // Asked for more than exists, with no fee involved.
+  const byChoice = overspentTokens(
+    legsOf({ id: "a", token: spendable, amount: "150", recipient: "0zk1abc" }),
+    undefined,
+  );
+  assert.equal(byChoice[0].causedByFee, false);
+  assert.equal(byChoice[0].feeShare, 0n);
+
+  // The amount fits on its own; the fee is what does not.
+  const byFee = overspentTokens(
+    legsOf({ id: "a", token: spendable, amount: "100", recipient: "0zk1abc" }),
+    { tokenAddress: USDC, amount: parseUnits("5", 6), token: spendable },
+  );
+  assert.equal(byFee[0].causedByFee, true);
+  assert.equal(byFee[0].overBy, parseUnits("5", 6));
 });

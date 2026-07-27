@@ -23,6 +23,17 @@ import { LegsState } from "./caps";
 export interface FeeReservation {
   tokenAddress: string;
   amount: bigint;
+  /**
+   * What the wallet holds of the FEE token.
+   *
+   * Supplied so the fee can be checked against its own balance. Without it the
+   * fee is only ever weighed against tokens that appear in the legs, so a fee
+   * in a token you hold little or none of passes every check here and fails at
+   * proof time — after the password, after the wait. Optional because a caller
+   * that has not loaded balances can still express a reservation; it just
+   * cannot have that check.
+   */
+  token?: RailgunDisplayBalance;
 }
 
 const sameToken = (a: string, b: string): boolean =>
@@ -172,6 +183,17 @@ export const maxAmount = (
 export interface TokenOverspend {
   token: RailgunDisplayBalance;
   overBy: bigint; // base units the total commitment exceeds the balance by
+  /** Base units of this token reserved for the fee (0 when the fee is elsewhere). */
+  feeShare: bigint;
+  /**
+   * The amounts alone fit; the fee is what took it over.
+   *
+   * The two are not the same problem and do not have the same answer — one is
+   * "send less", the other is "send less OR pay the fee in something else" —
+   * so the distinction is carried rather than left for the reader to work out
+   * from two numbers.
+   */
+  causedByFee: boolean;
 }
 
 /**
@@ -191,10 +213,27 @@ export const overspentTokens = (
   for (const l of legs.legs) {
     if (l.token) seen.set(l.token.tokenAddress.toLowerCase(), l.token);
   }
+  // The FEE's token, even when no leg carries it. A fee is a commitment
+  // against a balance exactly as an amount is; checking only the tokens being
+  // SENT is how a fee larger than the balance it draws from reaches the proof.
+  if (fee?.token) {
+    const key = fee.token.tokenAddress.toLowerCase();
+    if (!seen.has(key)) seen.set(key, fee.token);
+  }
   const out: TokenOverspend[] = [];
   for (const token of seen.values()) {
     const expected = expectedBalance(token, legs, { fee });
-    if (expected < 0n) out.push({ token, overBy: -expected });
+    if (expected >= 0n) continue;
+    const feeShare = feeReserved(fee, token.tokenAddress);
+    // Would the amounts alone have fit? If so the fee is the cause, and the
+    // answer is a different one.
+    const withoutFee = expectedBalance(token, legs, { fee: undefined });
+    out.push({
+      token,
+      overBy: -expected,
+      feeShare,
+      causedByFee: feeShare > 0n && withoutFee >= 0n,
+    });
   }
   return out;
 };

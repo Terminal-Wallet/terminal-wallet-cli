@@ -199,13 +199,20 @@ export const preflight = ({
 
   if (overspend.length) {
     const [first] = overspend;
-    return {
-      ok: false,
-      reason: "overspend",
-      message:
-        `Overspends ${first.token.symbol} by ` +
-        `${fmtAmount(formatUnits(first.overBy, first.token.decimals), 6)} — reduce the amount or fee.`,
-    };
+    const { symbol, decimals } = first.token;
+    const show = (v: bigint) => fmtAmount(formatUnits(v, decimals), 6);
+    // "Over by X" alone leaves the user to work out WHICH thing is too big,
+    // and the two have different answers: send less, or pay the fee in
+    // something else. A fee that exceeds the balance on its own is a third
+    // case again — nothing you can type in the amount field will fix it.
+    const message = !first.causedByFee
+      ? `Overspends ${symbol} by ${show(first.overBy)} — reduce the amount.`
+      : first.feeShare > first.token.amount
+        ? `The ${symbol} fee (${show(first.feeShare)}) is more than your ` +
+          `${show(first.token.amount)} ${symbol} — pay the fee in another token.`
+        : `The ${symbol} fee (${show(first.feeShare)}) takes this ` +
+          `${show(first.overBy)} over — reduce the amount or pay the fee in another token.`;
+    return { ok: false, reason: "overspend", message };
   }
 
   return { ok: true };
