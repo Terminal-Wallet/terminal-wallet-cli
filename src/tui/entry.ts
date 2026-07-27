@@ -409,7 +409,7 @@ export const runDeck = async (): Promise<void> => {
     const s = getState();
 
     titleBar.setContent(
-      `${tag("◆ TWALLET", "green")}${tag("  · RAILGUN privacy wallet", "gray")}`,
+      `${tag("◆ TERMINAL WALLET", "green")}${tag("  · RAILGUN privacy wallet", "gray")}`,
     );
 
     const present = (a: string) => a && a !== "—";

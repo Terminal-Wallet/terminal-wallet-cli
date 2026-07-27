@@ -95,11 +95,23 @@ export const fmtAmount = (raw: string, maxFrac = 6): string => {
  * ≥1 gwei round to an integer; sub-gwei values keep up to 3 decimals with a
  * 0.001 gwei floor so tiny-but-nonzero fees never display as a misleading "0".
  */
+/**
+ * The three tiers as they actually differ.
+ *
+ * Never rounded to whole gwei. Below about 20 gwei the whole spread between
+ * slow and fast is often under a gwei, so rounding printed "14 / 14 / 14" for
+ * three prices that are not the same — a ticker saying nothing while looking
+ * like it was working. Two decimals is where a tier difference stops being
+ * visible in a fee, and a fixed width keeps the header from jittering as it
+ * updates; the one decimal above 100 is to bound the line.
+ */
 export const gasTicker = (est: CustomGasEstimate): string => {
   const g = (priority: bigint) => {
     const gwei = Number(formatUnits(priority + est.baseFeePerGas, "gwei"));
     if (gwei <= 0) return "0";
-    if (gwei >= 1) return Math.round(gwei).toString();
+    if (gwei >= 100) return gwei.toFixed(1);
+    if (gwei >= 1) return gwei.toFixed(2);
+    // Sub-gwei: keep the precision that is the whole figure down here.
     return Math.max(0.001, Number(gwei.toFixed(3))).toString();
   };
   return `${g(est.slow)} / ${g(est.average)} / ${g(est.fast)} gwei`;
