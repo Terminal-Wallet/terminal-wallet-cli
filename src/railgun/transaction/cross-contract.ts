@@ -28,6 +28,7 @@ import { createLogger } from "../../platform/logger";
 
 const log = createLogger("cross-contract");
 import { getCurrentRailgunID } from "../wallet/wallet-util";
+import { syncEphemeralIndexOnce } from "../wallet/ephemeral-util";
 import { getCurrentNetwork } from "../engine/engine";
 import {
   PrivateGasDetails,
@@ -81,6 +82,11 @@ export const getCrossContractGasEstimate = async (
 ): Promise<PrivateGasEstimate | undefined> => {
   const railgunWalletID = getCurrentRailgunID();
   const txIDVersion = TXIDVersion.V2_PoseidonMerkle;
+
+  // A recipe binds its calldata to an executor address when it is built. Realign
+  // the ephemeral index before the SDK derives the address for this estimate, or
+  // the batch is quoted for one account and executed as another.
+  await syncEphemeralIndexOnce(chainName, encryptionKey);
 
   const gasDetailsResult = await getTransactionGasDetails(
     chainName,
