@@ -126,9 +126,15 @@ export const buildSwapInputs = async (
  */
 const VAULT_SLIPPAGE_BPS = 100n;
 
-/** Deposit floor 2.9M, redeem 2.8M — the recipes' own declared minimums. */
+/**
+ * The recipes declare 2.9M for a deposit and 2.8M for a redeem, and a combo
+ * meal 2.9M. Either card can now carry a swap leg, and the hint sizes both the
+ * fee preview and the overspend reservation — so both take the combo figure.
+ * Over-reserving costs headroom; under-reserving costs a send that fails after
+ * the proof is paid for.
+ */
 const VAULT_DEPOSIT_GAS_UNITS = 2_900_000n;
-const VAULT_REDEEM_GAS_UNITS = 2_800_000n;
+const VAULT_REDEEM_GAS_UNITS = 2_900_000n;
 
 /**
  * The vaults on offer, each paired with the balance its action would spend: the
@@ -205,7 +211,22 @@ const submitVault = async (
   if (!s.vault || !s.amount) return { ok: false, error: "incomplete" };
   const encryptionKey = await requireEncryptionKey();
   if (!encryptionKey) return { ok: false, error: "cancelled" };
-  const amount = parseUnits(s.amount, s.vault.token.decimals);
+  // A deposit is denominated in what it is paid with; a redemption is always
+  // denominated in shares, and the chosen token is what it comes back AS.
+  const denomination = action === "deposit" ? s.token ?? s.vault.token : s.vault.token;
+  const counterpart =
+    action === "deposit"
+      ? s.token && {
+          tokenAddress: s.token.tokenAddress,
+          decimals: s.token.decimals,
+          amount: 0n,
+        }
+      : s.buyToken && {
+          tokenAddress: s.buyToken.tokenAddress,
+          decimals: s.buyToken.decimals,
+          amount: 0n,
+        };
+  const amount = parseUnits(s.amount, denomination.decimals);
   const inputs = await getMorphoVaultInputs(
     chainName,
     action,
@@ -213,6 +234,7 @@ const submitVault = async (
     amount,
     VAULT_SLIPPAGE_BPS,
     encryptionKey,
+    counterpart,
   );
   return toResult(
     await runCrossContractTransaction(
@@ -343,7 +365,10 @@ const submitFxMintOpen = async (
   if (!s.pool || !s.amount || !s.debt) return { ok: false, error: "incomplete" };
   const encryptionKey = await requireEncryptionKey();
   if (!encryptionKey) return { ok: false, error: "cancelled" };
-  const collateral = parseUnits(s.amount, s.pool.token.decimals);
+  // The amount is in whatever is being spent — the collateral itself, or the
+  // token being swapped into it.
+  const payWith = s.token ?? s.pool.token;
+  const collateral = parseUnits(s.amount, payWith.decimals);
   // fxUSD is an 18-decimal token; the debt is denominated in it, not in the
   // pool's collateral.
   const targetDebt = parseUnits(s.debt, 18);
@@ -353,6 +378,7 @@ const submitFxMintOpen = async (
     collateral,
     targetDebt,
     encryptionKey,
+    { tokenAddress: payWith.tokenAddress, decimals: payWith.decimals },
   );
   return toResult(
     await runCrossContractTransaction(
@@ -709,9 +735,11 @@ export const txBuilderConfigs: Record<
     title: "Deposit into a Morpho vault — Privately",
     chainName,
     verb: "Deposit",
-    // No token row: the vault is what decides which asset this spends.
-    fields: ["vault", "amount", "fee", "gas"],
+    // The vault names the asset it wants; the token row is what you PAY with.
+    // Anything other than the asset folds a 0x swap into the same batch.
+    fields: ["vault", "token", "amount", "fee", "gas"],
     loadVaults: () => loadVaultChoices(chainName, "deposit"),
+    loadTokens: () => getPrivateERC20BalancesForChain(chainName),
     ...gasInfo(chainName),
     gasUnitsHint: VAULT_DEPOSIT_GAS_UNITS,
     relayAdapt: true,
@@ -723,9 +751,11 @@ export const txBuilderConfigs: Record<
     title: "Mint fxUSD against collateral — Privately",
     chainName,
     verb: "Mint",
-    // No token row: the pool decides which collateral this takes.
-    fields: ["pool", "amount", "debt", "fee", "gas"],
+    // The pool names the collateral it wants; the token row is what you PAY
+    // with. Anything other than the collateral folds a 0x swap in front.
+    fields: ["pool", "token", "amount", "debt", "fee", "gas"],
     loadPools: () => loadPoolChoices(chainName),
+    loadTokens: () => getPrivateERC20BalancesForChain(chainName),
     ...gasInfo(chainName),
     gasUnitsHint: FXMINT_GAS_FLOOR,
     relayAdapt: true,
@@ -736,8 +766,11 @@ export const txBuilderConfigs: Record<
     title: "Redeem from a Morpho vault — Privately",
     chainName,
     verb: "Redeem",
-    fields: ["vault", "amount", "fee", "gas"],
+    // The amount is in shares; the buy token is what to come back AS, and
+    // anything other than the vault's asset folds a 0x swap in behind it.
+    fields: ["vault", "amount", "buyToken", "fee", "gas"],
     loadVaults: () => loadVaultChoices(chainName, "redeem"),
+    loadBuyTokens: () => loadBuyTokens(chainName),
     ...gasInfo(chainName),
     gasUnitsHint: VAULT_REDEEM_GAS_UNITS,
     relayAdapt: true,

@@ -18,8 +18,11 @@ import {
   FxMintOpenRecipe,
   FxMintPoolRef,
   RecipeERC20Amount,
+  RecipeERC20Info,
   RecipeInput,
+  ZeroXSwap_FxMintOpen_ComboMeal,
   getFxPool,
+  makeEphemeralExecutor,
   resolvePool,
 } from "@railgun-community/cookbook";
 import {
@@ -32,6 +35,7 @@ import {
   syncEphemeralIndexOnce,
 } from "../../wallet/ephemeral-util";
 import { getProviderForChain } from "../../network/network-util";
+import { needsSwapLeg } from "../morpho/vault";
 import { getNextPositionId } from "./position";
 import { createLogger } from "../../../platform/logger";
 
@@ -55,19 +59,33 @@ export const isFxSupportedNetwork = (chainName: NetworkName): boolean =>
  */
 export const FXMINT_GAS_FLOOR = 2_700_000n;
 
+/**
+ * How wide the swap leg may slip when the position is opened with something
+ * other than the pool's collateral. Matches the standalone private swap.
+ */
+export const FXMINT_SWAP_SLIPPAGE_BPS = 320;
+
 export interface FxMintOpenBuild extends CrossContractInputs {
   pool: ReturnType<typeof resolvePool>;
   /** The id the batch expects the pool to mint. */
   positionId: bigint;
   collateral: { tokenAddress: string; decimals: number; amount: bigint };
+  /** Whether a 0x swap into the collateral was folded into the same batch. */
+  swapped: boolean;
   /** fxUSD the position will owe, before the pool's borrow fee. */
   targetDebt: bigint;
   borrowFeeRatio: bigint;
 }
 
 /**
- * Build "open a position": deposit collateral, mint `targetDebt` of fxUSD, and
+ * Build "open a position": put up collateral, mint `targetDebt` of fxUSD, and
  * shield both the fxUSD and the position NFT back to this wallet.
+ *
+ * `payWith` is what the collateral is bought with. Naming the pool's own
+ * collateral is the same as omitting it — there is nothing to swap, and the
+ * cookbook's combo refuses to trade the collateral for itself. Anything else
+ * folds a 0x swap into the front of the same batch, so a position can be opened
+ * from whatever happens to be shielded rather than only from wstETH or WBTC.
  *
  * The encryption key is required and is not prompted for here: the batch
  * executes as an ephemeral EOA derived from it, and a transaction primitive
@@ -79,6 +97,7 @@ export const getFxMintOpenInputs = async (
   collateralAmount: bigint,
   targetDebt: bigint,
   encryptionKey: string,
+  payWith?: { tokenAddress: string; decimals: number },
 ): Promise<FxMintOpenBuild> => {
   if (!isFxSupportedNetwork(chainName)) {
     throw new Error(`f(x) is Ethereum-only; this wallet is on ${chainName}.`);
@@ -106,27 +125,46 @@ export const getFxMintOpenInputs = async (
       `position ${positionId}, debt ${targetDebt}, borrowFeeRatio ${borrowFeeRatio}`,
   );
 
+  const swapFrom = needsSwapLeg(payWith?.tokenAddress, pool.collateralToken)
+    ? payWith
+    : undefined;
+  const spendToken = swapFrom ?? {
+    tokenAddress: pool.collateralToken,
+    decimals: Number(pool.collateralDecimals),
+  };
+
   const relayAdaptUnshieldERC20Amounts: RecipeERC20Amount[] = [
     {
-      tokenAddress: pool.collateralToken,
-      decimals: pool.collateralDecimals,
+      tokenAddress: spendToken.tokenAddress,
+      decimals: BigInt(spendToken.decimals),
       amount: collateralAmount,
     },
   ];
 
-  const recipe = new FxMintOpenRecipe({
+  const fxOpts = {
     pool: poolRef,
     targetDebt,
     predictedPositionId: positionId,
     borrowFeeRatio,
-  });
+  };
   const recipeInput: RecipeInput = {
     networkName: chainName,
     railgunAddress,
     erc20Amounts: relayAdaptUnshieldERC20Amounts,
     nfts: [],
   };
-  const recipeOutput = await recipe.getRecipeOutput(recipeInput);
+  const sellERC20Info: RecipeERC20Info | undefined = swapFrom && {
+    tokenAddress: swapFrom.tokenAddress,
+    decimals: BigInt(swapFrom.decimals),
+  };
+  const recipeOutput = sellERC20Info
+    ? await new ZeroXSwap_FxMintOpen_ComboMeal({
+        ...fxOpts,
+        sellERC20Info,
+        swapSlippageBasisPoints: FXMINT_SWAP_SLIPPAGE_BPS,
+        recipient: makeEphemeralExecutor(ephemeralAddress, "fxmint open"),
+      }).getComboMealOutput(recipeInput)
+    : await new FxMintOpenRecipe(fxOpts).getRecipeOutput(recipeInput);
 
   const relayAdaptShieldERC20Addresses: RailgunERC20Recipient[] =
     recipeOutput.erc20AmountRecipients.map(({ tokenAddress }) => ({
@@ -147,10 +185,11 @@ export const getFxMintOpenInputs = async (
     pool,
     positionId,
     collateral: {
-      tokenAddress: pool.collateralToken,
-      decimals: Number(pool.collateralDecimals),
+      tokenAddress: spendToken.tokenAddress,
+      decimals: Number(spendToken.decimals),
       amount: collateralAmount,
     },
+    swapped: Boolean(swapFrom),
     targetDebt,
     borrowFeeRatio,
     relayAdaptUnshieldERC20Amounts,

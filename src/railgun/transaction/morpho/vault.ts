@@ -13,7 +13,10 @@ import {
   MorphoVaultV2DepositRecipe,
   MorphoVaultV1RedeemRecipe,
   MorphoVaultV2RedeemRecipe,
+  MorphoVaultRedeem_ZeroXSwap_ComboMeal,
+  ZeroXSwap_MorphoVaultDeposit_ComboMeal,
   RecipeERC20Amount,
+  RecipeERC20Info,
   RecipeInput,
   RecipeOutput,
   makeEphemeralExecutor,
@@ -48,6 +51,14 @@ export interface MorphoVaultRef {
  * the package root, and a curated list is what the picker wants anyway — every
  * other parameter (asset, both decimals) is read from the vault itself.
  */
+/**
+ * How wide the swap leg of a combo may slip.
+ *
+ * Only the swap needs this — the vault leg has its own, much tighter tolerance,
+ * because an ERC-4626 rate barely moves. Matches the standalone private swap.
+ */
+export const VAULT_SWAP_SLIPPAGE_BPS = 320;
+
 export const MORPHO_VAULTS: readonly MorphoVaultRef[] = [
   {
     name: "Steakhouse USDC",
@@ -65,6 +76,23 @@ export const MORPHO_VAULTS: readonly MorphoVaultRef[] = [
 export const isMorphoSupportedNetwork = (chainName: NetworkName): boolean =>
   chainName === NetworkName.Ethereum;
 
+/**
+ * Whether a swap leg is needed to reach `target`.
+ *
+ * Naming the token the action already deals in is not a trade, and the
+ * cookbook's 0x leg would be asked to swap a token for itself. Separated out
+ * because the combo cannot be built offline — its swap leg quotes against the
+ * live 0x API — so this decision is the part that can be tested.
+ */
+export const needsSwapLeg = (
+  counterpartAddress: string | undefined,
+  targetAddress: string,
+): boolean =>
+  Boolean(
+    counterpartAddress &&
+      counterpartAddress.toLowerCase() !== targetAddress.toLowerCase(),
+  );
+
 /** A token amount as the review card wants to show it. */
 export interface MorphoVaultLeg {
   tokenAddress: string;
@@ -75,6 +103,8 @@ export interface MorphoVaultLeg {
 export interface MorphoVaultBuild extends CrossContractInputs {
   action: MorphoVaultAction;
   vault: MorphoVaultRef;
+  /** Whether a 0x swap was folded into the same batch. */
+  swapped: boolean;
   /** What leaves the private balance. */
   spend: MorphoVaultLeg;
   /**
@@ -85,12 +115,15 @@ export interface MorphoVaultBuild extends CrossContractInputs {
   receive: MorphoVaultLeg & { minimum: bigint };
 }
 
-const buildRecipe = (
+type Executor = ReturnType<typeof makeEphemeralExecutor>;
+type Provider = ReturnType<typeof getProviderForChain>;
+
+const bareRecipe = (
   action: MorphoVaultAction,
   vault: MorphoVaultRef,
   slippageBasisPoints: bigint,
-  executor: ReturnType<typeof makeEphemeralExecutor>,
-  provider: ReturnType<typeof getProviderForChain>,
+  executor: Executor,
+  provider: Provider,
 ) => {
   const { vaultAddress, generation } = vault;
   if (action === "deposit") {
@@ -101,6 +134,48 @@ const buildRecipe = (
   return generation === "V2"
     ? new MorphoVaultV2RedeemRecipe(vaultAddress, slippageBasisPoints, executor, provider)
     : new MorphoVaultV1RedeemRecipe(vaultAddress, slippageBasisPoints, executor, provider);
+};
+
+/**
+ * The same action with a 0x swap fused onto the side that needs one.
+ *
+ * A deposit swaps first, so the batch can be paid for with whatever is already
+ * shielded rather than only the vault's own asset. A redemption swaps last, so
+ * the proceeds come back as the token that was asked for. Either way it is one
+ * batch, one proof and one fee — running the swap separately would be two of
+ * each, and would leave the intermediate token shielded in between.
+ */
+const comboRecipe = (
+  action: MorphoVaultAction,
+  vault: MorphoVaultRef,
+  slippageBasisPoints: bigint,
+  executor: Executor,
+  provider: Provider,
+  asset: RecipeERC20Info,
+  counterpart: RecipeERC20Info,
+) => {
+  const { vaultAddress, generation } = vault;
+  return action === "deposit"
+    ? new ZeroXSwap_MorphoVaultDeposit_ComboMeal(
+        counterpart,
+        asset,
+        VAULT_SWAP_SLIPPAGE_BPS,
+        vaultAddress,
+        slippageBasisPoints,
+        executor,
+        provider,
+        generation,
+      )
+    : new MorphoVaultRedeem_ZeroXSwap_ComboMeal(
+        vaultAddress,
+        slippageBasisPoints,
+        asset,
+        counterpart,
+        VAULT_SWAP_SLIPPAGE_BPS,
+        executor,
+        provider,
+        generation,
+      );
 };
 
 /**
@@ -129,10 +204,15 @@ export const receivedLeg = (
 };
 
 /**
- * Build a vault deposit or redemption.
+ * Build a vault deposit or redemption, swapping in the same batch if it needs to.
  *
- * `amount` is denominated in whatever the action spends: the vault's asset for
- * a deposit, its shares for a redemption.
+ * `amount` is denominated in whatever the action spends: for a deposit that is
+ * `counterpart` if one is given and the vault's asset otherwise; for a
+ * redemption it is always the vault's shares.
+ *
+ * `counterpart` is the other side of the trade — what a deposit is paid WITH,
+ * or what a redemption should come back AS. Naming the vault's own asset is the
+ * same as omitting it: there is nothing to swap, so no swap leg is built.
  *
  * The encryption key is required and is not prompted for here: the 7702
  * relay-adapt executes as an ephemeral EOA derived from it, that EOA is the
@@ -146,6 +226,7 @@ export const getMorphoVaultInputs = async (
   amount: bigint,
   slippageBasisPoints: bigint,
   encryptionKey: string,
+  counterpart?: MorphoVaultLeg,
 ): Promise<MorphoVaultBuild> => {
   if (!isMorphoSupportedNetwork(chainName)) {
     throw new Error(`Morpho vaults are Ethereum-only; this wallet is on ${chainName}.`);
@@ -166,25 +247,59 @@ export const getMorphoVaultInputs = async (
   const { assetAddress, assetDecimals, shareDecimals } =
     await MorphoVaultAPI.getVaultData(vault.vaultAddress, provider);
 
+  const asset: RecipeERC20Info = {
+    tokenAddress: assetAddress,
+    decimals: assetDecimals,
+  };
+  const swapLeg = needsSwapLeg(counterpart?.tokenAddress, assetAddress)
+    ? counterpart
+    : undefined;
+
+  const shares: MorphoVaultLeg = {
+    tokenAddress: vault.vaultAddress,
+    decimals: Number(shareDecimals),
+    amount,
+  };
+  const assetLeg: MorphoVaultLeg = {
+    tokenAddress: assetAddress,
+    decimals: Number(assetDecimals),
+    amount,
+  };
+  // A deposit spends what it is paid with; a redemption always spends shares.
   const spend: MorphoVaultLeg =
-    action === "deposit"
-      ? { tokenAddress: assetAddress, decimals: Number(assetDecimals), amount }
-      : { tokenAddress: vault.vaultAddress, decimals: Number(shareDecimals), amount };
+    action === "deposit" ? { ...(swapLeg ?? assetLeg), amount } : shares;
   const receiveTokenAddress =
-    action === "deposit" ? vault.vaultAddress : assetAddress;
+    action === "deposit"
+      ? vault.vaultAddress
+      : (swapLeg?.tokenAddress ?? assetAddress);
 
   const relayAdaptUnshieldERC20Amounts: RecipeERC20Amount[] = [
     { tokenAddress: spend.tokenAddress, decimals: BigInt(spend.decimals), amount },
   ];
 
-  const recipe = buildRecipe(action, vault, slippageBasisPoints, executor, provider);
   const recipeInput: RecipeInput = {
     networkName: chainName,
     railgunAddress,
     erc20Amounts: relayAdaptUnshieldERC20Amounts,
     nfts: [],
   };
-  const recipeOutput = await recipe.getRecipeOutput(recipeInput);
+  const recipeOutput = swapLeg
+    ? await comboRecipe(
+        action,
+        vault,
+        slippageBasisPoints,
+        executor,
+        provider,
+        asset,
+        { tokenAddress: swapLeg.tokenAddress, decimals: BigInt(swapLeg.decimals) },
+      ).getComboMealOutput(recipeInput)
+    : await bareRecipe(
+        action,
+        vault,
+        slippageBasisPoints,
+        executor,
+        provider,
+      ).getRecipeOutput(recipeInput);
 
   // Everything the batch ends holding comes back to this wallet, matching how
   // the swap path shields its outputs.
@@ -197,6 +312,7 @@ export const getMorphoVaultInputs = async (
   return {
     action,
     vault,
+    swapped: Boolean(swapLeg),
     spend,
     receive: receivedLeg(recipeOutput, receiveTokenAddress),
     relayAdaptUnshieldERC20Amounts,
