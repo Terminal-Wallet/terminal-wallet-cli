@@ -7,6 +7,7 @@
  * rail already runs. Nothing here is vault-specific past building the recipe.
  */
 import { NetworkName, RailgunERC20Recipient } from "@railgun-community/shared-models";
+import { Contract, ZeroAddress } from "ethers";
 import {
   MorphoVaultAPI,
   MorphoVaultV1DepositRecipe,
@@ -45,13 +46,6 @@ export interface MorphoVaultRef {
 }
 
 /**
- * The vaults offered in the builder.
- *
- * The cookbook ships these addresses but does not re-export its registry from
- * the package root, and a curated list is what the picker wants anyway — every
- * other parameter (asset, both decimals) is read from the vault itself.
- */
-/**
  * How wide the swap leg of a combo may slip.
  *
  * Only the swap needs this — the vault leg has its own, much tighter tolerance,
@@ -59,6 +53,23 @@ export interface MorphoVaultRef {
  */
 export const VAULT_SWAP_SLIPPAGE_BPS = 320;
 
+/**
+ * The vaults offered in the builder.
+ *
+ * Curated rather than enumerated. Morpho lists hundreds and several carry live
+ * `deposit_disabled` or bad-debt warnings, so an automatic list would offer
+ * things a deposit or a redemption could fail on. These were each verified on
+ * mainnet — name, asset, decimals, that `previewDeposit` answers, and which
+ * generation they are — rather than taken from a document.
+ *
+ * The generation is not cosmetic: it picks the recipe subclass. V1 answers
+ * `MORPHO()`, V2 answers `receiveAssetsGate()`, and every entry below was
+ * classified by asking the contract.
+ *
+ * Deliberately not offered: DAI and wstETH. The only vaults for either are
+ * around $1M of liquidity, which is not enough to be sure a redemption comes
+ * back out.
+ */
 export const MORPHO_VAULTS: readonly MorphoVaultRef[] = [
   {
     name: "Steakhouse USDC",
@@ -70,7 +81,65 @@ export const MORPHO_VAULTS: readonly MorphoVaultRef[] = [
     vaultAddress: "0xbeef088055857739C12CD3765F20b7679Def0f51",
     generation: "V2",
   },
+  {
+    name: "Steakhouse USDT",
+    vaultAddress: "0xbEef047a543E45807105E51A8BBEFCc5950fcfBa",
+    generation: "V1",
+  },
+  {
+    name: "Steakhouse Prime USDT",
+    vaultAddress: "0xbeef003C68896c7D2c3c60d363e8d71a49Ab2bf9",
+    generation: "V2",
+  },
+  {
+    name: "Steakhouse ETH",
+    vaultAddress: "0xBEEf050ecd6a16c4e7bfFbB52Ebba7846C4b8cD4",
+    generation: "V1",
+  },
+  {
+    name: "Vault Bridge WETH",
+    vaultAddress: "0x31A5684983EeE865d943A696AAC155363bA024f9",
+    generation: "V1",
+  },
+  {
+    name: "Vault Bridge WBTC",
+    vaultAddress: "0x812B2C6Ab3f4471c0E43D4BB61098a9211017427",
+    generation: "V1",
+  },
 ];
+
+/**
+ * Whether a V2 vault would refuse this wallet outright.
+ *
+ * Morpho Vaults V2 lets a curator attach a gate contract that only allows
+ * allowlisted addresses to deposit or redeem. This wallet executes every batch
+ * as a FRESH ephemeral account that has never been allowlisted anywhere, so a
+ * gated vault does not merely inconvenience it — every deposit and every
+ * redemption reverts, permanently, and the batch mines while doing nothing
+ * (relay-adapt does not require success).
+ *
+ * None of the vaults above have a gate today. This is checked anyway, because
+ * a curator can add one after the fact and the failure is otherwise silent.
+ */
+export const isVaultGated = async (
+  vault: MorphoVaultRef,
+  provider: ReturnType<typeof getProviderForChain>,
+): Promise<boolean> => {
+  if (vault.generation !== "V2") return false;
+  const contract = new Contract(
+    vault.vaultAddress,
+    [
+      "function receiveAssetsGate() view returns (address)",
+      "function sendAssetsGate() view returns (address)",
+    ],
+    provider,
+  );
+  const gates = await Promise.all([
+    contract.receiveAssetsGate().catch(() => ZeroAddress),
+    contract.sendAssetsGate().catch(() => ZeroAddress),
+  ]);
+  return gates.some((gate: string) => gate !== ZeroAddress);
+};
 
 /** Morpho is deployed on Ethereum only; every recipe rejects other networks. */
 export const isMorphoSupportedNetwork = (chainName: NetworkName): boolean =>

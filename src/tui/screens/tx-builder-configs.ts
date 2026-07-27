@@ -64,6 +64,7 @@ import {
   MorphoVaultAction,
   getMorphoVaultInputs,
   isMorphoSupportedNetwork,
+  isVaultGated,
 } from "../../railgun/transaction/morpho/vault";
 import { MorphoVaultAPI } from "@railgun-community/cookbook";
 import { getProviderForChain } from "../../railgun/network/network-util";
@@ -172,6 +173,10 @@ const loadVaultChoices = async (
       provider,
     ).catch(() => undefined);
     if (!data) continue;
+    // A gated V2 vault refuses this wallet outright — the executor is a fresh
+    // account that has never been allowlisted — and the batch would mine
+    // having done nothing. Better absent than offered and broken.
+    if (await isVaultGated(vault, provider).catch(() => false)) continue;
     const spendAddress =
       action === "deposit" ? data.assetAddress : vault.vaultAddress;
     const held = balances.find(
