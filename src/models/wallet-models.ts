@@ -49,6 +49,14 @@ export type ExternalSignerRecord = {
 };
 
 
+export type PositionAccountRecord = {
+  slot: number;
+  marketId: string;
+  loanToken: string;
+  collateralToken: string;
+  openedAt: number;
+};
+
 export type KeychainFile = {
   name: string;
   salt: string;
@@ -65,6 +73,16 @@ export type KeychainFile = {
    */
   responsiveMenu?: boolean;
   customProviders?: CustomProviderMap;
+  /**
+   * Which reserved-band slot holds which address-bound position, per RAILGUN
+   * wallet. A convenience: the accounts derive deterministically from the seed,
+   * so losing this costs a rediscovery scan, not the positions.
+   *
+   * Keyed by railgunWalletID because the ephemeral derivation path embeds the
+   * wallet's own index — the same slot is a different account under a different
+   * wallet, and a shared record would point at the wrong one.
+   */
+  positionAccounts?: MapType<PositionAccountRecord[]>;
   showSenderAddress?: boolean;
   /**
    * Broadcaster addresses the user has pinned or rejected. Persisted so a

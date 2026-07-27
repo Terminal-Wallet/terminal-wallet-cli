@@ -91,24 +91,6 @@ export const positionAccountAddress = (
   );
 
 /**
- * A position the wallet is keeping an account for.
- *
- * `marketId` identifies it on Morpho; the two token addresses are recorded so
- * they can be registered with the wallet's token list at allocation time. That
- * matters more than it looks: the recovery scanner enumerates a curated token
- * list, so a token it has never heard of is invisible, and residue left at a
- * position account after a partly-failed batch would not show up.
- */
-export interface PositionAccountRecord {
-  slot: number;
-  marketId: string;
-  loanToken: string;
-  collateralToken: string;
-  /** When it was allocated, so a stale registry can be reasoned about. */
-  openedAt: number;
-}
-
-/**
  * The lowest slot not present in `taken`.
  *
  * Absence from the registry is NOT on its own evidence that a slot is free —
