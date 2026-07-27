@@ -22,6 +22,7 @@ import { createModal, shifted } from "../widgets/modal";
 import {
   FieldKey,
   BuilderState,
+  VaultChoice,
   fieldDisplay,
   validate,
   summarize,
@@ -58,6 +59,12 @@ export interface TxBuilderConfig {
   loadBuyTokens?: () =>
     | RailgunDisplayBalance[]
     | Promise<RailgunDisplayBalance[]>; // swaps: buy-token options
+  /**
+   * Vault flows: the vaults on offer, each already paired with the balance this
+   * action would spend. Resolving the pair needs the vault's own asset/share
+   * metadata, so it happens here rather than in the picker.
+   */
+  loadVaults?: () => Promise<VaultChoice[]>;
   defaultAddress?: string; // seeds (editable) the address field, e.g. swap 0zk destination
   submit: (state: BuilderState) => Promise<{ ok: boolean; error?: string }>;
 }
@@ -67,6 +74,7 @@ type Row = FieldKey | "__send" | "__cancel";
 const FIELD_LABELS: Record<FieldKey, string> = {
   token: "Token",
   buyToken: "Buy token",
+  vault: "Vault",
   amount: "Amount",
   address: "Recipient",
   memo: "Memo",
@@ -184,10 +192,38 @@ export const runTxBuilder = async (
       if (addr) state.token = balances.find((b) => b.tokenAddress === addr);
     };
 
+    const editVault = async () => {
+      if (!cfg.loadVaults) return;
+      const choices = await cfg.loadVaults();
+      if (!choices.length) {
+        provider.notify("No vaults available on this network.");
+        return;
+      }
+      const picked = await provider.select(
+        "Select vault",
+        choices.map((c) => ({
+          label: c.vault.name,
+          value: c.vault.vaultAddress,
+          hint: `${formatUnits(c.token.amount, c.token.decimals)} ${c.token.symbol}`,
+        })),
+      );
+      const choice = choices.find((c) => c.vault.vaultAddress === picked);
+      if (choice) {
+        // The vault decides the token, so picking one also settles what the
+        // amount field measures against.
+        state.vault = choice;
+        state.token = choice.token;
+        state.amount = undefined;
+      }
+    };
+
     const edit = async (key: FieldKey) => {
       switch (key) {
         case "token":
           await editToken();
+          break;
+        case "vault":
+          await editVault();
           break;
         case "amount": {
           const a = await provider.input(

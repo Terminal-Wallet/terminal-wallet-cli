@@ -83,7 +83,9 @@ export const createPalette = (host: PaletteHost): Palette => {
           ? "public"
           : card.category === "SWAP"
             ? "0x swap"
-            : "cookbook";
+            : card.category === "DEFI"
+              ? "morpho"
+              : "cookbook";
     if (card.disabled) {
       return `${tag(card.label, "gray")}\n${tag("unavailable", "gray")}`;
     }

@@ -52,7 +52,17 @@ import {
 } from "./tx-flow-helpers";
 import { RunResult, SendOutcome } from "../../flows/run";
 import { TxBuilderConfig } from "./tx-builder";
-import { BuilderState } from "./tx-builder-core";
+import { BuilderState, VaultChoice } from "./tx-builder-core";
+import {
+  MORPHO_VAULTS,
+  MorphoVaultAction,
+  getMorphoVaultInputs,
+  isMorphoSupportedNetwork,
+} from "../../railgun/transaction/morpho/vault";
+import { MorphoVaultAPI } from "@railgun-community/cookbook";
+import { getProviderForChain } from "../../railgun/network/network-util";
+import { getTokenInfo } from "../../railgun/balance/token-util";
+import { runCrossContractTransaction } from "../../flows/deps/cross-contract";
 import {
   LegsState, Leg, toRecipients } from "../../flows/caps";
 import { isNativeChoice, makeNativeEntry } from "../../flows/native-token";
@@ -102,6 +112,63 @@ export const buildSwapInputs = async (
   return { inputs, amount, sellIsBase: wrapped.symbol === sell.symbol };
 };
 
+/**
+ * Vault rates move only with interest accrual and fees, so the quote and the
+ * execution are near-identical. This is headroom against a same-block change,
+ * not a real price tolerance — tight enough to be meaningful, loose enough that
+ * a batch does not revert and cost the gas for nothing.
+ */
+const VAULT_SLIPPAGE_BPS = 100n;
+
+/** Deposit floor 2.9M, redeem 2.8M — the recipes' own declared minimums. */
+const VAULT_DEPOSIT_GAS_UNITS = 2_900_000n;
+const VAULT_REDEEM_GAS_UNITS = 2_800_000n;
+
+/**
+ * The vaults on offer, each paired with the balance its action would spend: the
+ * vault's asset for a deposit, its shares for a redemption. A vault the wallet
+ * holds nothing for is still listed, showing zero, so the option is
+ * discoverable rather than silently absent.
+ */
+const loadVaultChoices = async (
+  chainName: NetworkName,
+  action: MorphoVaultAction,
+): Promise<VaultChoice[]> => {
+  if (!isMorphoSupportedNetwork(chainName)) return [];
+  const balances = await getPrivateERC20BalancesForChain(chainName);
+  const provider = getProviderForChain(chainName);
+  const choices: VaultChoice[] = [];
+  for (const vault of MORPHO_VAULTS) {
+    const data = await MorphoVaultAPI.getVaultData(
+      vault.vaultAddress,
+      provider,
+    ).catch(() => undefined);
+    if (!data) continue;
+    const spendAddress =
+      action === "deposit" ? data.assetAddress : vault.vaultAddress;
+    const held = balances.find(
+      (b) => b.tokenAddress.toLowerCase() === spendAddress.toLowerCase(),
+    );
+    if (held) {
+      choices.push({ vault, token: held });
+      continue;
+    }
+    const info = await getTokenInfo(chainName, spendAddress).catch(() => undefined);
+    if (!info) continue;
+    choices.push({
+      vault,
+      token: {
+        symbol: info.symbol,
+        name: info.name,
+        tokenAddress: spendAddress,
+        decimals: info.decimals,
+        amount: 0n,
+      },
+    });
+  }
+  return choices;
+};
+
 type SubmitResult = { ok: boolean; error?: string };
 
 /**
@@ -121,6 +188,39 @@ const toResult = (r: RunResult<SendOutcome>): SubmitResult =>
 
 /** Consolidated recipients from the multi-leg state (empty if none complete). */
 const legRecipients = (s: BuilderState) => (s.legs ? toRecipients(s.legs) : []);
+
+/** Shared submit for both vault directions — only the action and label differ. */
+const submitVault = async (
+  chainName: NetworkName,
+  action: MorphoVaultAction,
+  type: RailgunTransaction,
+  s: BuilderState,
+): Promise<SubmitResult> => {
+  if (!s.vault || !s.amount) return { ok: false, error: "incomplete" };
+  const encryptionKey = await requireEncryptionKey();
+  if (!encryptionKey) return { ok: false, error: "cancelled" };
+  const amount = parseUnits(s.amount, s.vault.token.decimals);
+  const inputs = await getMorphoVaultInputs(
+    chainName,
+    action,
+    s.vault.vault,
+    amount,
+    VAULT_SLIPPAGE_BPS,
+    encryptionKey,
+  );
+  return toResult(
+    await runCrossContractTransaction(
+      {
+        type,
+        chainName,
+        inputs,
+        encryptionKey,
+        fee: s.fee ?? resolveDefaultFee(),
+      },
+      applyGasDetailsConfirm(s.gas, legsView(s)),
+    ),
+  );
+};
 
 /** Complete legs split into native (wrap/unwrap) and ERC20. */
 const splitNative = (s: BuilderState): { native: Leg[]; erc20: Leg[] } => {
@@ -528,6 +628,33 @@ export const txBuilderConfigs: Record<
       };
       return toResult(await runPublicSwapTransaction(spec, applyGasPublicConfirm(s.gas)));
     },
+  }),
+
+  "morpho-vault-deposit": (chainName) => ({
+    title: "Deposit into a Morpho vault — Privately",
+    chainName,
+    verb: "Deposit",
+    // No token row: the vault is what decides which asset this spends.
+    fields: ["vault", "amount", "fee", "gas"],
+    loadVaults: () => loadVaultChoices(chainName, "deposit"),
+    ...gasInfo(chainName),
+    gasUnitsHint: VAULT_DEPOSIT_GAS_UNITS,
+    relayAdapt: true,
+    submit: (s: BuilderState) =>
+      submitVault(chainName, "deposit", RailgunTransaction.MorphoVaultDeposit, s),
+  }),
+
+  "morpho-vault-redeem": (chainName) => ({
+    title: "Redeem from a Morpho vault — Privately",
+    chainName,
+    verb: "Redeem",
+    fields: ["vault", "amount", "fee", "gas"],
+    loadVaults: () => loadVaultChoices(chainName, "redeem"),
+    ...gasInfo(chainName),
+    gasUnitsHint: VAULT_REDEEM_GAS_UNITS,
+    relayAdapt: true,
+    submit: (s: BuilderState) =>
+      submitVault(chainName, "redeem", RailgunTransaction.MorphoVaultRedeem, s),
   }),
 };
 

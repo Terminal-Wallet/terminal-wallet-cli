@@ -17,6 +17,7 @@ export * from "./stubs/send-private-deps";
 export * from "./stubs/send-public-deps";
 export * from "./stubs/cross-contract-pipeline";
 export * from "./stubs/approval-deps";
+export * from "./stubs/fake-provider";
 
 // fixtures
 export * from "./fixtures/tokens";
@@ -27,3 +28,4 @@ export * from "./fixtures/fees";
 export * from "./fixtures/gas";
 export * from "./fixtures/proved";
 export * from "./fixtures/specs";
+export * from "./fixtures/railgun-fees";

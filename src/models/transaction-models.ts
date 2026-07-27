@@ -31,4 +31,6 @@ export enum RailgunTransaction {
   PublicBaseTransfer = "PUBLIC BASE TRANSFER",
   Public0XSwap = "PUBLIC ZER0X SWAP",
   Private0XSwap = "PRIVATE ZER0X SWAP",
+  MorphoVaultDeposit = "MORPHO VAULT DEPOSIT",
+  MorphoVaultRedeem = "MORPHO VAULT REDEEM",
 }

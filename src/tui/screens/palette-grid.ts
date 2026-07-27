@@ -9,7 +9,7 @@
  */
 import { buildActions, MenuGroup } from "../actions";
 
-export type PaletteCategory = "PRIVATE" | "PUBLIC" | "SWAP" | "OTHER";
+export type PaletteCategory = "PRIVATE" | "PUBLIC" | "SWAP" | "DEFI" | "OTHER";
 
 /** The balance set a seeded token came from (anchored to the rail section). */
 export type TokenKind = "private" | "public";
@@ -31,20 +31,30 @@ const OPENABLE = new Set([
   "public-transfer",
   "private-swap",
   "public-swap",
+  "morpho-vault-deposit",
+  "morpho-vault-redeem",
 ]);
 
 const CATEGORY_OF: Partial<Record<MenuGroup, PaletteCategory>> = {
   "Private Actions": "PRIVATE",
   "Public Actions": "PUBLIC",
   "0x Swap Tools": "SWAP",
+  "Morpho Vaults": "DEFI",
 };
 
-export const CATEGORY_ORDER: PaletteCategory[] = ["PRIVATE", "PUBLIC", "SWAP", "OTHER"];
+export const CATEGORY_ORDER: PaletteCategory[] = [
+  "PRIVATE",
+  "PUBLIC",
+  "SWAP",
+  "DEFI",
+  "OTHER",
+];
 
 /**
  * Whether a card is gated out by the seeded token's kind. Swaps follow the split:
  * a private token disables PUBLIC actions AND public-swap; a public token disables
- * PRIVATE actions AND private-swap. OTHER is never gated; no kind = nothing gated.
+ * PRIVATE actions AND private-swap. DEFI spends the private balance, so it gates
+ * with PRIVATE. OTHER is never gated; no kind = nothing gated.
  */
 export const isCardGated = (
   card: Pick<PaletteCard, "id" | "category">,
@@ -53,7 +63,9 @@ export const isCardGated = (
   if (!kind || card.category === "OTHER") return false;
   return kind === "private"
     ? card.category === "PUBLIC" || card.id === "public-swap"
-    : card.category === "PRIVATE" || card.id === "private-swap";
+    : card.category === "PRIVATE" ||
+        card.category === "DEFI" ||
+        card.id === "private-swap";
 };
 
 /** The palette's card set: openable actions grouped by category + a synthetic Other. */

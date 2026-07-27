@@ -10,13 +10,36 @@ import { FeeMode } from "../../flows/spec";
 import { RailgunDisplayBalance } from "../../models/balance-models";
 import { LegsState, FlowCaps, validateLegs } from "../../flows/caps";
 import { TokenOverspend } from "../../flows/balance";
+import { MorphoVaultRef } from "../../railgun/transaction/morpho/vault";
 import { fmtAmount } from "../format/deck";
 
-export type FieldKey = "token" | "buyToken" | "amount" | "address" | "memo" | "gas" | "fee" | "showSender";
+export type FieldKey =
+  | "token"
+  | "buyToken"
+  | "vault"
+  | "amount"
+  | "address"
+  | "memo"
+  | "gas"
+  | "fee"
+  | "showSender";
+
+/**
+ * A vault the builder can act on, paired with the balance the action spends.
+ *
+ * They are picked together because the vault decides the token: a deposit
+ * spends the vault's asset and a redemption spends its shares, so there is no
+ * separate token to choose.
+ */
+export interface VaultChoice {
+  vault: MorphoVaultRef;
+  token: RailgunDisplayBalance;
+}
 
 export interface BuilderState {
   token?: RailgunDisplayBalance; // for swaps: the SELL token
   buyToken?: RailgunDisplayBalance; // swaps: the BUY token
+  vault?: VaultChoice; // vault flows: the vault, and the token it spends
   amount?: string;
   address?: string;
   memo?: string;
@@ -98,6 +121,8 @@ export const fieldDisplay = (key: FieldKey, s: BuilderState): string => {
         : "‹select token›";
     case "buyToken":
       return s.buyToken ? s.buyToken.symbol : "‹select token›";
+    case "vault":
+      return s.vault ? s.vault.vault.name : "‹select vault›";
     case "amount":
       return s.amount ? s.amount : "‹enter amount›";
     case "address":
@@ -126,6 +151,7 @@ export const validate = (
   const missing: string[] = [];
   if (fields.includes("token") && !s.token) missing.push("token");
   if (fields.includes("buyToken") && !s.buyToken) missing.push("buy token");
+  if (fields.includes("vault") && !s.vault) missing.push("vault");
   if (fields.includes("amount")) {
     const n = Number(s.amount);
     if (!s.amount || !isFinite(n) || n <= 0) missing.push("a valid amount");

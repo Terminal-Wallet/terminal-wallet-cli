@@ -148,10 +148,16 @@ export const getERC20AmountRecipients = (
   return consolidatedAmounts;
 };
 
-/** Relay-Adapt is required for base-token unshields and private 0x swaps. */
+/**
+ * Relay-Adapt is required for base-token unshields and for every flow that
+ * runs a cookbook recipe against a contract — the 0x swap and the Morpho vault
+ * round trips.
+ */
 export const useRelayAdapt = (type: RailgunTransaction): boolean =>
   type === RailgunTransaction.UnshieldBase ||
-  type === RailgunTransaction.Private0XSwap;
+  type === RailgunTransaction.Private0XSwap ||
+  type === RailgunTransaction.MorphoVaultDeposit ||
+  type === RailgunTransaction.MorphoVaultRedeem;
 
 /**
  * HOW a transaction executes — the second axis, orthogonal to FeeMode.
@@ -182,6 +188,8 @@ export type ExecutionMode = { kind: "direct" } | { kind: "ephemeral-7702" };
 export const executionMode = (type: RailgunTransaction): ExecutionMode =>
   type === RailgunTransaction.UnshieldBase ||
   type === RailgunTransaction.Private0XSwap ||
+  type === RailgunTransaction.MorphoVaultDeposit ||
+  type === RailgunTransaction.MorphoVaultRedeem ||
   type === RailgunTransaction.ShieldBase
     ? { kind: "ephemeral-7702" }
     : { kind: "direct" };

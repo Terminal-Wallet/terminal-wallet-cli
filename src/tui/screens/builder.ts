@@ -127,6 +127,7 @@ export interface Builder {
 const FIELD_LABELS: Record<FieldKey, string> = {
   token: "Token",
   buyToken: "Buy token",
+  vault: "Vault",
   amount: "Amount",
   address: "Recipient",
   memo: "Memo",
@@ -789,6 +790,27 @@ export const createBuilder = (host: BuilderHost): Builder => {
           choices.map((b) => ({ label: b.symbol, value: b.tokenAddress, hint: b.name })),
         );
         if (address) state.buyToken = choices.find((b) => b.tokenAddress === address);
+      }
+    } else if (key === "vault" && cfg.loadVaults) {
+      const choices = await cfg.loadVaults();
+      if (!choices.length) provider.notify("No vaults available on this network.");
+      else {
+        const picked = await provider.select(
+          "Select vault",
+          choices.map((c) => ({
+            label: c.vault.name,
+            value: c.vault.vaultAddress,
+            hint: `${formatUnits(c.token.amount, c.token.decimals)} ${c.token.symbol}`,
+          })),
+        );
+        const choice = choices.find((c) => c.vault.vaultAddress === picked);
+        if (choice) {
+          // The vault decides the token, so picking one also settles what the
+          // amount field, the overspend check and the fee reservation measure.
+          state.vault = choice;
+          state.token = choice.token;
+          state.amount = undefined;
+        }
       }
     } else if (key === "amount") {
       const single: LegsState = { legs: [{ id: "__single", token: state.token }], seq: 1 };
