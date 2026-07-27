@@ -58,6 +58,7 @@ import {
   TokenOverspend,
   overspentTokens,
   expectedBalance,
+  feeReserved,
   gasReservationFor,
   maxAmount,
 } from "../../flows/balance";
@@ -671,14 +672,27 @@ export const createBuilder = (host: BuilderHost): Builder => {
    * Says why the spendable figure is short of the balance, when it is because
    * gas was held back. Without it a base-token "max" reads as a wrong number.
    */
-  const reservedNote = (tokenAddress: string): string => {
-    if (!cfg?.gasFromBalance || !feeReservation) return "";
-    if (feeReservation.tokenAddress.toLowerCase() !== tokenAddress.toLowerCase())
-      return "";
-    return ` (${fmtAmount(
-      formatUnits(feeReservation.amount, cfg.gasDecimals),
-      6,
-    )} held for gas)`;
+  /**
+   * What a fee is holding back from THIS token, so a spendable figure that has
+   * been reduced says why it was.
+   *
+   * It used to speak only for flows whose GAS comes out of the balance, which
+   * left the commonest case silent: a broadcaster fee in the same token you
+   * are sending. On a swap — 2.6M gas of cross-contract — that fee can be the
+   * whole balance, and the amount field said "spendable 0" and nothing else.
+   * It also names the way out, because there is one and it is not obvious:
+   * the fee can be paid in a different token.
+   *
+   * Denominated in the TOKEN's decimals, not the chain's gas decimals: a
+   * reservation is held against the token it is reserved from.
+   */
+  const reservedNote = (token: RailgunDisplayBalance): string => {
+    const held = feeReserved(feeReservation, token.tokenAddress);
+    if (held <= 0n) return "";
+    const amount = fmtAmount(formatUnits(held, token.decimals), 6);
+    return cfg?.gasFromBalance
+      ? ` (${amount} held for gas)`
+      : ` (${amount} held for the fee — pay it in another token to free this)`;
   };
 
   const editLegAmount = async (id: string) => {
@@ -696,7 +710,7 @@ export const createBuilder = (host: BuilderHost): Builder => {
         hint: `spendable ${fmtAmount(
           formatUnits(expected > 0n ? expected : 0n, leg.token.decimals),
           6,
-        )} ${leg.token.symbol}${reservedNote(leg.token.tokenAddress)} · type "max"`,
+        )} ${leg.token.symbol}${reservedNote(leg.token)} · type "max"`,
       };
     }
     let amount = await getInputProvider().input(
@@ -788,7 +802,7 @@ export const createBuilder = (host: BuilderHost): Builder => {
           hint: `spendable ${fmtAmount(
             formatUnits(expected > 0n ? expected : 0n, state.token.decimals),
             6,
-          )} ${state.token.symbol}${reservedNote(state.token.tokenAddress)} · type "max"`,
+          )} ${state.token.symbol}${reservedNote(state.token)} · type "max"`,
         };
       }
       let amount = await provider.input(
