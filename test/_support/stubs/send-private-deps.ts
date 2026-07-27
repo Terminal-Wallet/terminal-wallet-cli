@@ -16,6 +16,9 @@ export interface SendPrivateCalls {
   reset: number;
   watched?: { kind: "relayed" | "self"; hash: string };
   mined?: { chain: NetworkName; hash: string };
+  /** Whether the mined batch was interrogated for a relay-adapt CallError. */
+  failureChecked?: { chain: NetworkName; hash: string };
+  batchFailed?: { chain: NetworkName; hash: string; reason: string };
 }
 
 const txResponse = (hash: string): TransactionResponse =>
@@ -60,6 +63,15 @@ export const makeSendPrivateDeps = (
     },
     notifyMined: (chain, hash) => {
       calls.mined = { chain, hash };
+    },
+    // Clean by default: a test that wants a failed batch overrides it, so the
+    // rest keep asserting the success path without saying so.
+    relayAdaptFailure: async (chain, hash) => {
+      calls.failureChecked = { chain, hash };
+      return undefined;
+    },
+    notifyBatchFailed: (chain, hash, reason) => {
+      calls.batchFailed = { chain, hash, reason };
     },
     ...over,
   };

@@ -24,6 +24,7 @@ import { getTransactionURLForChain } from "../railgun/network/network-util";
 import { waitForRelayedTx, waitForTx } from "../railgun/transaction/public/public-tx";
 import { resetBalanceScan } from "../railgun/wallet/private-wallet";
 import { ratchetEphemeralIfRelayAdapt } from "../railgun/wallet/ephemeral-util";
+import { getRelayAdaptFailure } from "../railgun/transaction/relay-adapt-error";
 
 export interface SendPrivateDeps {
   broadcast: (
@@ -48,6 +49,20 @@ export interface SendPrivateDeps {
   watchSelf: (tx: TransactionResponse) => Promise<void>;
   /** Surface a "mined" status. */
   notifyMined: (chainName: NetworkName, hash: string) => void;
+  /**
+   * The failure a mined relay-adapt batch is carrying, if any. A relay-adapt
+   * transaction can succeed while the work inside it reverts.
+   */
+  relayAdaptFailure: (
+    chainName: NetworkName,
+    hash: string,
+  ) => Promise<string | undefined>;
+  /** Surface a batch that mined without doing what it said. */
+  notifyBatchFailed: (
+    chainName: NetworkName,
+    hash: string,
+    reason: string,
+  ) => void;
 }
 
 const defaultDeps: SendPrivateDeps = {
@@ -68,6 +83,38 @@ const defaultDeps: SendPrivateDeps = {
       durationMs: 30000,
       replace: true,
     }),
+  relayAdaptFailure: getRelayAdaptFailure,
+  notifyBatchFailed: (chainName, hash, reason) =>
+    emitCoreEvent({
+      type: "status:message",
+      // The transaction mined, so "failed" needs saying plainly or it reads as
+      // a warning about something that still worked.
+      text:
+        `Transaction mined but the batch did not complete (${reason}). ` +
+        `Funds may be recoverable from the ephemeral account: ` +
+        `${getTransactionURLForChain(chainName, hash)}`,
+      durationMs: 120000,
+      replace: true,
+    }),
+};
+
+/**
+ * Report the batch, once it has mined.
+ *
+ * Relay-adapt is the only path that can mine and still have failed, so it is
+ * the only one asked. Anything else goes straight to "mined".
+ */
+const settled = async (
+  deps: SendPrivateDeps,
+  chainName: NetworkName,
+  hash: string,
+  isRelayAdapt: boolean,
+): Promise<void> => {
+  const failure = isRelayAdapt
+    ? await deps.relayAdaptFailure(chainName, hash)
+    : undefined;
+  if (failure) deps.notifyBatchFailed(chainName, hash, failure);
+  else deps.notifyMined(chainName, hash);
 };
 
 /**
@@ -102,7 +149,9 @@ export const sendPrivateTransaction = async (
     const hash = await finalTx.send();
     await ratchetEphemeralIfRelayAdapt(chainName, proved.transaction);
     deps.resetScan();
-    void deps.watchRelayed(chainName, hash).then(() => deps.notifyMined(chainName, hash));
+    void deps
+      .watchRelayed(chainName, hash)
+      .then(() => settled(deps, chainName, hash, useRelayAdapt(type)));
     return { hash, url: deps.txUrl(chainName, hash) };
   }
 
@@ -114,6 +163,8 @@ export const sendPrivateTransaction = async (
   const txResult = await wallet.sendTransaction(proved.transaction);
   await ratchetEphemeralIfRelayAdapt(chainName, proved.transaction);
   deps.resetScan();
-  void deps.watchSelf(txResult).then(() => deps.notifyMined(chainName, txResult.hash));
+  void deps
+    .watchSelf(txResult)
+    .then(() => settled(deps, chainName, txResult.hash, useRelayAdapt(type)));
   return { hash: txResult.hash, url: deps.txUrl(chainName, txResult.hash) };
 };
