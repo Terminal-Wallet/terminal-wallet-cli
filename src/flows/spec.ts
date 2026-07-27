@@ -159,7 +159,11 @@ export const useRelayAdapt = (type: RailgunTransaction): boolean =>
   type === RailgunTransaction.MorphoVaultDeposit ||
   type === RailgunTransaction.MorphoVaultRedeem ||
   type === RailgunTransaction.FxMintOpen ||
-  type === RailgunTransaction.FxMintClose;
+  type === RailgunTransaction.FxMintClose ||
+  type === RailgunTransaction.FxMintTopup ||
+  type === RailgunTransaction.FxMintTopupBorrow ||
+  type === RailgunTransaction.FxMintBorrowMore ||
+  type === RailgunTransaction.FxMintRepay;
 
 /**
  * HOW a transaction executes — the second axis, orthogonal to FeeMode.
@@ -194,6 +198,10 @@ export const executionMode = (type: RailgunTransaction): ExecutionMode =>
   type === RailgunTransaction.MorphoVaultRedeem ||
   type === RailgunTransaction.FxMintOpen ||
   type === RailgunTransaction.FxMintClose ||
+  type === RailgunTransaction.FxMintTopup ||
+  type === RailgunTransaction.FxMintTopupBorrow ||
+  type === RailgunTransaction.FxMintBorrowMore ||
+  type === RailgunTransaction.FxMintRepay ||
   type === RailgunTransaction.ShieldBase
     ? { kind: "ephemeral-7702" }
     : { kind: "direct" };

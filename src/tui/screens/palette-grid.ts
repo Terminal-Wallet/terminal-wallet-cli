@@ -44,6 +44,10 @@ const OPENABLE = new Set([
   "morpho-vault-deposit",
   "morpho-vault-redeem",
   "fx-mint-open",
+  "fx-mint-topup",
+  "fx-mint-topup-borrow",
+  "fx-mint-borrow-more",
+  "fx-mint-repay",
   "fx-mint-close",
 ]);
 

@@ -57,6 +57,7 @@ import {
   VaultChoice,
   PoolChoice,
   PositionChoice,
+  FieldKey,
 } from "./tx-builder-core";
 import {
   MORPHO_VAULTS,
@@ -77,6 +78,10 @@ import {
 } from "../../railgun/transaction/fx/mint";
 import { FX_ADDRESSES, KNOWN_POOLS } from "@railgun-community/cookbook";
 import { getFxMintCloseInputs } from "../../railgun/transaction/fx/close";
+import {
+  FxAdjustAction,
+  getFxMintAdjustInputs,
+} from "../../railgun/transaction/fx/adjust";
 import { getPrivateNFTsForChain } from "../../railgun/balance/balance-cache";
 import { describeNFTs } from "../../railgun/balance/nft-util";
 import { fxPositionCollections } from "../../railgun/transaction/fx/position";
@@ -488,6 +493,120 @@ const previewFxCloseLegs = async (
     },
   );
   return defiLegs({ stepOutputs: build.steps } as never, await symbolResolver(chainName));
+};
+
+/** The four adjust actions, as builder cards. Same shape, different deltas. */
+const ADJUST_CARDS: {
+  id: string;
+  action: FxAdjustAction;
+  type: RailgunTransaction;
+  title: string;
+  verb: string;
+  /** Rows beyond the position, in display order. */
+  fields: FieldKey[];
+}[] = [
+  {
+    id: "fx-mint-topup",
+    action: "topup",
+    type: RailgunTransaction.FxMintTopup,
+    title: "Add collateral to an f(x) position — Privately",
+    verb: "Top up",
+    fields: ["token", "amount"],
+  },
+  {
+    id: "fx-mint-topup-borrow",
+    action: "topup-and-borrow",
+    type: RailgunTransaction.FxMintTopupBorrow,
+    title: "Add collateral and borrow more — Privately",
+    verb: "Top up",
+    fields: ["token", "amount", "debt"],
+  },
+  {
+    id: "fx-mint-borrow-more",
+    action: "borrow-more",
+    type: RailgunTransaction.FxMintBorrowMore,
+    // Borrowing against collateral already posted spends nothing up front, so
+    // there is no token or amount row at all.
+    title: "Borrow more against an f(x) position — Privately",
+    verb: "Borrow",
+    fields: ["debt"],
+  },
+  {
+    id: "fx-mint-repay",
+    action: "repay",
+    type: RailgunTransaction.FxMintRepay,
+    // Always fxUSD: the debt is denominated in it and no shipped combo swaps
+    // into it, which is the same asymmetry the close card has.
+    title: "Repay an f(x) position's debt — Privately",
+    verb: "Repay",
+    fields: ["amount"],
+  },
+];
+
+const adjustAmounts = (action: FxAdjustAction, s: BuilderState) => {
+  const spendDecimals =
+    action === "repay" ? 18 : (s.token?.decimals ?? s.position?.pool.collateralDecimals ?? 18);
+  return {
+    amount: s.amount ? parseUnits(s.amount, Number(spendDecimals)) : 0n,
+    debtChange: s.debt ? parseUnits(s.debt, 18) : 0n,
+  };
+};
+
+const buildAdjust = (
+  chainName: NetworkName,
+  action: FxAdjustAction,
+  s: BuilderState,
+) => {
+  if (!s.position) throw new Error("incomplete");
+  const { amount, debtChange } = adjustAmounts(action, s);
+  return (encryptionKey: string) =>
+    getFxMintAdjustInputs(
+      chainName,
+      action,
+      s.position!.pool.name,
+      s.position!.positionId,
+      amount,
+      debtChange,
+      encryptionKey,
+      action === "repay" || !s.token
+        ? undefined
+        : { tokenAddress: s.token.tokenAddress, decimals: s.token.decimals },
+    );
+};
+
+const previewAdjustLegs = async (
+  chainName: NetworkName,
+  action: FxAdjustAction,
+  s: BuilderState,
+): Promise<DefiLeg[]> => {
+  const encryptionKey = getCachedEncryptionKey();
+  if (!encryptionKey || !s.position) return [];
+  const build = await buildAdjust(chainName, action, s)(encryptionKey);
+  return defiLegs({ stepOutputs: build.steps } as never, await symbolResolver(chainName));
+};
+
+const submitAdjust = async (
+  chainName: NetworkName,
+  action: FxAdjustAction,
+  type: RailgunTransaction,
+  s: BuilderState,
+): Promise<SubmitResult> => {
+  if (!s.position) return { ok: false, error: "incomplete" };
+  const encryptionKey = await requireEncryptionKey();
+  if (!encryptionKey) return { ok: false, error: "cancelled" };
+  const inputs = await buildAdjust(chainName, action, s)(encryptionKey);
+  return toResult(
+    await runCrossContractTransaction(
+      {
+        type,
+        chainName,
+        inputs,
+        encryptionKey,
+        fee: s.fee ?? resolveDefaultFee(),
+      },
+      applyGasDetailsConfirm(s.gas, legsView(s)),
+    ),
+  );
 };
 
 const submitFxMintClose = async (
@@ -928,6 +1047,26 @@ export const txBuilderConfigs: Record<
     relayAdapt: true,
     submit: (s: BuilderState) => submitFxMintOpen(chainName, s),
   }),
+
+  ...Object.fromEntries(
+    ADJUST_CARDS.map((card) => [
+      card.id,
+      (chainName: NetworkName): TxBuilderConfig => ({
+        title: card.title,
+        chainName,
+        verb: card.verb,
+        fields: ["position", ...card.fields, "fee", "gas"],
+        loadPositions: () => loadPositionChoices(chainName),
+        loadTokens: () => getPrivateERC20BalancesForChain(chainName),
+        previewLegs: (s) => previewAdjustLegs(chainName, card.action, s),
+        ...gasInfo(chainName),
+        gasUnitsHint: FXMINT_GAS_FLOOR,
+        relayAdapt: true,
+        submit: (s: BuilderState) =>
+          submitAdjust(chainName, card.action, card.type, s),
+      }),
+    ]),
+  ),
 
   "fx-mint-close": (chainName) => ({
     title: "Close an f(x) position — Privately",
