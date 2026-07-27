@@ -12,6 +12,7 @@ import { LegsState, FlowCaps, validateLegs } from "../../flows/caps";
 import { TokenOverspend } from "../../flows/balance";
 import { FxPoolEntry } from "@railgun-community/cookbook";
 import { MorphoVaultRef } from "../../railgun/transaction/morpho/vault";
+import { asPercent, sliderBar } from "../format/slider";
 import { fmtAmount } from "../format/deck";
 
 export type FieldKey =
@@ -20,7 +21,9 @@ export type FieldKey =
   | "vault"
   | "pool"
   | "amount"
+  | "collateralPct"
   | "debt"
+  | "debtRatio"
   | "address"
   | "memo"
   | "gas"
@@ -55,6 +58,16 @@ export interface BuilderState {
   vault?: VaultChoice; // vault flows: the vault, and the token it spends
   pool?: PoolChoice; // fx flows: the pool, and the collateral it takes
   debt?: string; // fx flows: how much fxUSD to mint against the collateral
+  /**
+   * Slider positions, 0..1.
+   *
+   * These are what the user moves; `amount` and `debt` are what they resolve
+   * to, and the rest of the builder — overspend, fee reservation, submit —
+   * reads only those. So a slider is an input method, not a second source of
+   * truth about what is being spent.
+   */
+  collateralPct?: number;
+  debtRatio?: number;
   amount?: string;
   address?: string;
   memo?: string;
@@ -142,6 +155,16 @@ export const fieldDisplay = (key: FieldKey, s: BuilderState): string => {
       return s.pool ? s.pool.pool.name : "‹select pool›";
     case "debt":
       return s.debt ? s.debt : "‹enter amount to mint›";
+    case "collateralPct":
+      return s.collateralPct === undefined
+        ? "‹set with ← →›"
+        : `${sliderBar(s.collateralPct, 14)} ${asPercent(s.collateralPct)}` +
+          (s.amount ? `  ${s.amount}` : "");
+    case "debtRatio":
+      return s.debtRatio === undefined
+        ? "‹set with ← →›"
+        : `${sliderBar(s.debtRatio, 14)} ${asPercent(s.debtRatio, 1)}` +
+          (s.debt ? `  ${s.debt} fxUSD` : "");
     case "amount":
       return s.amount ? s.amount : "‹enter amount›";
     case "address":
@@ -176,6 +199,8 @@ export const validate = (
     const n = Number(s.debt);
     if (!s.debt || !isFinite(n) || n <= 0) missing.push("an amount to mint");
   }
+  if (fields.includes("collateralPct") && !s.amount) missing.push("collateral");
+  if (fields.includes("debtRatio") && !s.debt) missing.push("an amount to mint");
   if (fields.includes("amount")) {
     const n = Number(s.amount);
     if (!s.amount || !isFinite(n) || n <= 0) missing.push("a valid amount");

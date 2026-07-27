@@ -77,6 +77,17 @@ import {
   resolveDefaultFeeAsync,
 } from "../../flows/collect/fee";
 import { getTokenPricesUSD } from "../../price/defillama";
+import { parseUnits } from "ethers";
+import {
+  FxRisk,
+  fxDebtForRatio,
+  fxMaxOpenRatio,
+  fxPositionRisk,
+} from "../../railgun/transaction/fx/risk";
+import { clampFraction } from "../format/slider";
+import { fxRiskLines } from "../format/fx-position";
+import { getFxPool } from "@railgun-community/cookbook";
+import { getProviderForChain } from "../../railgun/network/network-util";
 import { balanceUSD, formatUSD } from "../../price/portfolio";
 import { amountLines, protocolFeeLines, BuilderView } from "../format/builder-detail";
 import { swapBuyLine, toSwapPreview, SwapQuotePreview } from "../format/swap";
@@ -130,7 +141,9 @@ const FIELD_LABELS: Record<FieldKey, string> = {
   vault: "Vault",
   pool: "Pool",
   amount: "Amount",
+  collateralPct: "Collateral",
   debt: "Mint",
+  debtRatio: "Loan",
   address: "Recipient",
   memo: "Memo",
   gas: "Gas",
@@ -164,6 +177,14 @@ export const createBuilder = (host: BuilderHost): Builder => {
    */
   let loadedBalances: RailgunDisplayBalance[] = [];
   let swapPreview: SwapQuotePreview | undefined;
+  /**
+   * The chosen pool's risk thresholds, read from the chain when it is picked.
+   * They are governance parameters — the long pools rebalance at 0.88 and the
+   * short pools at 0.90 — so they are never assumed.
+   */
+  let fxThresholds:
+    | { rebalanceDebtRatio: bigint; liquidationDebtRatio: bigint }
+    | undefined;
 
   const caps = () => flowCaps(cfg?.flowId ?? "");
   const findLeg = (id: string): Leg | undefined =>
@@ -207,6 +228,64 @@ export const createBuilder = (host: BuilderHost): Builder => {
   const currentOverspend = (): TokenOverspend[] => {
     const legs = legsForValidation();
     return legs ? overspentTokens(legs, feeReservation) : [];
+  };
+
+  /** The collateral the position would put up, from the slider's position. */
+  const collateralAmount = (): bigint => {
+    if (!state.token || state.collateralPct === undefined) return 0n;
+    const pct = BigInt(Math.round(clampFraction(state.collateralPct) * 10_000));
+    return (state.token.amount * pct) / 10_000n;
+  };
+
+  const collateralPriceUsd = (): number =>
+    state.token ? (prices[state.token.tokenAddress.toLowerCase()] ?? 0) : 0;
+
+  /** The live risk of what is currently on screen, if it is an fx position. */
+  const fxRisk = (): FxRisk | undefined => {
+    if (!fxThresholds || !state.token) return undefined;
+    const debt = state.debt ? parseUnits(state.debt, 18) : 0n;
+    return fxPositionRisk({
+      collateralAmount: collateralAmount(),
+      collateralDecimals: state.token.decimals,
+      collateralPriceUsd: collateralPriceUsd(),
+      debtAmount: debt,
+      ...fxThresholds,
+    });
+  };
+
+  /**
+   * Move a slider and write through to the amount it stands for.
+   *
+   * The sliders are an input method: `amount` and `debt` remain the only things
+   * the overspend gate, the fee reservation and submit ever read, so nothing
+   * downstream has to know a slider exists.
+   */
+  const nudge = (key: FieldKey, delta: number) => {
+    if (!cfg) return;
+    if (key === "collateralPct") {
+      const next = clampFraction((state.collateralPct ?? 0) + delta);
+      state.collateralPct = next;
+      if (state.token) {
+        state.amount = formatUnits(collateralAmount(), state.token.decimals);
+      }
+      // The debt was sized against the old collateral, so re-derive it.
+      if (state.debtRatio !== undefined) nudge("debtRatio", 0);
+      return;
+    }
+    if (key === "debtRatio") {
+      const ceiling = fxThresholds
+        ? fxMaxOpenRatio(fxThresholds.rebalanceDebtRatio)
+        : 0.5;
+      const next = Math.min(ceiling, clampFraction((state.debtRatio ?? 0) + delta));
+      state.debtRatio = next;
+      const debt = fxDebtForRatio(
+        collateralAmount(),
+        state.token?.decimals ?? 18,
+        collateralPriceUsd(),
+        next,
+      );
+      state.debt = debt > 0n ? formatUnits(debt, 18) : undefined;
+    }
   };
 
   // --- rows ------------------------------------------------------------------
@@ -312,6 +391,19 @@ export const createBuilder = (host: BuilderHost): Builder => {
     if (state.buyToken && !cfg.multiLeg) {
       lines.push(
         `${tag("buy", "gray")}    ${swapBuyLine(state.buyToken.symbol, swapPreview, (s) => fmtAmount(s, 6))}`,
+      );
+    }
+
+    // What the position would actually be, next to the controls that set it.
+    const risk = fxRisk();
+    if (risk && state.pool && fxThresholds) {
+      lines.push("");
+      lines.push(
+        ...fxRiskLines({
+          risk,
+          collateralSymbol: state.pool.token.symbol,
+          ...fxThresholds,
+        }),
       );
     }
 
@@ -833,6 +925,26 @@ export const createBuilder = (host: BuilderHost): Builder => {
           state.pool = choice;
           state.token = choice.token;
           state.amount = undefined;
+          state.collateralPct = undefined;
+          state.debt = undefined;
+          state.debtRatio = undefined;
+          // Its rebalance and liquidation ratios are what the risk meter is
+          // drawn against; without them the sliders have no scale, so this is
+          // read rather than defaulted.
+          fxThresholds = await getFxPool(
+            choice.pool.name,
+            getProviderForChain(cfg.chainName),
+          )
+            .then((pool) => ({
+              rebalanceDebtRatio: pool.rebalanceDebtRatio,
+              liquidationDebtRatio: pool.liquidationDebtRatio,
+            }))
+            .catch(() => undefined);
+          if (!fxThresholds) {
+            provider.notify(
+              "Could not read the pool's risk thresholds — the position meter is unavailable.",
+            );
+          }
         }
       }
     } else if (key === "debt") {
@@ -1045,6 +1157,26 @@ export const createBuilder = (host: BuilderHost): Builder => {
       void ctx.refreshHistory();
     }
   };
+
+  /**
+   * Sliders adjust in place rather than opening a prompt.
+   *
+   * Enter still opens the typed editor, because "40%" and "exactly 1.5 wstETH"
+   * are both things people mean. Coarse by default, fine with shift, so a
+   * position can be dialled in without arrowing forty times.
+   */
+  const sliderKey = (delta: number) => () => {
+    const row = rows[(list as unknown as { selected: number }).selected];
+    if (row !== "collateralPct" && row !== "debtRatio") return;
+    nudge(row, delta);
+    buildRows();
+    void computeFeePreview();
+    ctx.render();
+  };
+  list.key(["right"], sliderKey(0.05));
+  list.key(["left"], sliderKey(-0.05));
+  list.key(["S-right"], sliderKey(0.01));
+  list.key(["S-left"], sliderKey(-0.01));
 
   list.on("select", (_item: unknown, index: number) => {
     const row = rows[index];

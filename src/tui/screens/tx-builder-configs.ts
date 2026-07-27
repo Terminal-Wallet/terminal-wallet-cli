@@ -753,7 +753,9 @@ export const txBuilderConfigs: Record<
     verb: "Mint",
     // The pool names the collateral it wants; the token row is what you PAY
     // with. Anything other than the collateral folds a 0x swap in front.
-    fields: ["pool", "token", "amount", "debt", "fee", "gas"],
+    // Sliders rather than typed amounts: a position is found by moving one
+    // and watching the debt ratio, not by knowing the numbers in advance.
+    fields: ["pool", "token", "collateralPct", "debtRatio", "fee", "gas"],
     loadPools: () => loadPoolChoices(chainName),
     loadTokens: () => getPrivateERC20BalancesForChain(chainName),
     ...gasInfo(chainName),

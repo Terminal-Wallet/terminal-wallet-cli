@@ -83,7 +83,9 @@ const FIELD_LABELS: Record<FieldKey, string> = {
   vault: "Vault",
   pool: "Pool",
   amount: "Amount",
+  collateralPct: "Collateral",
   debt: "Mint",
+  debtRatio: "Loan",
   address: "Recipient",
   memo: "Memo",
   gas: "Gas",
@@ -261,9 +263,18 @@ export const runTxBuilder = async (
         case "pool":
           await editPool();
           break;
-        case "debt": {
+        case "debt":
+        case "debtRatio": {
+          // This renderer has no slider, so the loan is typed here.
           const d = await provider.input("Amount of fxUSD to mint");
           if (d) state.debt = d;
+          break;
+        }
+        case "collateralPct": {
+          const c = await provider.input(
+            `Collateral${state.token ? ` in ${state.token.symbol}` : ""}`,
+          );
+          if (c) state.amount = c;
           break;
         }
         case "amount": {
