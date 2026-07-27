@@ -941,7 +941,11 @@ export const createBuilder = (host: BuilderHost): Builder => {
           choices.map((c) => ({
             label: c.vault.name,
             value: c.vault.vaultAddress,
-            hint: `${formatUnits(c.token.amount, c.token.decimals)} ${c.token.symbol}`,
+            // What it pays comes first: for two vaults on the same asset it is
+            // the only thing that distinguishes them.
+            hint:
+              (c.yield !== undefined ? `${(c.yield * 100).toFixed(2)}% · ` : "") +
+              `${fmtAmount(formatUnits(c.token.amount, c.token.decimals), 6)} ${c.token.symbol}`,
           })),
         );
         const choice = choices.find((c) => c.vault.vaultAddress === picked);

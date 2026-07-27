@@ -59,8 +59,8 @@ import {
   PositionChoice,
   FieldKey,
 } from "./tx-builder-core";
+import { listMorphoVaults } from "../../railgun/transaction/morpho/vault-registry";
 import {
-  MORPHO_VAULTS,
   MorphoVaultAction,
   getMorphoVaultInputs,
   isMorphoSupportedNetwork,
@@ -167,29 +167,34 @@ const loadVaultChoices = async (
   const balances = await getPrivateERC20BalancesForChain(chainName);
   const provider = getProviderForChain(chainName);
   const choices: VaultChoice[] = [];
-  for (const vault of MORPHO_VAULTS) {
-    const data = await MorphoVaultAPI.getVaultData(
-      vault.vaultAddress,
-      provider,
-    ).catch(() => undefined);
-    if (!data) continue;
+  for (const vault of await listMorphoVaults(chainName)) {
+    // The registry already carries the asset, so listing costs no RPC. Reading
+    // it per vault made opening the picker one round trip per row, which with
+    // twenty vaults was a visible stall. The build path still reads the vault
+    // itself, so nothing is trusted from the API when funds move.
+    const assetAddress =
+      vault.assetAddress ??
+      (await MorphoVaultAPI.getVaultData(vault.vaultAddress, provider)
+        .then((d) => d.assetAddress)
+        .catch(() => undefined));
+    if (!assetAddress) continue;
     // A gated V2 vault refuses this wallet outright — the executor is a fresh
     // account that has never been allowlisted — and the batch would mine
     // having done nothing. Better absent than offered and broken.
     if (await isVaultGated(vault, provider).catch(() => false)) continue;
-    const spendAddress =
-      action === "deposit" ? data.assetAddress : vault.vaultAddress;
+    const spendAddress = action === "deposit" ? assetAddress : vault.vaultAddress;
     const held = balances.find(
       (b) => b.tokenAddress.toLowerCase() === spendAddress.toLowerCase(),
     );
     if (held) {
-      choices.push({ vault, token: held });
+      choices.push({ vault, token: held, yield: vault.netApy });
       continue;
     }
     const info = await getTokenInfo(chainName, spendAddress).catch(() => undefined);
     if (!info) continue;
     choices.push({
       vault,
+      yield: vault.netApy,
       token: {
         symbol: info.symbol,
         name: info.name,

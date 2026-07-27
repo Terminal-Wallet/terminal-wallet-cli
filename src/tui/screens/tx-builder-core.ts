@@ -42,6 +42,12 @@ export type FieldKey =
 export interface VaultChoice {
   vault: MorphoVaultRef;
   token: RailgunDisplayBalance;
+  /**
+   * Net APY as a fraction, when the registry knows it. This is the number the
+   * choice is actually being made on — two vaults for the same asset differ by
+   * little else a user can see.
+   */
+  yield?: number;
 }
 
 /**
