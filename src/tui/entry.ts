@@ -447,6 +447,14 @@ export const runDeck = async (): Promise<void> => {
     }
     leftRail.style.border.fg = dim ? "black" : "gray";
     activity.style.border.fg = dim ? "black" : "gray";
+    // And they stop taking a selection at all. Refusing the ACTION while the
+    // highlight still moved under the pointer was the worst of both: the deck
+    // looked like it was responding and then did nothing. `List.select`
+    // returns early when this is off, for the mouse and the keyboard alike.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (leftRail as any).interactive = !dim;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (activity as any).interactive = !dim;
 
     if (mode === "home") {
       homeBox.setContent(

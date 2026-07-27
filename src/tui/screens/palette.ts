@@ -52,7 +52,12 @@ export const createPalette = (host: PaletteHost): Palette => {
   const { ctx, box } = host;
   let layout: PaletteLayout | undefined;
   let cursor = "";
-  let elements: { id: string; el: blessed.Widgets.BoxElement }[] = [];
+  let elements: {
+    id: string;
+    el: blessed.Widgets.BoxElement;
+    /** Kept so the cursor can be drawn INTO the card's text, not just around it. */
+    card?: LaidCard;
+  }[] = [];
 
   const clear = () => {
     for (const e of elements) e.el.destroy();
@@ -63,7 +68,15 @@ export const createPalette = (host: PaletteHost): Palette => {
     !!layout?.cards.find((c) => c.id === id)?.disabled;
 
   /** Two lines: the action, and what kind of action it is. */
-  const face = (card: LaidCard): string => {
+  /**
+   * A card's text, with the cursor drawn into it.
+   *
+   * The border alone was too quiet, and a filled background too loud. The
+   * label itself lights up instead — which is also what a pointer moving over
+   * a card should do, and `mouseover` moves the cursor, so hover and keyboard
+   * end up saying the same thing in the same place.
+   */
+  const face = (card: LaidCard, selected = false): string => {
     const kind =
       card.category === "PRIVATE"
         ? "private"
@@ -72,9 +85,13 @@ export const createPalette = (host: PaletteHost): Palette => {
           : card.category === "SWAP"
             ? "0x swap"
             : "cookbook";
-    return card.disabled
-      ? `${tag(card.label, "gray")}\n${tag("unavailable", "gray")}`
-      : `${tag(card.label, "white")}\n${tag(kind, "gray")}`;
+    if (card.disabled) {
+      return `${tag(card.label, "gray")}\n${tag("unavailable", "gray")}`;
+    }
+    const label = selected
+      ? `{cyan-fg}{bold}${card.label}{/}`
+      : tag(card.label, "white");
+    return `${label}\n${tag(kind, "gray")}`;
   };
 
   const highlight = () => {
@@ -86,9 +103,7 @@ export const createPalette = (host: PaletteHost): Palette => {
       // background on one is a lot of colour to say "the cursor is here" —
       // which is all it means. Bold picks the text up with it.
       e.el.style.border.fg = disabled ? "gray" : selected ? "cyan" : "gray";
-      e.el.style.bold = selected;
-      e.el.style.bg = undefined;
-      e.el.style.fg = disabled ? "gray" : undefined;
+      if (e.card) e.el.setContent(face(e.card, selected));
     }
   };
 
@@ -207,7 +222,7 @@ export const createPalette = (host: PaletteHost): Palette => {
         highlight();
         ctx.screen.render();
       });
-      elements.push({ id: card.id, el });
+      elements.push({ id: card.id, el, card });
     }
 
     highlight();
