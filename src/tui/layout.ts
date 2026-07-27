@@ -15,7 +15,9 @@
 export type Tier = "wide" | "medium" | "narrow";
 
 export const LEFT_W = 44;
-export const RIGHT_W = 30;
+// Wider than it was by a few columns: the rail carries only activity now, and
+// a transaction row was losing its amount to the ellipsis.
+export const RIGHT_W = 33;
 /** The builder and home pane must always have at least this much. */
 export const MIN_CENTER = 46;
 export const MIN_W = 50;

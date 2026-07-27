@@ -292,18 +292,11 @@ export const runDeck = async (): Promise<void> => {
     scrollbar: { ch: " ", style: { bg: "green" } },
   });
   const activity = blessed.list({
-    parent: screen, top: TOP, right: 0, width: RIGHT_W, height: 8, tags: true,
+    parent: screen, top: TOP, right: 0, width: RIGHT_W, bottom: 1, tags: true,
     label: " activity · Enter to review ", border: { type: "line" },
     keys: true, mouse: true, vi: true,
     scrollbar: { ch: " ", style: { bg: "green" } },
     style: { border: { fg: "gray" }, selected: { bg: "cyan", fg: "black" }, item: { fg: "white" } },
-    padding: { left: 1, right: 1 },
-  });
-  const logsBox = blessed.box({
-    parent: screen, top: TOP + 8, right: 0, width: RIGHT_W, bottom: 1, tags: true,
-    label: " logs · click to expand ", border: { type: "line" },
-    mouse: true, clickable: true,
-    style: { border: { fg: "gray" }, hover: { border: { fg: "cyan" } } },
     padding: { left: 1, right: 1 },
   });
   const cmdBtn = blessed.box({
@@ -367,14 +360,9 @@ export const runDeck = async (): Promise<void> => {
     }
     if (wantRight) {
       activity.show();
-      logsBox.show();
-      if (l.rightOverlay) {
-        activity.setFront();
-        logsBox.setFront();
-      }
+      if (l.rightOverlay) activity.setFront();
     } else {
       activity.hide();
-      logsBox.hide();
     }
 
     screen.render();
@@ -446,8 +434,13 @@ export const runDeck = async (): Promise<void> => {
     ({ history } = s);
     activity.setItems(formatHistoryRows(s.history, tag));
 
-    const tail = s.logs.slice(-12);
-    logsBox.setContent(tail.length ? tail.join("\n") : tag("…", "gray"));
+    // The deck stops taking input while a transaction is being built, so it
+    // should stop LOOKING like it takes input. Refusing a click with a message
+    // explains it once; the borders explain it every time you glance at them.
+    const dim = mode === "build";
+    for (const card of cards) card.box.style.border.fg = dim ? "black" : "gray";
+    leftRail.style.border.fg = dim ? "black" : "gray";
+    activity.style.border.fg = dim ? "black" : "gray";
 
     if (mode === "home") {
       homeBox.setContent(
@@ -547,7 +540,6 @@ export const runDeck = async (): Promise<void> => {
     })();
   });
 
-  logsBox.on("click", deckClick(() => void showLogs(ctx)));
   cmdBtn.on("click", deckClick(() => openPalette()));
 
   // --- keys ------------------------------------------------------------------
