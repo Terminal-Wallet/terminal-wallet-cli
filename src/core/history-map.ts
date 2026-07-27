@@ -41,6 +41,40 @@ const DIRECTION: Record<
   [TransactionHistoryItemCategory.Unknown]: "neutral",
 };
 
+/**
+ * A relay-adapt bundle the SDK has no category for.
+ *
+ * A private swap unshields one token and receives a DIFFERENT one back into
+ * the same wallet in a single transaction. That fits none of the five
+ * categories the SDK reports, so it arrives as `Unknown` and the feed called it
+ * "Activity" — the least informative label available, on one of the largest
+ * things the wallet does. Every 7702 flow lands here: the swap, and anything
+ * else that unshields and re-shields in one bundle.
+ *
+ * Told apart by shape, since the item carries no relay-adapt flag. Change
+ * returns in the SAME token it left in, so testing the received tokens against
+ * the unshielded ones is what separates a swap from an ordinary unshield with
+ * change.
+ */
+export const looksLikeSwap = (item: TransactionHistoryItem): boolean => {
+  if (!item.unshieldERC20Amounts.length || !item.receiveERC20Amounts.length) {
+    return false;
+  }
+  const sent = new Set(
+    item.unshieldERC20Amounts.map((a) => a.tokenAddress.toLowerCase()),
+  );
+  return item.receiveERC20Amounts.some(
+    (a) => !sent.has(a.tokenAddress.toLowerCase()),
+  );
+};
+
+/** The label for an item, including the shapes the SDK reports as Unknown. */
+export const categoryLabel = (item: TransactionHistoryItem): string => {
+  const known = CATEGORY_LABEL[item.category];
+  if (known && known !== "Activity") return known;
+  return looksLikeSwap(item) ? "Swap" : (known ?? "Activity");
+};
+
 const pickAmounts = (item: TransactionHistoryItem): RailgunERC20Amount[] => {
   switch (item.category) {
     case TransactionHistoryItemCategory.TransferReceiveERC20s:
@@ -101,7 +135,8 @@ export const mapHistoryItems = async (
         : undefined;
       return {
         txid: item.txid,
-        category: CATEGORY_LABEL[item.category] ?? "Activity",
+        category: categoryLabel(item),
+        // A swap moves value within the wallet rather than in or out of it.
         direction: DIRECTION[item.category] ?? "neutral",
         timestamp: item.timestamp ?? undefined,
         amounts: await formatAmounts(chainName, pickAmounts(item), resolveToken),
