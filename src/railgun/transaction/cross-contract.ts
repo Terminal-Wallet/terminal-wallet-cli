@@ -2,15 +2,18 @@
  * Generic Relay-Adapt cross-contract calls — the rail that 0x swaps AND every
  * cookbook recipe (LP add/remove, Beefy deposit/withdraw, combo meals) ride.
  *
- * A "recipe" produces CrossContractInputs (unshield amounts + shield addresses +
- * the contract calls + a min gas limit). This module turns any such inputs into
- * a gas estimate and a proved transaction — so wiring a new cookbook recipe is
- * just: build its RecipeOutput → CrossContractInputs → run.
+ * A "recipe" produces CrossContractInputs (unshield amounts + shield addresses,
+ * the same pair again for NFTs, the contract calls, and a min gas limit). This
+ * module turns any such inputs into a gas estimate and a proved transaction —
+ * so wiring a new cookbook recipe is just: build its RecipeOutput →
+ * CrossContractInputs → run.
  */
 import {
   EVMGasType,
   NetworkName,
   RailgunERC20Recipient,
+  RailgunNFTAmount,
+  RailgunNFTAmountRecipient,
   RailgunPopulateTransactionResponse,
   SelectedBroadcaster,
   TXIDVersion,
@@ -21,7 +24,10 @@ import {
   generateCrossContractCallsProof7702,
   populateProvedCrossContractCalls,
 } from "@railgun-community/wallet";
-import { RecipeERC20Amount } from "@railgun-community/cookbook";
+import {
+  RecipeERC20Amount,
+  RecipeNFTRecipient,
+} from "@railgun-community/cookbook";
 import { ContractTransaction } from "ethers";
 import { emitCoreEvent } from "../../core/events";
 import { createLogger } from "../../platform/logger";
@@ -66,6 +72,17 @@ export const NO_CROSS_CONTRACT_GAS_FLOOR = 150_000n;
 export interface CrossContractInputs {
   relayAdaptUnshieldERC20Amounts: RecipeERC20Amount[];
   relayAdaptShieldERC20Addresses: RailgunERC20Recipient[];
+  /**
+   * NFTs the batch spends and produces — a protocol position that has to cross
+   * the seam and come back, such as an f(x) fxMint position.
+   *
+   * Optional because most recipes move only tokens, and because the cookbook's
+   * step validator passes an empty input NFT list without complaint: it checks
+   * only that every INPUT NFT reappears in the outputs, so omitting a required
+   * NFT is caught on-chain rather than at build time.
+   */
+  relayAdaptUnshieldNFTAmounts?: RailgunNFTAmount[];
+  relayAdaptShieldNFTRecipients?: RailgunNFTAmountRecipient[];
   crossContractCalls: ContractTransaction[];
   /**
    * Always NO_CROSS_CONTRACT_GAS_FLOOR. Required rather than optional because
@@ -73,6 +90,22 @@ export interface CrossContractInputs {
    */
   minGasLimit: bigint;
 }
+
+/**
+ * The cookbook's NFT recipient shape, in the SDK's.
+ *
+ * They differ by one field name — the cookbook says `recipient`, the SDK says
+ * `recipientAddress` — and the rest is identical, so passing one where the
+ * other is expected is a type error rather than a silent misroute. This mirrors
+ * the ERC-20 rename the swap path already does.
+ */
+export const toShieldNFTRecipients = (
+  nftRecipients: RecipeNFTRecipient[],
+): RailgunNFTAmountRecipient[] =>
+  nftRecipients.map(({ recipient, ...nft }) => ({
+    ...nft,
+    recipientAddress: recipient,
+  }));
 
 export const getCrossContractGasEstimate = async (
   chainName: NetworkName,
@@ -106,6 +139,8 @@ export const getCrossContractGasEstimate = async (
   const {
     relayAdaptUnshieldERC20Amounts,
     relayAdaptShieldERC20Addresses,
+    relayAdaptUnshieldNFTAmounts = [],
+    relayAdaptShieldNFTRecipients = [],
     crossContractCalls,
     minGasLimit,
   } = inputs;
@@ -126,9 +161,9 @@ export const getCrossContractGasEstimate = async (
     railgunWalletID,
     encryptionKey,
     relayAdaptUnshieldERC20Amounts,
-    [],
+    relayAdaptUnshieldNFTAmounts,
     relayAdaptShieldERC20Addresses,
-    [],
+    relayAdaptShieldNFTRecipients,
     crossContractCalls,
     originalGasDetails,
     feeTokenDetails,
@@ -168,6 +203,8 @@ export const getProvedCrossContractTransaction = async (
   const {
     relayAdaptUnshieldERC20Amounts,
     relayAdaptShieldERC20Addresses,
+    relayAdaptUnshieldNFTAmounts = [],
+    relayAdaptShieldNFTRecipients = [],
     crossContractCalls,
     minGasLimit,
   } = inputs;
@@ -187,9 +224,9 @@ export const getProvedCrossContractTransaction = async (
       railgunWalletID,
       encryptionKey,
       relayAdaptUnshieldERC20Amounts,
-      [],
+      relayAdaptUnshieldNFTAmounts,
       relayAdaptShieldERC20Addresses,
-      [],
+      relayAdaptShieldNFTRecipients,
       crossContractCalls,
       broadcasterFeeERC20Recipient,
       sendWithPublicWallet,
@@ -206,9 +243,9 @@ export const getProvedCrossContractTransaction = async (
         chainName,
         railgunWalletID,
         relayAdaptUnshieldERC20Amounts,
-        [],
+        relayAdaptUnshieldNFTAmounts,
         relayAdaptShieldERC20Addresses,
-        [],
+        relayAdaptShieldNFTRecipients,
         crossContractCalls,
         broadcasterFeeERC20Recipient,
         sendWithPublicWallet,
