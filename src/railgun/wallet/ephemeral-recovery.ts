@@ -170,7 +170,7 @@ const scanViaLogs = async (
     ];
     const nftCandidates = new Map<string, { nftAddress: string; tokenSubID: string }>();
     for (const l of erc721Logs) {
-      const tokenSubID = l.topics[3];
+      const [, , , tokenSubID] = l.topics;
       nftCandidates.set(`${l.address.toLowerCase()}:${tokenSubID}`, {
         nftAddress: l.address,
         tokenSubID,

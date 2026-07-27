@@ -659,6 +659,11 @@ export const createBuilder = (host: BuilderHost): Builder => {
     cfg = make(getCurrentNetwork());
     state = { gas: undefined };
     swapPreview = undefined;
+    // Everything derived from the LAST flow has to go, or the new one opens
+    // showing the previous action's batch and risk until an edit happens to
+    // recompute them — which reads as a description of what you are about to do.
+    legsPreview = undefined;
+    fxThresholds = undefined;
     feePreview = undefined;
     feeReservation = undefined;
     loadedBalances = [];
