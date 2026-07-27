@@ -15,6 +15,7 @@
 import blessed from "blessed";
 import { NetworkName } from "@railgun-community/shared-models";
 import { DeckContext } from "./context";
+import { ensureFocus } from "./widgets/focus-guard";
 import { createFeeders } from "./feeders";
 import { getState, setState, subscribe, WalletState } from "./store";
 import { footerStatus } from "./format/footer";
@@ -364,6 +365,12 @@ export const runDeck = async (): Promise<void> => {
     } else {
       activity.hide();
     }
+
+    // Hiding a rail that held focus empties the focus history — rewindFocus
+    // skips anything not visible — and the next element appended into a
+    // scrollable box then throws from inside blessed. The centre pane is
+    // always visible, so it is the one thing that can always hold it.
+    ensureFocus(screen, center);
 
     screen.render();
   };

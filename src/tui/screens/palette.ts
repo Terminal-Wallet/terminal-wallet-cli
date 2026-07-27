@@ -26,6 +26,7 @@ import {
   PaletteLayout,
   TokenKind,
 } from "./palette-grid";
+import { ensureFocus } from "../widgets/focus-guard";
 import { listCookbookRecipes } from "./cookbook-recipes";
 import { RailgunDisplayBalance } from "../../models/balance-models";
 
@@ -187,6 +188,10 @@ export const createPalette = (host: PaletteHost): Palette => {
 
   const rebuild = () => {
     clear();
+    // The cards are appended to `box`, which is scrollable in a short pane —
+    // and appending into a scrollable parent with nothing focused throws from
+    // inside blessed's Element constructor.
+    ensureFocus(ctx.screen, box);
     const innerWidth = Math.max(18, ((box.width as number) || 60) - 4);
     const { kind } = host.seeded();
     const cards = buildPaletteCards(getState().baseSymbol, kind);
