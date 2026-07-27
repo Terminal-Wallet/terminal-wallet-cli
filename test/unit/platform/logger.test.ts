@@ -11,6 +11,7 @@ import {
   createLogger,
   setLogSink,
   LogRecord,
+  redactText,
 } from "../../../src/platform/logger";
 
 const MNEMONIC =
@@ -49,6 +50,15 @@ afterEach(() => {
 });
 
 const output = () => written.join("");
+
+test("text on its way to a file is redacted like text on its way to a sink", () => {
+  // The crash reporter writes an error's stack to disk, which is a second path
+  // out of the process that does not go through `write`. A file outlives the
+  // terminal, the log pane and the process, so it is the last place a phrase
+  // should be allowed to land.
+  assert.ok(!redactText(`recovery phrase: ${MNEMONIC}`).includes(MNEMONIC));
+  assert.match(redactText("nothing secret here"), /nothing secret here/);
+});
 
 test("a mnemonic never reaches the sink", () => {
   const log = createLogger("test");

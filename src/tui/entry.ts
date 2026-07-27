@@ -23,6 +23,7 @@ import { createBlessedInputProvider } from "./input-provider";
 import { setInputProvider } from "../core/input";
 import { onCoreEvent } from "../core/events";
 import { installDeckLogSink, releaseDeckLogSink } from "./log-sink";
+import { setTerminalRestore } from "../platform/lifecycle";
 import { tag, short } from "./format/tags";
 import {
   pctDelta,
@@ -576,6 +577,13 @@ export const runDeck = async (): Promise<void> => {
   // Before anything boots: the engine's provider health checks fire during
   // initializeWalletSystems, and unclaimed they land on top of the screen.
   installDeckLogSink();
+  // And how to undo both, for a fatal error: without this the reason the
+  // process died is written into a pane that dies with it, on a screen the
+  // terminal is about to stop showing.
+  setTerminalRestore(() => {
+    releaseDeckLogSink();
+    screen.destroy();
+  });
 
   const seedNetwork = configuredDefaultNetwork();
   if (seedNetwork) {

@@ -21,3 +21,4 @@ custom-tmp
 # wallet secrets and migration backups
 *.zSecret
 *.zKey.v1.bak
+twallet-crash.log

@@ -83,6 +83,16 @@ const MNEMONIC_RE = /\b(?:[a-z]{3,8} ){11}[a-z]{3,8}(?:(?: [a-z]{3,8}){12})?\b/g
 const redactString = (value: string): string =>
   value.replace(PRIVATE_KEY_RE, REDACTED).replace(MNEMONIC_RE, REDACTED);
 
+/**
+ * Scrub a string that is about to be written somewhere other than a sink.
+ *
+ * Exported for the crash reporter, which writes an error's stack to a FILE.
+ * Everything through `write` is redacted already; a second path to durable
+ * storage that is not would be the one place a mnemonic survives — and the
+ * file outlives the process, the terminal and the log pane.
+ */
+export const redactText = (value: string): string => redactString(value);
+
 const redact = (value: unknown, depth = 0): unknown => {
   if (typeof value === "string") {
     return redactString(value);
