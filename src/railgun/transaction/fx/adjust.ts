@@ -93,6 +93,108 @@ const spendTokenFor = (
   );
 };
 
+/** The one branch that differs per action, kept apart from the shared plumbing. */
+const buildOutput = async (args: {
+  action: FxAdjustAction;
+  poolRef: FxMintPoolRef;
+  positionId: bigint;
+  debtChange: bigint;
+  borrowFeeRatio: bigint;
+  repayFeeRatio: bigint;
+  chainName: NetworkName;
+  provider: ReturnType<typeof getProviderForChain>;
+  executor: ReturnType<typeof makeEphemeralExecutor>;
+  swapFrom?: { tokenAddress: string; decimals: number };
+  shieldedFxUSD: bigint;
+  recipeInput: RecipeInput;
+}): Promise<RecipeOutput> => {
+  const {
+    action,
+    poolRef,
+    positionId,
+    debtChange,
+    borrowFeeRatio,
+    repayFeeRatio,
+    chainName,
+    executor,
+    swapFrom,
+    shieldedFxUSD,
+    recipeInput,
+  } = args;
+  const sellERC20Info = swapFrom && {
+    tokenAddress: swapFrom.tokenAddress,
+    decimals: BigInt(swapFrom.decimals),
+  };
+
+  if (action === "topup") {
+    return sellERC20Info
+      ? new ZeroXSwap_FxMintTopup_ComboMeal({
+          pool: poolRef,
+          positionId,
+          sellERC20Info,
+          swapSlippageBasisPoints: FXMINT_SWAP_SLIPPAGE_BPS,
+          recipient: executor,
+        }).getComboMealOutput(recipeInput)
+      : new FxMintTopupRecipe({ pool: poolRef, positionId }).getRecipeOutput(
+          recipeInput,
+        );
+  }
+
+  if (action === "topup-and-borrow") {
+    const opts = {
+      pool: poolRef,
+      positionId,
+      additionalDebt: debtChange,
+      borrowFeeRatio,
+    };
+    return sellERC20Info
+      ? new ZeroXSwap_FxMintTopupAndBorrow_ComboMeal({
+          ...opts,
+          sellERC20Info,
+          swapSlippageBasisPoints: FXMINT_SWAP_SLIPPAGE_BPS,
+          recipient: executor,
+        }).getComboMealOutput(recipeInput)
+      : new FxMintTopupAndBorrowRecipe(opts).getRecipeOutput(recipeInput);
+  }
+
+  if (action === "borrow-more") {
+    return new FxMintBorrowMoreRecipe({
+      pool: poolRef,
+      positionId,
+      additionalDebt: debtChange,
+      borrowFeeRatio,
+    }).getRecipeOutput(recipeInput);
+  }
+
+  // Repay. How much can actually be repaid is bounded by what survives the
+  // unshield fee and the pool's repay fee, and the cookbook computes that —
+  // sizing it on the amount SENT would try to spend money that never arrives.
+  const fees = getRailgunFeeBasisPoints(chainName);
+  if (!fees) {
+    throw new Error(
+      `RAILGUN fees are not known for ${chainName} yet — wait for the engine to load.`,
+    );
+  }
+  const position = await getFxPosition(positionId, poolRef, args.provider);
+  const amounts = computeFxRepay({
+    rawDebts: position.rawDebts,
+    shieldedFxUSD,
+    desiredRepayAmount: shieldedFxUSD,
+    repayFeeRatio,
+    railgunUnshieldFeeBps: fees.unshield,
+  });
+  if (amounts.repayAmount <= 0n) {
+    throw new Error("Not enough shielded fxUSD to repay any of this debt.");
+  }
+  return new FxMintRepayDebtRecipe({
+    pool: poolRef,
+    positionId,
+    repayAmount: amounts.repayAmount,
+    approveAmount: amounts.approveAmount,
+    repayFeeRatio,
+  }).getRecipeOutput(recipeInput);
+};
+
 /**
  * Adjust a position the wallet holds.
  *
@@ -212,106 +314,4 @@ export const getFxMintAdjustInputs = async (
         ? recipeOutput.minGasLimit
         : FXMINT_GAS_FLOOR,
   };
-};
-
-/** The one branch that differs per action, kept apart from the shared plumbing. */
-const buildOutput = async (args: {
-  action: FxAdjustAction;
-  poolRef: FxMintPoolRef;
-  positionId: bigint;
-  debtChange: bigint;
-  borrowFeeRatio: bigint;
-  repayFeeRatio: bigint;
-  chainName: NetworkName;
-  provider: ReturnType<typeof getProviderForChain>;
-  executor: ReturnType<typeof makeEphemeralExecutor>;
-  swapFrom?: { tokenAddress: string; decimals: number };
-  shieldedFxUSD: bigint;
-  recipeInput: RecipeInput;
-}): Promise<RecipeOutput> => {
-  const {
-    action,
-    poolRef,
-    positionId,
-    debtChange,
-    borrowFeeRatio,
-    repayFeeRatio,
-    chainName,
-    executor,
-    swapFrom,
-    shieldedFxUSD,
-    recipeInput,
-  } = args;
-  const sellERC20Info = swapFrom && {
-    tokenAddress: swapFrom.tokenAddress,
-    decimals: BigInt(swapFrom.decimals),
-  };
-
-  if (action === "topup") {
-    return sellERC20Info
-      ? new ZeroXSwap_FxMintTopup_ComboMeal({
-          pool: poolRef,
-          positionId,
-          sellERC20Info,
-          swapSlippageBasisPoints: FXMINT_SWAP_SLIPPAGE_BPS,
-          recipient: executor,
-        }).getComboMealOutput(recipeInput)
-      : new FxMintTopupRecipe({ pool: poolRef, positionId }).getRecipeOutput(
-          recipeInput,
-        );
-  }
-
-  if (action === "topup-and-borrow") {
-    const opts = {
-      pool: poolRef,
-      positionId,
-      additionalDebt: debtChange,
-      borrowFeeRatio,
-    };
-    return sellERC20Info
-      ? new ZeroXSwap_FxMintTopupAndBorrow_ComboMeal({
-          ...opts,
-          sellERC20Info,
-          swapSlippageBasisPoints: FXMINT_SWAP_SLIPPAGE_BPS,
-          recipient: executor,
-        }).getComboMealOutput(recipeInput)
-      : new FxMintTopupAndBorrowRecipe(opts).getRecipeOutput(recipeInput);
-  }
-
-  if (action === "borrow-more") {
-    return new FxMintBorrowMoreRecipe({
-      pool: poolRef,
-      positionId,
-      additionalDebt: debtChange,
-      borrowFeeRatio,
-    }).getRecipeOutput(recipeInput);
-  }
-
-  // Repay. How much can actually be repaid is bounded by what survives the
-  // unshield fee and the pool's repay fee, and the cookbook computes that —
-  // sizing it on the amount SENT would try to spend money that never arrives.
-  const fees = getRailgunFeeBasisPoints(chainName);
-  if (!fees) {
-    throw new Error(
-      `RAILGUN fees are not known for ${chainName} yet — wait for the engine to load.`,
-    );
-  }
-  const position = await getFxPosition(positionId, poolRef, args.provider);
-  const amounts = computeFxRepay({
-    rawDebts: position.rawDebts,
-    shieldedFxUSD,
-    desiredRepayAmount: shieldedFxUSD,
-    repayFeeRatio,
-    railgunUnshieldFeeBps: fees.unshield,
-  });
-  if (amounts.repayAmount <= 0n) {
-    throw new Error("Not enough shielded fxUSD to repay any of this debt.");
-  }
-  return new FxMintRepayDebtRecipe({
-    pool: poolRef,
-    positionId,
-    repayAmount: amounts.repayAmount,
-    approveAmount: amounts.approveAmount,
-    repayFeeRatio,
-  }).getRecipeOutput(recipeInput);
 };

@@ -557,14 +557,15 @@ const buildAdjust = (
   action: FxAdjustAction,
   s: BuilderState,
 ) => {
-  if (!s.position) throw new Error("incomplete");
+  const { position } = s;
+  if (!position) throw new Error("incomplete");
   const { amount, debtChange } = adjustAmounts(action, s);
   return (encryptionKey: string) =>
     getFxMintAdjustInputs(
       chainName,
       action,
-      s.position!.pool.name,
-      s.position!.positionId,
+      position.pool.name,
+      position.positionId,
       amount,
       debtChange,
       encryptionKey,
