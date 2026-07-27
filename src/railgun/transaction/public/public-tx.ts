@@ -85,13 +85,50 @@ export const populateAndCalculateGasForERC20Transaction = async (
   return { privateGasEstimate, populatedTransaction };
 };
 
+/**
+ * Whether ethers refused to MODEL a transaction, rather than the chain
+ * refusing the transaction.
+ *
+ * An EIP-7702 (type 0x4) send comes back from some RPCs with the outer
+ * signature zeroed — `r`/`s`/`v` all `0x0` — while `yParity` is set, and
+ * ethers 6.14 validates the two against each other and throws "yParity
+ * mismatch (argument=\"signature\")". Nothing is wrong with the transaction:
+ * it is mined, it succeeds, and the authorization inside it carries the real
+ * signature. What fails is parsing the description of it.
+ *
+ * A receipt has no signature fields, so it parses — and a receipt is what
+ * "wait" actually means.
+ */
+const isUnmodellable = (err: unknown): boolean => {
+  const { code, message } = (err ?? {}) as { code?: string; message?: string };
+  const text = message ?? "";
+  // Both, not either. INVALID_ARGUMENT is ethers' code for any bad argument —
+  // a malformed hash reaches this same catch — and "signature" appears in
+  // messages that are about a real signature. Swallowing those would turn an
+  // immediate, accurate error into a three-minute poll for a transaction that
+  // does not exist. `yParity` alone is specific enough to stand by itself.
+  return (
+    (code === "INVALID_ARGUMENT" && /signature|yParity/i.test(text)) ||
+    /yParity/i.test(text)
+  );
+};
+
 export const waitOnTx = async (
   txResponse: TransactionResponse,
   txTimeout: number,
 ) => {
   await promiseTimeout(
-    txResponse.wait().catch((err) => {
-      log.info(err);
+    txResponse.wait().catch(async (err) => {
+      if (!isUnmodellable(err)) {
+        log.info(err);
+        return;
+      }
+      // Fall through to the receipt rather than giving up on the wait: this is
+      // a parse failure, and the caller still wants to know when it lands.
+      log.debug("ethers cannot model this response; waiting on the receipt", err);
+      await txResponse.provider
+        ?.waitForTransaction(txResponse.hash, 1, txTimeout)
+        .catch((pollErr) => log.info(pollErr));
     }),
     txTimeout,
   );
@@ -114,13 +151,26 @@ export const waitForRelayedTx = async (
   txTimeout = 3 * 60 * 1000,
 ) => {
   const provider = getProviderForChain(chainName) as unknown as JsonRpcProvider;
-  let txResponse: TransactionResponse | null = null;
   try {
-    txResponse = await provider.getTransaction(txHash);
+    let txResponse: TransactionResponse | null = null;
+    try {
+      txResponse = await provider.getTransaction(txHash);
+    } catch (err: unknown) {
+      // See isUnmodellable. This used to report a mined 7702 transaction as
+      // "Transaction <hash> error: yParity mismatch" and then return WITHOUT
+      // waiting for anything — so the alarming line was the lesser half of it.
+      if (!isUnmodellable(err)) throw err;
+      log.debug("ethers cannot model this transaction; waiting on the receipt", err);
+    }
 
     if (txResponse !== null) {
       await waitOnTx(txResponse, txTimeout);
+      return;
     }
+    await promiseTimeout(
+      provider.waitForTransaction(txHash, 1, txTimeout),
+      txTimeout,
+    );
   } catch (err: Error | any) {
     log.error(`Transaction ${txHash} error: ${err.message}`);
   }
