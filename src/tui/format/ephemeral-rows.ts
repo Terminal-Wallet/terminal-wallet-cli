@@ -29,7 +29,9 @@ export interface IndexRow {
 /** Whether a scanned row is holding anything at all. */
 export const holdsAssets = (row: IndexRow): boolean =>
   row.scan !== undefined &&
-  (row.scan.nativeWei > 0n || row.scan.erc20s.length > 0);
+  (row.scan.nativeWei > 0n ||
+    row.scan.erc20s.length > 0 ||
+    row.scan.nfts.length > 0);
 
 /**
  * Newest first. The interesting accounts are the ones just behind the current

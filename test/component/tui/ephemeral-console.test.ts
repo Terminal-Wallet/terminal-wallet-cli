@@ -58,6 +58,7 @@ const entries = (...indexes: number[]): EphemeralHistoryEntry[] =>
 const holding: EphemeralAssetScan = {
   address: "0x",
   nativeWei: parseUnits("0.0021", 18),
+  nfts: [],
   erc20s: [],
   method: "logs",
 };

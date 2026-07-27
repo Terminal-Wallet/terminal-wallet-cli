@@ -37,10 +37,12 @@ const entries = (...indexes: number[]): EphemeralHistoryEntry[] =>
 const scan = (
   nativeWei: bigint,
   erc20s: EphemeralAssetScan["erc20s"] = [],
+  nfts: EphemeralAssetScan["nfts"] = [],
 ): EphemeralAssetScan => ({
   address: "0x",
   nativeWei,
   erc20s,
+  nfts,
   method: "logs",
 });
 

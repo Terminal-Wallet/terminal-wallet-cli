@@ -26,6 +26,7 @@ const scan = (over: Partial<EphemeralAssetScan> = {}): EphemeralAssetScan =>
     address: "0xabc",
     nativeWei: 0n,
     erc20s: [],
+    nfts: [],
     method: "logs",
     ...over,
   }) as EphemeralAssetScan;

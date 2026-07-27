@@ -17,6 +17,7 @@ import {
   getProvedEphemeralRecoveryTransaction,
   submitRecoveryTransaction,
   EphemeralAssetScan,
+  RecoverableNFT,
   RecoverableERC20,
 } from "../../railgun/wallet/ephemeral-recovery";
 import { collectFeeMode } from "../../flows/collect/fee";
@@ -37,7 +38,13 @@ const NATIVE = "__native__";
 const pickAssets = async (
   nativeWei: bigint,
   erc20s: RecoverableERC20[],
-): Promise<{ native: boolean; erc20s: RecoverableERC20[] } | undefined> => {
+  nfts: RecoverableNFT[],
+): Promise<
+  | { native: boolean; erc20s: RecoverableERC20[]; nfts: RecoverableNFT[] }
+  | undefined
+> => {
+  const nftValue = (nft: RecoverableNFT) =>
+    `nft:${nft.nftAddress}:${nft.tokenSubID}`;
   const choices = [
     ...(nativeWei > 0n
       ? [
@@ -52,6 +59,13 @@ const pickAssets = async (
       label: `${token.symbol.padEnd(8)} ${formatUnits(token.balance, token.decimals)}`,
       value: token.tokenAddress,
     })),
+    // A position is listed by name rather than amount — it is one thing, and
+    // the thing is the collateral behind it.
+    ...nfts.map((nft) => ({
+      label: nft.label,
+      value: nftValue(nft),
+      hint: "position → shield",
+    })),
   ];
   const picked = await getInputProvider().multiSelect(
     "Select assets to reshield",
@@ -62,6 +76,7 @@ const pickAssets = async (
   return {
     native: picked.includes(NATIVE),
     erc20s: erc20s.filter((token) => picked.includes(token.tokenAddress)),
+    nfts: nfts.filter((nft) => picked.includes(nftValue(nft))),
   };
 };
 
@@ -77,7 +92,7 @@ export const runRecovery = async (
   // silently price this one.
   clearGasFeeSelection();
   try {
-    if (scan.nativeWei === 0n && scan.erc20s.length === 0) {
+    if (scan.nativeWei === 0n && scan.erc20s.length === 0 && scan.nfts.length === 0) {
       provider.notify(`Nothing stranded at [${targetIndex}].`);
       return;
     }
@@ -85,7 +100,7 @@ export const runRecovery = async (
       provider.notify("Curated-list scan only — arbitrary tokens may be missed.");
     }
 
-    const selection = await pickAssets(scan.nativeWei, scan.erc20s);
+    const selection = await pickAssets(scan.nativeWei, scan.erc20s, scan.nfts);
     if (!selection) {
       provider.notify("Nothing selected.");
       return;
@@ -111,6 +126,7 @@ export const runRecovery = async (
       {
         erc20s: selection.erc20s,
         nativeWei: selection.native ? scan.nativeWei : undefined,
+        nfts: selection.nfts,
       },
       broadcaster,
     );
@@ -120,6 +136,7 @@ export const runRecovery = async (
       ...selection.erc20s.map(
         (token) => `${formatUnits(token.balance, token.decimals)} ${token.symbol}`,
       ),
+      ...selection.nfts.map((nft) => nft.label),
     ].join(", ");
     const lines = recoverySummaryLines({
       assets,

@@ -1,4 +1,6 @@
 import {
+  RailgunNFTAmountRecipient,
+  NFTTokenType,
   EVMGasType,
   NetworkName,
   RailgunERC20Amount,
@@ -7,7 +9,7 @@ import {
   TXIDVersion,
   isDefined,
 } from "@railgun-community/shared-models";
-import { ContractTransaction, parseUnits } from "ethers";
+import { Contract, ContractTransaction, parseUnits } from "ethers";
 import { RelayAdapt__factory } from "@railgun-community/engine";
 import { getGasEstimates, getGasFeeSelection } from "../gas/gas-fee";
 import {
@@ -40,6 +42,8 @@ import {
 import { getOutputGasEstimate } from "../transaction/private/unshield-tx";
 import { PrivateGasDetails } from "../../models/transaction-models";
 import { emitCoreEvent } from "../../core/events";
+import { describeNFT } from "../balance/nft-util";
+import { fxPositionCollections } from "../transaction/fx/position";
 import { NO_CROSS_CONTRACT_GAS_FLOOR } from "../transaction/cross-contract";
 
 // EIP-7702 ephemeral accounts are per-op and never intended to hold a balance, but a partial
@@ -54,10 +58,25 @@ export type RecoverableERC20 = {
   balance: bigint;
 };
 
+/**
+ * A stranded ERC-721.
+ *
+ * A partly-failed batch can leave a protocol position at an ephemeral address —
+ * an f(x) position NFT is the position, so losing track of it loses the
+ * collateral behind it, not just a collectible.
+ */
+export type RecoverableNFT = {
+  nftAddress: string;
+  tokenSubID: string;
+  /** Named where the collection is recognised; see balance/nft-util. */
+  label: string;
+};
+
 export type EphemeralAssetScan = {
   address: string;
   nativeWei: bigint;
   erc20s: RecoverableERC20[];
+  nfts: RecoverableNFT[];
   // "logs": curated list PLUS any token that sent a Transfer to the ephemeral in the recent
   // window (eth_getLogs). "tokenlist": curated list only (getLogs unavailable/capped) — can miss
   // arbitrary tokens; surface this.
@@ -123,7 +142,10 @@ const scanViaTokenList = async (
 const scanViaLogs = async (
   chainName: NetworkName,
   address: string,
-): Promise<RecoverableERC20[]> => {
+): Promise<{
+  erc20s: RecoverableERC20[];
+  nftCandidates: { nftAddress: string; tokenSubID: string }[];
+}> => {
   try {
     const provider = getProviderForChain(chainName);
     const latest = await provider.getBlockNumber();
@@ -136,9 +158,24 @@ const scanViaLogs = async (
       toBlock: latest,
       topics: [ERC20_TRANSFER_TOPIC, null, paddedRecipient],
     });
+    // ERC-20 and ERC-721 share the Transfer topic and are told apart by shape:
+    // ERC-721 indexes the token id, so it carries a fourth topic. Without this
+    // split an incoming NFT was scanned as a token, and `balanceOf` — which on
+    // an ERC-721 returns how many you hold — made it look like a balance of 1
+    // wei of some unnamed token.
+    const erc721Logs = logs.filter((l) => l.topics.length === 4);
+    const erc20Logs = logs.filter((l) => l.topics.length === 3);
     const tokenAddresses = [
-      ...new Set(logs.map((l) => l.address.toLowerCase())),
+      ...new Set(erc20Logs.map((l) => l.address.toLowerCase())),
     ];
+    const nftCandidates = new Map<string, { nftAddress: string; tokenSubID: string }>();
+    for (const l of erc721Logs) {
+      const tokenSubID = l.topics[3];
+      nftCandidates.set(`${l.address.toLowerCase()}:${tokenSubID}`, {
+        nftAddress: l.address,
+        tokenSubID,
+      });
+    }
     const out: RecoverableERC20[] = [];
     for (const tokenAddress of tokenAddresses) {
       const balance = await getERC20Balance(chainName, tokenAddress, address);
@@ -156,10 +193,57 @@ const scanViaLogs = async (
       }
       out.push({ tokenAddress, symbol, decimals, balance });
     }
-    return out;
+    return { erc20s: out, nftCandidates: [...nftCandidates.values()] };
   } catch {
-    return [];
+    return { erc20s: [], nftCandidates: [] };
   }
+};
+
+/**
+ * Which of the NFTs that were once sent here are still here.
+ *
+ * A log says an NFT arrived, not that it stayed — the batch that stranded one
+ * may have been retried, or the position closed. `ownerOf` is the only answer
+ * that is true now, and it reverts for a burnt token, which is exactly the
+ * case a fully-closed position leaves behind.
+ */
+const stillOwned = async (
+  chainName: NetworkName,
+  address: string,
+  candidates: { nftAddress: string; tokenSubID: string }[],
+): Promise<RecoverableNFT[]> => {
+  if (!candidates.length) return [];
+  const provider = getProviderForChain(chainName);
+  const known = fxPositionCollections();
+  const out: RecoverableNFT[] = [];
+  for (const candidate of candidates) {
+    try {
+      const contract = new Contract(
+        candidate.nftAddress,
+        ["function ownerOf(uint256) view returns (address)"],
+        provider,
+      );
+      const owner: string = await contract.ownerOf(BigInt(candidate.tokenSubID));
+      if (owner.toLowerCase() !== address.toLowerCase()) continue;
+      out.push({
+        nftAddress: candidate.nftAddress,
+        tokenSubID: candidate.tokenSubID,
+        label: describeNFT(
+          {
+            nftAddress: candidate.nftAddress,
+            tokenSubID: candidate.tokenSubID,
+            nftTokenType: NFTTokenType.ERC721,
+            amount: 1n,
+          },
+          known,
+        ).label,
+      });
+    } catch {
+      // Burnt, not an ERC-721, or an RPC that will not say — either way it is
+      // not something this can move.
+    }
+  }
+  return out;
 };
 
 // Discover every recoverable asset sitting at an ephemeral address: native gas token + all
@@ -177,14 +261,15 @@ export const scanEphemeralAssets = async (
     scanViaTokenList(chainName, address),
   ]);
   const deduped = new Map<string, RecoverableERC20>();
-  for (const t of [...viaLogs, ...viaTokenList]) {
+  for (const t of [...viaLogs.erc20s, ...viaTokenList]) {
     deduped.set(t.tokenAddress.toLowerCase(), t);
   }
   return {
     address,
     nativeWei,
     erc20s: [...deduped.values()],
-    method: viaLogs.length > 0 ? "logs" : "tokenlist",
+    nfts: await stillOwned(chainName, address, viaLogs.nftCandidates),
+    method: viaLogs.erc20s.length > 0 ? "logs" : "tokenlist",
   };
 };
 
@@ -199,6 +284,7 @@ export const scanEphemeralAssets = async (
 export type RecoverySelection = {
   erc20s: RecoverableERC20[]; // stranded ERC20s to reshield (may be empty)
   nativeWei?: bigint; // stranded native ETH to wrap+reshield (omit/0n to skip)
+  nfts?: RecoverableNFT[]; // stranded positions to reshield (may be empty)
 };
 
 export type Proved7702RelayAdapt = {
@@ -214,6 +300,8 @@ export type Proved7702RelayAdapt = {
 type RelayAdaptBatch = {
   unshieldERC20Amounts: RailgunERC20Amount[];
   shieldRecipients: RailgunERC20Recipient[];
+  /** Positions to bring back. Empty for an ERC20-only recovery. */
+  shieldNFTRecipients?: RailgunNFTAmountRecipient[];
   crossContractCalls: ContractTransaction[];
 };
 
@@ -233,7 +321,12 @@ const buildProved7702Batch = async (
   const txIDVersion = TXIDVersion.V2_PoseidonMerkle;
   const railgunWalletID = getCurrentRailgunID();
   const chainId = BigInt(getChainForName(chainName).id);
-  const { unshieldERC20Amounts, shieldRecipients, crossContractCalls } = batch;
+  const {
+    unshieldERC20Amounts,
+    shieldRecipients,
+    shieldNFTRecipients = [],
+    crossContractCalls,
+  } = batch;
 
   const gasDetailsResult = (await getTransactionGasDetails(
     chainName,
@@ -296,9 +389,9 @@ const buildProved7702Batch = async (
       railgunWalletID,
       encryptionKey,
       unshieldERC20Amounts,
-      [], // relayAdaptUnshieldNFTAmounts
+      [], // nothing is unshielded: recovery moves what is already at the account
       shieldRecipients,
-      [], // relayAdaptShieldNFTRecipients
+      shieldNFTRecipients,
       crossContractCalls,
       originalGasDetails,
       feeTokenDetails,
@@ -330,7 +423,7 @@ const buildProved7702Batch = async (
       unshieldERC20Amounts,
       [],
       shieldRecipients,
-      [],
+      shieldNFTRecipients,
       crossContractCalls,
       broadcasterFeeERC20Recipient,
       sendWithPublicWallet,
@@ -353,7 +446,7 @@ const buildProved7702Batch = async (
         unshieldERC20Amounts,
         [],
         shieldRecipients,
-        [],
+        shieldNFTRecipients,
         crossContractCalls,
         broadcasterFeeERC20Recipient,
         sendWithPublicWallet,
@@ -394,7 +487,8 @@ export const getProvedEphemeralRecoveryTransaction = async (
   const { wrappedAddress } = getWrappedTokenInfoForChain(chainName);
 
   const hasNative = isDefined(selection.nativeWei) && selection.nativeWei > 0n;
-  if (selection.erc20s.length === 0 && !hasNative) {
+  const nfts = selection.nfts ?? [];
+  if (selection.erc20s.length === 0 && !hasNative && nfts.length === 0) {
     throw new Error("Nothing selected to recover.");
   }
   const targetAddress = await getEphemeralAddressForIndex(
@@ -425,11 +519,26 @@ export const getProvedEphemeralRecoveryTransaction = async (
     });
   }
 
+  // A position comes back as itself — one indivisible ERC-721 — rather than as
+  // an amount, so it is shielded by id.
+  const shieldNFTRecipients: RailgunNFTAmountRecipient[] = nfts.map((nft) => ({
+    nftAddress: nft.nftAddress,
+    tokenSubID: nft.tokenSubID,
+    nftTokenType: NFTTokenType.ERC721,
+    amount: 1n,
+    recipientAddress: railgunAddress,
+  }));
+
   return buildProved7702Batch(
     chainName,
     encryptionKey,
     targetIndex,
-    { unshieldERC20Amounts: [], shieldRecipients, crossContractCalls },
+    {
+      unshieldERC20Amounts: [],
+      shieldRecipients,
+      shieldNFTRecipients,
+      crossContractCalls,
+    },
     broadcasterSelection,
   );
 };
