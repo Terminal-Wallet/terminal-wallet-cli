@@ -58,3 +58,56 @@ export const moveCursor = (
 /** The selected action id at a position (undefined if out of range). */
 export const idAt = (cols: NavColumn[], pos: NavPos): string | undefined =>
   cols[pos.col]?.ids[pos.row];
+
+// --- who owns the input -------------------------------------------------
+
+/** What the deck can be showing over itself. */
+export type DeckMode = "home" | "palette" | "build";
+
+/** What a click on the deck's own chrome should do, given what is over it. */
+export type ClickVerdict =
+  /** Nothing is in the way. */
+  | "act"
+  /** A chooser is in the way, and choosing something else is a fair answer. */
+  | "closeThenAct"
+  /** Half a transaction is in the way. Say so; do not throw it away. */
+  | "refuse"
+  /** A dialog is in the way and its scrim already ate the click. */
+  | "ignore";
+
+/**
+ * What a click on the deck means while something is over it.
+ *
+ * The deck's chrome stays visible behind whatever is on top, and every bit of
+ * it is clickable. Clicking a stat card or a balance with the transaction card
+ * open put a second screen ON TOP of a half-built transaction and orphaned the
+ * one underneath: the new screen owns the mode, so Escape closed that instead,
+ * and the card could no longer be reached at all.
+ *
+ * Three answers rather than a yes/no, because the three cases genuinely differ.
+ * The palette is a chooser — clicking something else IS the choice, so it
+ * closes and acts. The card holds work that cannot be recreated by clicking
+ * again, so it refuses and says why. A dialog's scrim has already swallowed
+ * the click, so anything reaching here under one is a stray.
+ */
+export const deckClickVerdict = (
+  mode: DeckMode,
+  modalDepth: number,
+): ClickVerdict => {
+  if (modalDepth > 0) return "ignore";
+  if (mode === "build") return "refuse";
+  if (mode === "palette") return "closeThenAct";
+  return "act";
+};
+
+/**
+ * Whether the deck's own Escape should act.
+ *
+ * Escape is exempt from the modal key grab (`screen.ignoreLocked`) so a dialog
+ * can always be dismissed even after focus moves underneath it — which means
+ * every screen-level Escape handler hears it too. Without this the Escape that
+ * closed the card's token picker also closed the card behind it, dropping the
+ * user back on the deck mid-build.
+ */
+export const escapeReachesDeck = (modalDepth: number): boolean =>
+  modalDepth === 0;

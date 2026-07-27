@@ -53,7 +53,8 @@ import {
   TOP,
 } from "./layout";
 import { copyToClipboard } from "./widgets/clipboard";
-import { shifted } from "./widgets/modal";
+import { openModalCount, shifted } from "./widgets/modal";
+import { deckClickVerdict, escapeReachesDeck } from "./nav";
 import { createPalette } from "./screens/palette";
 import { createBuilder } from "./screens/builder";
 import { showLogs, showTxReview } from "./screens/popout";
@@ -117,6 +118,10 @@ export const runDeck = async (): Promise<void> => {
   // Same cycle one level down: `render` draws the builder, and the builder is
   // constructed with a context that renders.
   let drawBuilder: () => void = () => undefined;
+  // And once more for the palette: a click on the deck behind it means "that
+  // instead", which has to close it — but the click handlers are wired before
+  // the palette exists.
+  let leavePalette: () => void = () => undefined;
 
   const feeders = createFeeders(render);
   const ctx: DeckContext = {
@@ -148,6 +153,34 @@ export const runDeck = async (): Promise<void> => {
   };
   pubCopy.on("click", copyAddress(() => getState().publicAddress, "0x"));
   zkCopy.on("click", copyAddress(() => getState().privateAddress, "0zk"));
+
+  /**
+   * What a click on the deck's own chrome should do, given what is over it.
+   *
+   * The deck's chrome stays visible behind the builder, and every bit of it is
+   * clickable. Clicking a stat card or a balance opens a second screen ON TOP
+   * of a half-built transaction and leaves the one underneath orphaned: the new
+   * screen owns `mode`, so Esc closes that instead, and there is no longer a
+   * way back to the builder at all. Say why rather than doing nothing, or it
+   * reads as the click having been missed.
+   */
+  const deckClick = (fn: () => void) => () => {
+    switch (deckClickVerdict(mode, openModalCount())) {
+      case "refuse":
+        setState({ status: "Finish or close the transaction first (Esc)." });
+        render();
+        return;
+      case "closeThenAct":
+        // The palette is a chooser; clicking something else IS the choice.
+        leavePalette();
+        fn();
+        return;
+      case "ignore":
+        return;
+      default:
+        fn();
+    }
+  };
 
   interface CardDef {
     key: string;
@@ -225,7 +258,7 @@ export const runDeck = async (): Promise<void> => {
       border: { type: "line" }, label: def.label, padding: { left: 1, right: 1 },
       style: { border: { fg: "gray" }, hover: { border: { fg: "cyan" } } },
     });
-    box.on("click", def.click);
+    box.on("click", deckClick(def.click));
     return { def, box, visible: true };
   });
 
@@ -477,6 +510,8 @@ export const runDeck = async (): Promise<void> => {
     onClose: backHome,
   });
 
+  leavePalette = () => palette.close();
+
   const openPalette = () => {
     mode = "palette";
     homeBox.hide();
@@ -497,19 +532,23 @@ export const runDeck = async (): Promise<void> => {
   };
 
   leftRail.on("select", (_item: unknown, index: number) => {
-    const row = rows[index];
-    if (!row?.token) return; // headers and spacers carry no token
-    seededKind = row.kind;
-    void resolveSeed(row.token.symbol).then(() => openPalette());
+    deckClick(() => {
+      const row = rows[index];
+      if (!row?.token) return; // headers and spacers carry no token
+      seededKind = row.kind;
+      void resolveSeed(row.token.symbol).then(() => openPalette());
+    })();
   });
 
   activity.on("select", (_item: unknown, index: number) => {
-    const entry = history[index];
-    if (entry) void showTxReview(ctx, entry);
+    deckClick(() => {
+      const entry = history[index];
+      if (entry) void showTxReview(ctx, entry);
+    })();
   });
 
-  logsBox.on("click", () => void showLogs(ctx));
-  cmdBtn.on("click", () => openPalette());
+  logsBox.on("click", deckClick(() => void showLogs(ctx)));
+  cmdBtn.on("click", deckClick(() => openPalette()));
 
   // --- keys ------------------------------------------------------------------
   const quit = () => {
@@ -521,27 +560,41 @@ export const runDeck = async (): Promise<void> => {
     process.exit(0);
   };
 
-  screen.key(["q", "C-c"], quit);
+  // While a transaction is being built it owns the keyboard. blessed suppresses
+  // these already once a field is READING, but not between fields — so moving
+  // around the builder and pressing `q` quit the app, and `u` opened a menu
+  // over a half-built transaction.
+  const deckKey = (fn: () => void) => () => {
+    if (mode === "build") return;
+    fn();
+  };
+  screen.key(["C-c"], quit);
+  screen.key(["q"], deckKey(quit));
   // `:` is the reliable command key — most terminals swallow Ctrl/Cmd-K before a
   // TUI ever sees it. C-k is kept as a best-effort second binding.
-  screen.key([":", "C-k"], () => openPalette());
-  screen.key(["u"], () => void openUtilitiesMenu(ctx));
-  screen.key(["t"], () => void openStatusMenu(ctx));
-  screen.key(["l"], () => void showLogs(ctx));
-  screen.key(["b"], () => {
+  screen.key([":", "C-k"], deckKey(() => openPalette()));
+  screen.key(["u"], deckKey(() => void openUtilitiesMenu(ctx)));
+  screen.key(["t"], deckKey(() => void openStatusMenu(ctx)));
+  screen.key(["l"], deckKey(() => void showLogs(ctx)));
+  screen.key(["b"], deckKey(() => {
     wantLeft = !wantLeft;
     relayout(false);
-  });
-  screen.key(["v"], () => {
+  }));
+  screen.key(["v"], deckKey(() => {
     wantRight = !wantRight;
     relayout(false);
-  });
+  }));
   // The footer advertises S while composing, so it is bound — but only in the
   // builder, where it means "review and send" rather than a stray letter.
   screen.key(shifted("S"), () => {
     if (mode === "build") builder.send();
   });
   screen.key(["escape"], () => {
+    // A dialog owns Escape while it is up. modal.ts exempts Escape from the
+    // key grab so a dialog can always be dismissed; that exemption is
+    // screen-wide, so this handler hears it too — and the Escape that closed a
+    // dialog opened from the builder was closing the builder behind it.
+    if (!escapeReachesDeck(openModalCount())) return;
     if (mode === "build") {
       builder.close();
       return;
