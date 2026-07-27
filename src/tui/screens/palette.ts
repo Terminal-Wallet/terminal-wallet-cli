@@ -69,12 +69,11 @@ export const createPalette = (host: PaletteHost): Palette => {
 
   /** Two lines: the action, and what kind of action it is. */
   /**
-   * A card's text, with the cursor drawn into it.
+   * A card's text. The cursor is the FILL behind it, not a colour in it.
    *
-   * The border alone was too quiet, and a filled background too loud. The
-   * label itself lights up instead — which is also what a pointer moving over
-   * a card should do, and `mouseover` moves the cursor, so hover and keyboard
-   * end up saying the same thing in the same place.
+   * A block of colour is the right signal here — it reads instantly across a
+   * grid. Green, on black text: blue was the original and looked wrong on a
+   * solid background, and cyan was no better.
    */
   const face = (card: LaidCard, selected = false): string => {
     const kind =
@@ -88,10 +87,12 @@ export const createPalette = (host: PaletteHost): Palette => {
     if (card.disabled) {
       return `${tag(card.label, "gray")}\n${tag("unavailable", "gray")}`;
     }
+    // Black on the fill, or the label sits white-on-green and reads as
+    // washed out; the sub-label follows it rather than staying dim-on-bright.
     const label = selected
-      ? `{cyan-fg}{bold}${card.label}{/}`
+      ? `{bold}${tag(card.label, "black")}{/bold}`
       : tag(card.label, "white");
-    return `${label}\n${tag(kind, "gray")}`;
+    return `${label}\n${tag(kind, selected ? "black" : "gray")}`;
   };
 
   const highlight = () => {
@@ -103,6 +104,8 @@ export const createPalette = (host: PaletteHost): Palette => {
       // background on one is a lot of colour to say "the cursor is here" —
       // which is all it means. Bold picks the text up with it.
       e.el.style.border.fg = disabled ? "gray" : selected ? "cyan" : "gray";
+      // The fill is the highlight; the border says which one Enter takes.
+      e.el.style.bg = selected ? "green" : undefined;
       if (e.card) e.el.setContent(face(e.card, selected));
     }
   };
