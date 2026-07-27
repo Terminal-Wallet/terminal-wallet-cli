@@ -4,13 +4,20 @@
  * a responsive grid layout and 2D keyboard navigation. No blessed imports — the
  * deck renders this; the logic stays unit-testable.
  *
- * Categories: PRIVATE / PUBLIC / SWAP / DEFI / OTHER. DEFI is the protocol
- * actions — Morpho vaults, f(x) minting — all of which spend the private
- * balance. OTHER is a synthetic card that opens the cookbook extension point.
+ * Categories: PRIVATE / PUBLIC, then one per protocol, then OTHER. The
+ * header carries the qualifier so a card only has to name the verb — which is
+ * why two cards can both read "Send" without being ambiguous. Protocol actions
+ * all spend the private balance and gate like PRIVATE. OTHER is a synthetic
+ * card that opens the cookbook extension point.
  */
 import { buildActions, MenuGroup } from "../actions";
 
-export type PaletteCategory = "PRIVATE" | "PUBLIC" | "SWAP" | "DEFI" | "OTHER";
+export type PaletteCategory =
+  | "PRIVATE"
+  | "PUBLIC"
+  | "MORPHO"
+  | "F(X)"
+  | "OTHER";
 
 /** The balance set a seeded token came from (anchored to the rail section). */
 export type TokenKind = "private" | "public";
@@ -18,6 +25,8 @@ export type TokenKind = "private" | "public";
 export interface PaletteCard {
   id: string;
   label: string;
+  /** The card's second line — what the action does, not what it is called. */
+  hint?: string;
   category: PaletteCategory;
   disabled?: boolean; // gated out by the seeded token's kind
 }
@@ -40,24 +49,30 @@ const OPENABLE = new Set([
 const CATEGORY_OF: Partial<Record<MenuGroup, PaletteCategory>> = {
   "Private Actions": "PRIVATE",
   "Public Actions": "PUBLIC",
-  "0x Swap Tools": "SWAP",
-  "Morpho Vaults": "DEFI",
-  "f(x) Mint": "DEFI",
+  Morpho: "MORPHO",
+  "f(x)": "F(X)",
 };
 
 export const CATEGORY_ORDER: PaletteCategory[] = [
   "PRIVATE",
   "PUBLIC",
-  "SWAP",
-  "DEFI",
+  "MORPHO",
+  "F(X)",
   "OTHER",
 ];
 
+/** The categories that spend the private balance, and so gate together. */
+const PRIVATE_SPENDING: PaletteCategory[] = ["PRIVATE", "MORPHO", "F(X)"];
+
 /**
- * Whether a card is gated out by the seeded token's kind. Swaps follow the split:
- * a private token disables PUBLIC actions AND public-swap; a public token disables
- * PRIVATE actions AND private-swap. DEFI spends the private balance, so it gates
- * with PRIVATE. OTHER is never gated; no kind = nothing gated.
+ * Whether a card is gated out by the seeded token's kind — a public token
+ * cannot start a private action, and the reverse.
+ *
+ * Swaps used to sit in their own category, which said nothing about which
+ * balance they spend, so both had to be named here by id. They now live in the
+ * PRIVATE and PUBLIC sections with everything else that spends the same money,
+ * and the rule is about categories again. OTHER is never gated; no seeded
+ * token gates nothing.
  */
 export const isCardGated = (
   card: Pick<PaletteCard, "id" | "category">,
@@ -65,10 +80,8 @@ export const isCardGated = (
 ): boolean => {
   if (!kind || card.category === "OTHER") return false;
   return kind === "private"
-    ? card.category === "PUBLIC" || card.id === "public-swap"
-    : card.category === "PRIVATE" ||
-        card.category === "DEFI" ||
-        card.id === "private-swap";
+    ? card.category === "PUBLIC"
+    : PRIVATE_SPENDING.includes(card.category);
 };
 
 /** The palette's card set: openable actions grouped by category + a synthetic Other. */
@@ -79,10 +92,23 @@ export const buildPaletteCards = (
   const cards: PaletteCard[] = buildActions(baseSymbol).flatMap((a) => {
     const category = CATEGORY_OF[a.group];
     return OPENABLE.has(a.id) && category
-      ? [{ id: a.id, label: a.label, category, disabled: isCardGated({ id: a.id, category }, kind) }]
+      ? [
+          {
+            id: a.id,
+            label: a.label,
+            hint: a.hint,
+            category,
+            disabled: isCardGated({ id: a.id, category }, kind),
+          },
+        ]
       : [];
   });
-  cards.push({ id: "other", label: "Other…", category: "OTHER" });
+  cards.push({
+    id: "other",
+    label: "Other\u2026",
+    hint: "more recipes",
+    category: "OTHER",
+  });
   return cards;
 };
 

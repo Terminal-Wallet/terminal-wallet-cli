@@ -52,6 +52,8 @@ export const createPalette = (host: PaletteHost): Palette => {
   const { ctx, box } = host;
   let layout: PaletteLayout | undefined;
   let cursor = "";
+  /** Rows of the box the grid can actually show — set when the grid is laid. */
+  let viewport = 0;
   let elements: {
     id: string;
     el: blessed.Widgets.BoxElement;
@@ -67,34 +69,54 @@ export const createPalette = (host: PaletteHost): Palette => {
   const isDisabled = (id: string): boolean =>
     !!layout?.cards.find((c) => c.id === id)?.disabled;
 
-  /** Two lines: the action, and what kind of action it is. */
   /**
-   * A card's text. The cursor is the FILL behind it, not a colour in it.
+   * A card's two lines: the verb, and what it does to your money.
    *
-   * A block of colour is the right signal here — it reads instantly across a
-   * grid. Green, on black text: blue was the original and looked wrong on a
-   * solid background, and cyan was no better.
+   * The second line used to name the category, which the header directly above
+   * the card already says — and it never appeared anyway, because a card three
+   * rows tall with a line border has exactly one row of content. Cards are four
+   * rows now and the line carries the action's own hint.
+   *
+   * The cursor is the FILL behind the text, not a colour in it. A block of
+   * colour reads instantly across a grid; green, on black text, because blue
+   * and cyan both looked washed out on a solid background.
    */
   const face = (card: LaidCard, selected = false): string => {
-    const kind =
-      card.category === "PRIVATE"
-        ? "private"
-        : card.category === "PUBLIC"
-          ? "public"
-          : card.category === "SWAP"
-            ? "0x swap"
-            : card.category === "DEFI"
-              ? "morpho"
-              : "cookbook";
     if (card.disabled) {
       return `${tag(card.label, "gray")}\n${tag("unavailable", "gray")}`;
     }
     // Black on the fill, or the label sits white-on-green and reads as
-    // washed out; the sub-label follows it rather than staying dim-on-bright.
+    // washed out; the hint follows it rather than staying dim-on-bright.
     const label = selected
       ? `{bold}${tag(card.label, "black")}{/bold}`
       : tag(card.label, "white");
-    return `${label}\n${tag(kind, selected ? "black" : "gray")}`;
+    return `${label}\n${tag(card.hint ?? "", selected ? "black" : "gray")}`;
+  };
+
+  /**
+   * Keep the cursor's card on screen.
+   *
+   * Only a pane too small for the whole grid scrolls at all, and there the
+   * arrow keys move the cursor rather than the view — so a card below the fold
+   * would be selectable, invisible, and impossible to tell apart from one that
+   * is simply not there.
+   */
+  const scrollToCursor = () => {
+    if (!layout || layout.height <= viewport) return;
+    const card = layout.cards.find((c) => c.id === cursor);
+    if (!card) return;
+    const top = (box as unknown as { childBase: number }).childBase ?? 0;
+    // The header sits one row above the card, and it names what the card is.
+    const wanted = Math.max(0, card.y - 1);
+    const next =
+      wanted < top
+        ? wanted
+        : card.y + card.h > top + viewport
+          ? card.y + card.h - viewport
+          : top;
+    if (next !== top) {
+      (box as unknown as { scrollTo: (n: number) => void }).scrollTo(next);
+    }
   };
 
   const highlight = () => {
@@ -176,12 +198,25 @@ export const createPalette = (host: PaletteHost): Palette => {
       cursor = enabled[0]?.id ?? cards[0]?.id ?? "";
     }
 
-    layout = layoutGrid(cards, {
-      width: innerWidth,
-      minCardW: 18,
-      gap: 1,
-      cardH: 3,
-    });
+    // Four rows a card is one for the label and one for the hint. In a short
+    // pane that does not fit, and the grid used to simply draw past the bottom
+    // of the box — cards rendered over the border, and the last category was on
+    // screen but unreachable. Drop the hint line first, since which flows exist
+    // is what the grid is for; if even that does not fit — a narrow pane
+    // collapses to one column — let the box scroll rather than lose a card.
+    const available = Math.max(
+      1,
+      ((box.height as number) || 24) - ((box.iheight as number) || 0),
+    );
+    const grid = (cardH: number) =>
+      layoutGrid(cards, { width: innerWidth, minCardW: 19, gap: 1, cardH });
+    layout = grid(4);
+    if (layout.height > available) layout = grid(3);
+    // `scrollable` is a real property on every blessed element; the typings
+    // only admit it as a constructor option.
+    (box as unknown as { scrollable: boolean }).scrollable =
+      layout.height > available;
+    viewport = available;
 
     for (const header of layout.headers) {
       elements.push({
@@ -230,12 +265,14 @@ export const createPalette = (host: PaletteHost): Palette => {
       elements.push({ id: card.id, el, card });
     }
 
+    scrollToCursor();
     highlight();
   };
 
   const move = (direction: "left" | "right" | "up" | "down") => {
     if (!layout) return;
     cursor = gridNav(layout.rows, cursor, direction, isDisabled);
+    scrollToCursor();
     highlight();
     ctx.screen.render();
   };

@@ -6,24 +6,28 @@
 export type MenuGroup =
   | "Private Actions"
   | "Public Actions"
-  | "0x Swap Tools"
-  | "Morpho Vaults"
-  | "f(x) Mint"
+  | "Morpho"
+  | "f(x)"
   | "Utilities";
 
 export interface MenuAction {
   id: string;
   label: string;
   group: MenuGroup;
+  /**
+   * The second line on a palette card. The label says what the action is; this
+   * says what it does to your money, which is the part worth reading before
+   * choosing. Kept next to the label so the two are written together.
+   */
+  hint?: string;
   disabled?: boolean;
 }
 
 export const GROUP_ORDER: MenuGroup[] = [
   "Private Actions",
   "Public Actions",
-  "0x Swap Tools",
-  "Morpho Vaults",
-  "f(x) Mint",
+  "Morpho",
+  "f(x)",
   "Utilities",
 ];
 
@@ -33,19 +37,18 @@ export const GROUP_ORDER: MenuGroup[] = [
 // token picker, so the palette stays a small, uniform card set. The underlying
 // txBuilderConfigs entries for the base flows remain (reused by that picker).
 export const buildActions = (baseSymbol: string): MenuAction[] => [
-  { id: "private-transfer", label: `Send ERC20s Privately`, group: "Private Actions" },
-  { id: "unshield-private-balances", label: `Unshield ERC20s`, group: "Private Actions" },
+  { id: "private-transfer", label: "Send", hint: "0zk \u2192 0zk", group: "Private Actions" },
+  { id: "unshield-private-balances", label: "Unshield", hint: "make it public", group: "Private Actions" },
+  { id: "private-swap", label: "Swap", hint: "shielded, 0x", group: "Private Actions" },
 
-  { id: "shield-public-balances", label: `Shield ERC20s`, group: "Public Actions" },
-  { id: "public-transfer", label: `Send ERC20s Publicly`, group: "Public Actions" },
+  { id: "shield-public-balances", label: "Shield", hint: "into RAILGUN", group: "Public Actions" },
+  { id: "public-transfer", label: "Send", hint: "0x \u2192 0x", group: "Public Actions" },
+  { id: "public-swap", label: "Swap", hint: "public, 0x", group: "Public Actions" },
 
-  { id: "private-swap", label: `Privately SWAP ERC20`, group: "0x Swap Tools" },
-  { id: "public-swap", label: `Publicly SWAP ERC20`, group: "0x Swap Tools" },
+  { id: "morpho-vault-deposit", label: "Deposit", hint: "earn yield", group: "Morpho" },
+  { id: "morpho-vault-redeem", label: "Withdraw", hint: "to private", group: "Morpho" },
 
-  { id: "morpho-vault-deposit", label: `Deposit into Vault`, group: "Morpho Vaults" },
-  { id: "morpho-vault-redeem", label: `Redeem from Vault`, group: "Morpho Vaults" },
-
-  { id: "fx-mint-open", label: `Mint fxUSD`, group: "f(x) Mint" },
+  { id: "fx-mint-open", label: "Mint fxUSD", hint: "on collateral", group: "f(x)" },
 
   { id: "activity", label: "Activity / History", group: "Utilities" },
   { id: "wallet-tools", label: "Wallet Tools", group: "Utilities" },
