@@ -133,3 +133,70 @@ test("a zero-amount NFT is not held", async () => {
   );
   assert.deepEqual(getPrivateNFTsForChain(NetworkName.Ethereum, WALLET), []);
 });
+
+test("another bucket's event does not wipe the positions", async () => {
+  // The engine emits one balance event PER BUCKET, and drainBalanceQueue
+  // applies every one of them. The NFT set was stored per-wallet rather than
+  // per-bucket and replaced wholesale on each event, so whichever bucket was
+  // applied last decided what the rail showed: a position appeared when
+  // Spendable landed and vanished when any other bucket arrived carrying no
+  // NFTs. That is the "showed and then disappeared" report.
+  const WALLET = "multi-bucket-wallet";
+  const event = (nfts: unknown[], bucket: RailgunWalletBalanceBucket) =>
+    ({
+      chain: { type: 0, id: 1 },
+      erc20Amounts: [],
+      nftAmounts: nfts,
+      balanceBucket: bucket,
+      railgunWalletID: WALLET,
+    }) as never;
+
+  await updatePrivateBalancesForChain(
+    NetworkName.Ethereum,
+    event([nft()], RailgunWalletBalanceBucket.Spendable),
+  );
+  assert.equal(getPrivateNFTsForChain(NetworkName.Ethereum, WALLET).length, 1);
+
+  await updatePrivateBalancesForChain(
+    NetworkName.Ethereum,
+    event([], RailgunWalletBalanceBucket.ShieldPending),
+  );
+  const still = getPrivateNFTsForChain(NetworkName.Ethereum, WALLET);
+  assert.equal(still.length, 1, "a position held as Spendable survived an empty ShieldPending event");
+  assert.equal(still[0].tokenSubID, "0x7bd");
+});
+
+test("a position pending a shield is still shown, and only once", async () => {
+  // Shielded positions arrive in ShieldPending first. Reporting nothing until
+  // they clear hides a position the wallet does hold; reporting it from both
+  // buckets after it clears would show it twice.
+  const WALLET = "pending-position-wallet";
+  const event = (nfts: unknown[], bucket: RailgunWalletBalanceBucket) =>
+    ({
+      chain: { type: 0, id: 1 },
+      erc20Amounts: [],
+      nftAmounts: nfts,
+      balanceBucket: bucket,
+      railgunWalletID: WALLET,
+    }) as never;
+
+  await updatePrivateBalancesForChain(
+    NetworkName.Ethereum,
+    event([nft()], RailgunWalletBalanceBucket.ShieldPending),
+  );
+  assert.equal(
+    getPrivateNFTsForChain(NetworkName.Ethereum, WALLET).length,
+    1,
+    "a position still maturing is held, and hiding it hides the position",
+  );
+
+  await updatePrivateBalancesForChain(
+    NetworkName.Ethereum,
+    event([nft()], RailgunWalletBalanceBucket.Spendable),
+  );
+  assert.equal(
+    getPrivateNFTsForChain(NetworkName.Ethereum, WALLET).length,
+    1,
+    "the same position in two buckets is one position",
+  );
+});

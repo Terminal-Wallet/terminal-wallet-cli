@@ -442,8 +442,13 @@ export const runDeck = async (): Promise<void> => {
       { tag, publicRow, privHeader, privBucket, nftRow },
       // A shield is pending for an hour. The bucket says only that funds are
       // waiting, which reads as indefinite; history has the timestamps.
+      //
+      // From `s`, not the `history` this render is about to update. Read from
+      // the module variable it was one render stale — the countdown could only
+      // appear on the render AFTER the shield reached history, and if nothing
+      // else changed there was no such render, so it never appeared at all.
       (summary) =>
-        pendingNote(summary, nextShieldMaturity(history, Math.floor(Date.now() / 1000))),
+        pendingNote(summary, nextShieldMaturity(s.history, Math.floor(Date.now() / 1000))),
       s.privateNFTs,
     );
     const empty =

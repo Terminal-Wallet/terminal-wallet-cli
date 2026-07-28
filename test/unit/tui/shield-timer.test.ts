@@ -10,6 +10,8 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { POI_SHIELD_PENDING_SEC } from "@railgun-community/shared-models";
 import {
   formatRemaining,
@@ -100,5 +102,24 @@ test("the note keeps the bare summary when there is no clock", () => {
   assert.match(
     pendingNote("0.002 shielding", { readyAt: 0, remainingSec: 900 }),
     /spendable in 15m$/,
+  );
+});
+
+test("the countdown is computed from the current render's history", () => {
+  // The deck mirrors `s.history` into a module variable so a click on the
+  // activity list can map back to the row it landed on. The countdown was
+  // reading that mirror — which is assigned AFTER the portfolio is built, so it
+  // held the PREVIOUS render's history. The clock could therefore only appear
+  // on the render after the shield reached history, and when nothing else
+  // changed there was no such render and it never appeared at all.
+  const entry = readFileSync(resolve(process.cwd(), "src/tui/entry.ts"), "utf-8");
+  assert.match(
+    entry,
+    /nextShieldMaturity\(s\.history,/,
+    "the countdown must read history from the state being rendered",
+  );
+  assert.ok(
+    !/nextShieldMaturity\(history,/.test(entry),
+    "reading the mirrored copy makes the countdown one render stale",
   );
 });
