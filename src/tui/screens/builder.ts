@@ -85,7 +85,9 @@ import {
   fxPositionRisk,
 } from "../../railgun/transaction/fx/risk";
 import { clampFraction } from "../format/slider";
-import { fxRiskLines } from "../format/fx-position";
+import { FxManagePlan, planFxManage, fxManageVerb } from "../../railgun/transaction/fx/manage";
+import { fxRiskLines, fxRiskDeltaLines, fxPositionSummary } from "../format/fx-position";
+import { poolCollateralSymbol } from "../../railgun/transaction/fx/position-state";
 import { DefiLeg, defiLegLines } from "../format/defi-legs";
 import { getFxPool } from "@railgun-community/cookbook";
 import { getProviderForChain } from "../../railgun/network/network-util";
@@ -147,6 +149,7 @@ const FIELD_LABELS: Record<FieldKey, string> = {
   collateralPct: "Collateral",
   debt: "Mint",
   debtRatio: "Loan",
+  debtDelta: "Debt",
   address: "Recipient",
   memo: "Memo",
   gas: "Gas",
@@ -249,8 +252,93 @@ export const createBuilder = (host: BuilderHost): Builder => {
   const collateralPriceUsd = (): number =>
     state.token ? (prices[state.token.tokenAddress.toLowerCase()] ?? 0) : 0;
 
-  /** The live risk of what is currently on screen, if it is an fx position. */
+  /**
+   * The price of the COLLATERAL, which for a position is the pool's token
+   * rather than whatever is in the token row.
+   *
+   * On the manage and close cards the token row is what you PAY with — fxUSD
+   * when repaying — so pricing risk off it valued the debt as if it were the
+   * collateral and reported a position that does not exist.
+   */
+  const positionCollateralPriceUsd = (): number => {
+    const address = state.position?.pool.collateralToken.toLowerCase();
+    if (address) return prices[address] ?? 0;
+    return collateralPriceUsd();
+  };
+
+  /**
+   * What the two manage sliders currently amount to, as a recipe.
+   *
+   * The deltas are resolved here rather than at submit so the card can show
+   * the resulting risk, name the verb, and refuse an unsupported pair while
+   * the sliders are still moving — instead of at the end, after a review.
+   */
+  const managePlan = (): FxManagePlan | undefined => {
+    const held = state.position?.state;
+    if (!held) return undefined;
+    const collateralDelta = state.collateralPct ? collateralAmount() : 0n;
+    const frac = state.debtDeltaFrac ?? 0;
+    let debtDelta = 0n;
+    if (frac < 0) {
+      // Repay: the fraction is of the debt actually owed, so -1 is exactly it
+      // and cannot overshoot into repaying more than exists.
+      debtDelta = -(held.debtAmount * BigInt(Math.round(-frac * 10000))) / 10000n;
+    } else if (frac > 0) {
+      const ceiling = fxDebtForRatio(
+        held.collateralAmount + collateralDelta,
+        held.collateralDecimals,
+        positionCollateralPriceUsd(),
+        fxMaxOpenRatio(held.rebalanceDebtRatio),
+      );
+      const headroom = ceiling > held.debtAmount ? ceiling - held.debtAmount : 0n;
+      debtDelta = (headroom * BigInt(Math.round(frac * 10000))) / 10000n;
+    }
+    return planFxManage({ collateralDelta, debtDelta });
+  };
+
+  /** Where the selected position stands before this card touches it. */
+  const fxRiskBefore = (): FxRisk | undefined => {
+    const held = state.position?.state;
+    if (!held) return undefined;
+    return fxPositionRisk({
+      collateralAmount: held.collateralAmount,
+      collateralDecimals: held.collateralDecimals,
+      collateralPriceUsd: positionCollateralPriceUsd(),
+      debtAmount: held.debtAmount,
+      rebalanceDebtRatio: held.rebalanceDebtRatio,
+      liquidationDebtRatio: held.liquidationDebtRatio,
+    });
+  };
+
+  /**
+   * The live risk of what is currently on screen.
+   *
+   * Two shapes. OPENING a position is collateral and debt that do not exist
+   * yet, so the row values are the whole position. ADJUSTING one starts from
+   * what is already there and applies the card's deltas — the resulting
+   * position is the only thing worth showing, and it cannot be derived from
+   * the rows alone.
+   */
   const fxRisk = (): FxRisk | undefined => {
+    const held = state.position?.state;
+    if (held) {
+      const plan = managePlan();
+      const addCollateral = plan?.ok ? plan.collateralDelta : 0n;
+      const debtDelta = plan?.ok
+        ? plan.action === "repay"
+          ? -plan.debtDelta
+          : plan.debtDelta
+        : 0n;
+      const debtAfter = held.debtAmount + debtDelta;
+      return fxPositionRisk({
+        collateralAmount: held.collateralAmount + addCollateral,
+        collateralDecimals: held.collateralDecimals,
+        collateralPriceUsd: positionCollateralPriceUsd(),
+        debtAmount: debtAfter > 0n ? debtAfter : 0n,
+        rebalanceDebtRatio: held.rebalanceDebtRatio,
+        liquidationDebtRatio: held.liquidationDebtRatio,
+      });
+    }
     if (!fxThresholds || !state.token) return undefined;
     const debt = state.debt ? parseUnits(state.debt, 18) : 0n;
     return fxPositionRisk({
@@ -279,6 +367,20 @@ export const createBuilder = (host: BuilderHost): Builder => {
       }
       // The debt was sized against the old collateral, so re-derive it.
       if (state.debtRatio !== undefined) nudge("debtRatio", 0);
+      // Same on a manage card: more collateral raises the borrow ceiling, so
+      // the same slider position means a different amount.
+      if (state.debtDeltaFrac !== undefined) nudge("debtDelta", 0);
+      return;
+    }
+    if (key === "debtDelta") {
+      // Symmetric around zero, and the write-through resolves it to `debt` —
+      // the only field submit reads — so nothing downstream knows the slider
+      // is signed.
+      const next = Math.max(-1, Math.min(1, (state.debtDeltaFrac ?? 0) + delta));
+      state.debtDeltaFrac = next;
+      const plan = managePlan();
+      state.debt =
+        plan?.ok && plan.debtDelta > 0n ? formatUnits(plan.debtDelta, 18) : undefined;
       return;
     }
     if (key === "debtRatio") {
@@ -459,8 +561,31 @@ export const createBuilder = (host: BuilderHost): Builder => {
     }
 
     // What the position would actually be, next to the controls that set it.
+    //
+    // Held positions get the same block. It used to be gated on `state.pool`,
+    // which only the OPEN card sets — so every card that adjusts an existing
+    // position showed no risk at all, which is the one screen where the
+    // consequence is the entire decision.
     const risk = fxRisk();
-    if (risk && state.pool && fxThresholds) {
+    const held = state.position?.state;
+    if (risk && held) {
+      lines.push("");
+      lines.push(
+        ...fxRiskDeltaLines({
+          before: fxRiskBefore(),
+          risk,
+          collateralSymbol: poolCollateralSymbol(state.position?.pool.name ?? ""),
+          rebalanceDebtRatio: held.rebalanceDebtRatio,
+          liquidationDebtRatio: held.liquidationDebtRatio,
+        }),
+      );
+      // A pair of deltas the shipped recipes cannot express. Said here, beside
+      // the sliders that produced it, rather than at submit after a review.
+      const plan = managePlan();
+      if (plan && !plan.ok && (state.collateralPct || state.debtDeltaFrac)) {
+        lines.push(tag(`▲ ${plan.reason}`, "yellow"));
+      }
+    } else if (risk && state.pool && fxThresholds) {
       lines.push("");
       lines.push(
         ...fxRiskLines({
@@ -1034,10 +1159,14 @@ export const createBuilder = (host: BuilderHost): Builder => {
       } else {
         const picked = await provider.select(
           "Select position",
+          // The pool name was the hint, which every row shares and so tells
+          // you nothing. What distinguishes two positions is their state.
           choices.map((c) => ({
             label: c.nft.label,
             value: c.nft.tokenSubID,
-            hint: c.pool.name,
+            hint: fxPositionSummary(c.state, poolCollateralSymbol(c.pool.name), (a, d) =>
+              fmtAmount(formatUnits(a, d), 4),
+            ),
           })),
         );
         const choice = choices.find((c) => c.nft.tokenSubID === picked);
@@ -1343,7 +1472,7 @@ export const createBuilder = (host: BuilderHost): Builder => {
    */
   const sliderKey = (delta: number) => () => {
     const row = rows[(list as unknown as { selected: number }).selected];
-    if (row !== "collateralPct" && row !== "debtRatio") return;
+    if (row !== "collateralPct" && row !== "debtRatio" && row !== "debtDelta") return;
     nudge(row, delta);
     buildRows();
     void computeFeePreview();

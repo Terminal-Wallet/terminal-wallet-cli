@@ -1,5 +1,5 @@
 /**
- * The four ways to change a position that already exists.
+ * The four ways to change a position that already exists, behind one card.
  *
  * They share a shape — unshield the NFT, `operate` a delta, shield the NFT back
  * — and differ only in which delta is non-zero and what has to be unshielded to
@@ -22,50 +22,50 @@ const adjust = readFileSync(
 
 const fieldsOf = (id: string) => txBuilderConfigs[id](NetworkName.Ethereum).fields;
 
-test("borrowing against posted collateral spends nothing up front", () => {
-  // No token and no amount row: the collateral is already in the position.
-  const fields = fieldsOf("fx-mint-borrow-more");
-  assert.ok(fields.includes("debt"));
-  assert.ok(!fields.includes("token"), "there is nothing to pay with");
-  assert.ok(!fields.includes("amount"));
+test("one card offers both axes and the position they act on", () => {
+  // Four cards became one. The four RECIPES are unchanged — only the surface
+  // collapsed, because nobody decides to perform a "top-up-and-borrow"; they
+  // decide they want collateral in or debt down, and the verb follows.
+  const cfg = txBuilderConfigs["fx-mint-manage"](NetworkName.Ethereum);
+  assert.ok(cfg.fields.includes("position"), "no position row");
+  assert.ok(cfg.fields.includes("collateralPct"), "no collateral axis");
+  assert.ok(cfg.fields.includes("debtDelta"), "no debt axis");
+  assert.ok(cfg.fields.includes("token"), "nothing to pay collateral with");
+  assert.ok(cfg.loadPositions, "cannot list positions");
+  assert.ok(cfg.previewLegs, "does not describe its batch");
+  assert.equal(cfg.relayAdapt, true);
 });
 
-test("a topup spends collateral, and can be paid for with any token", () => {
-  const fields = fieldsOf("fx-mint-topup");
-  assert.ok(fields.includes("token"), "swap → topup");
-  assert.ok(fields.includes("amount"));
-  assert.ok(!fields.includes("debt"), "a plain topup borrows nothing");
-});
-
-test("topup-and-borrow takes both an amount and a debt", () => {
-  const fields = fieldsOf("fx-mint-topup-borrow");
-  assert.ok(fields.includes("amount"));
-  assert.ok(fields.includes("debt"));
-  assert.ok(fields.includes("token"));
-});
-
-test("a repay is always in fxUSD, and does not pretend otherwise", () => {
-  // Same asymmetry as close: the debt is denominated in fxUSD and no shipped
-  // combo swaps into it.
-  const fields = fieldsOf("fx-mint-repay");
-  assert.ok(fields.includes("amount"));
-  assert.ok(!fields.includes("token"), "a pay-with row would imply a swap no recipe performs");
-  assert.match(adjust, /action === "repay"[\s\S]{0,120}fxUSD/);
-});
-
-test("every adjust card acts on a position it must first choose", () => {
+test("the four cards it replaced are gone, not merely hidden", () => {
+  // Left in the config map they would still be reachable by flow id, and the
+  // palette would be the only thing enforcing the new shape.
   for (const id of [
     "fx-mint-topup",
     "fx-mint-topup-borrow",
     "fx-mint-borrow-more",
     "fx-mint-repay",
   ]) {
-    const cfg = txBuilderConfigs[id](NetworkName.Ethereum);
-    assert.ok(cfg.fields.includes("position"), `${id} has no position row`);
-    assert.ok(cfg.loadPositions, `${id} cannot list positions`);
-    assert.ok(cfg.previewLegs, `${id} does not describe its batch`);
-    assert.equal(cfg.relayAdapt, true, `${id} is not relay-adapt`);
+    assert.equal(txBuilderConfigs[id], undefined, `${id} is still routable`);
   }
+});
+
+test("the debt axis is signed, so one control covers borrow and repay", () => {
+  // A target-ratio control cannot express "add collateral and leave the debt
+  // alone" — the commonest de-risking move — because the ratio falls on its
+  // own once the collateral lands.
+  const configs = readFileSync(
+    join(resolve(process.cwd(), "src"), "tui/screens/tx-builder-configs.ts"),
+    "utf-8",
+  );
+  assert.match(configs, /planFxManage\(/);
+  assert.match(configs, /debtDeltaFrac/);
+});
+
+test("a repay is always in fxUSD, and does not pretend otherwise", () => {
+  // Same asymmetry as close: the debt is denominated in fxUSD and no shipped
+  // combo swaps into it. Still true at the recipe layer, which the card
+  // collapse did not touch.
+  assert.match(adjust, /action === "repay"[\s\S]{0,120}fxUSD/);
 });
 
 test("the position is unshielded in and shielded back — an adjust never burns it", () => {

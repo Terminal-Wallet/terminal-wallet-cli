@@ -81,3 +81,15 @@ export const readFxPositionState = async (
     return undefined;
   }
 };
+
+/**
+ * The collateral a pool takes, as a symbol.
+ *
+ * `FxPoolEntry` carries the collateral's ADDRESS but not its symbol, and the
+ * pool name already states it: every known pool is named "<collateral>-<side>"
+ * — wstETH-Long, WBTC-Short. Splitting the name avoids a token lookup for a
+ * label, and falls back to the whole name rather than to an empty string, so a
+ * pool named differently still renders something true.
+ */
+export const poolCollateralSymbol = (poolName: string): string =>
+  poolName.split("-")[0] || poolName;

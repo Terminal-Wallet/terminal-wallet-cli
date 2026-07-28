@@ -29,7 +29,12 @@ import { txBuilderConfigs } from "../../../src/tui/screens/tx-builder-configs";
  * side. The palette passes 19.
  */
 const MIN_CARD_W = 19;
-const CONTENT_W = MIN_CARD_W - 2 - 2;
+// Two border cells and two padding cells, then ONE more the renderer keeps
+// for itself — measured, not derived. A 15-character hint word-wraps and the
+// overflow is dropped, since a card has exactly one hint line, so the previous
+// figure of 15 passed hints that render clipped. `scripts/palette-preview.ts`
+// is what settles this: the geometry is the authority, not the arithmetic.
+const CONTENT_W = MIN_CARD_W - 2 - 2 - 1;
 
 test("no card label is wider than the narrowest card", () => {
   for (const card of buildPaletteCards("ETH")) {
@@ -71,12 +76,9 @@ test("a public token gates every action that spends the private balance", () => 
   const cards = buildPaletteCards("ETH", "public");
   const gated = cards.filter((c) => c.disabled).map((c) => c.id);
   assert.deepEqual(gated.sort(), [
-    "fx-mint-borrow-more",
     "fx-mint-close",
+    "fx-mint-manage",
     "fx-mint-open",
-    "fx-mint-repay",
-    "fx-mint-topup",
-    "fx-mint-topup-borrow",
     "morpho-vault-deposit",
     "morpho-vault-redeem",
     "private-swap",

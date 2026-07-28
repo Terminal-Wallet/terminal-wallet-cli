@@ -12,9 +12,10 @@ import { LegsState, FlowCaps, validateLegs } from "../../flows/caps";
 import { TokenOverspend } from "../../flows/balance";
 import { FxPoolEntry } from "@railgun-community/cookbook";
 import { RailgunDisplayNFT } from "../../models/balance-models";
+import { FxPositionState } from "../../railgun/transaction/fx/position-state";
 import { EphemeralAssetScan } from "../../railgun/wallet/ephemeral-recovery";
 import { MorphoVaultRef } from "../../railgun/transaction/morpho/vault";
-import { asPercent, sliderBar } from "../format/slider";
+import { asPercent, sliderBar, centredBar } from "../format/slider";
 import { fmtAmount } from "../format/deck";
 
 export type FieldKey =
@@ -28,6 +29,7 @@ export type FieldKey =
   | "collateralPct"
   | "debt"
   | "debtRatio"
+  | "debtDelta"
   | "address"
   | "memo"
   | "gas"
@@ -71,6 +73,14 @@ export interface PositionChoice {
   nft: RailgunDisplayNFT;
   pool: FxPoolEntry;
   positionId: bigint;
+  /**
+   * The position's live collateral, debt and thresholds.
+   *
+   * Undefined when the read failed — NOT when the position is empty. The two
+   * are different answers and the screen has to say which, since zeroes read
+   * as a healthy position with nothing owed.
+   */
+  state?: FxPositionState;
 }
 
 /**
@@ -105,6 +115,19 @@ export interface BuilderState {
    */
   collateralPct?: number;
   debtRatio?: number;
+  /**
+   * The debt slider on the manage card, -1..+1, centred on no change.
+   *
+   * Signed rather than a target ratio, because the four adjust recipes are
+   * defined by a DIRECTION — borrow or repay — and a target ratio hides that.
+   * "Add collateral and leave the debt alone" is the commonest de-risking move
+   * and expresses as a ratio only by accident, since the ratio falls on its
+   * own once the collateral lands.
+   *
+   * -1 repays the whole debt; +1 borrows up to the safe ceiling. It resolves
+   * to `debt`, which is what submit reads.
+   */
+  debtDeltaFrac?: number;
   amount?: string;
   address?: string;
   memo?: string;
@@ -208,6 +231,13 @@ export const fieldDisplay = (key: FieldKey, s: BuilderState): string => {
         ? "‹set with ← →›"
         : `${sliderBar(s.debtRatio, 14)} ${asPercent(s.debtRatio, 1)}` +
           (s.debt ? `  ${s.debt} fxUSD` : "");
+    case "debtDelta": {
+      // Centred: the bar fills right of the middle to borrow and left to
+      // repay, so "no change" is a position rather than an absence.
+      const frac = s.debtDeltaFrac ?? 0;
+      const signed = s.debt ? `${frac < 0 ? "-" : "+"}${s.debt} fxUSD` : "no change";
+      return `${centredBar(frac, 14)} ${signed}`;
+    }
     case "amount":
       return s.amount ? s.amount : "‹enter amount›";
     case "address":

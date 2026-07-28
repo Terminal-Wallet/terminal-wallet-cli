@@ -36,6 +36,28 @@ export const sliderBar = (fraction: number, width: number): string => {
   return "█".repeat(filled) + "░".repeat(width - filled);
 };
 
+/**
+ * A bar filled outward from the centre, for a value that can go either way.
+ *
+ * "No change" is the middle, not an empty bar: a signed control whose zero
+ * looks identical to an unset one gives the user no way to tell that they have
+ * deliberately chosen to leave something alone. The centre cell is always
+ * drawn, so the axis is visible even at zero.
+ */
+export const centredBar = (fraction: number, width: number): string => {
+  if (width <= 0) return "";
+  const mid = Math.floor(width / 2);
+  const f = Math.max(-1, Math.min(1, isFinite(fraction) ? fraction : 0));
+  const cells = new Array<string>(width).fill("░");
+  const span = Math.round(Math.abs(f) * mid);
+  for (let i = 1; i <= span; i++) {
+    const at = f < 0 ? mid - i : mid + i;
+    if (at >= 0 && at < width) cells[at] = "█";
+  }
+  cells[mid] = "│";
+  return cells.join("");
+};
+
 export interface ZoneMark {
   /** Where the mark sits, as a fraction of the bar. */
   at: number;

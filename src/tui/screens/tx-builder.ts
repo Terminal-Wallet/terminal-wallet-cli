@@ -115,6 +115,7 @@ const FIELD_LABELS: Record<FieldKey, string> = {
   collateralPct: "Collateral",
   debt: "Mint",
   debtRatio: "Loan",
+  debtDelta: "Debt",
   address: "Recipient",
   memo: "Memo",
   gas: "Gas",

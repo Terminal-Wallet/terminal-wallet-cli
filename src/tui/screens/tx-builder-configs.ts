@@ -96,6 +96,9 @@ import {
 import { getPrivateNFTsForChain } from "../../railgun/balance/balance-cache";
 import { describeNFTs } from "../../railgun/balance/nft-util";
 import { fxPositionCollections } from "../../railgun/transaction/fx/position";
+import { readFxPositionState } from "../../railgun/transaction/fx/position-state";
+import { FxManagePlan, planFxManage } from "../../railgun/transaction/fx/manage";
+import { mapLimited } from "../../util/concurrency";
 import {
   LegsState, Leg, toRecipients } from "../../flows/caps";
 import { isNativeChoice, makeNativeEntry } from "../../flows/native-token";
@@ -437,7 +440,7 @@ const loadPositionChoices = async (
 ): Promise<PositionChoice[]> => {
   if (!isFxSupportedNetwork(chainName)) return [];
   const collections = fxPositionCollections();
-  return describeNFTs(getPrivateNFTsForChain(chainName), collections).flatMap(
+  const held = describeNFTs(getPrivateNFTsForChain(chainName), collections).flatMap(
     (nft) => {
       if (nft.kind !== "fx-position") return [];
       const pool = KNOWN_POOLS.find(
@@ -447,6 +450,13 @@ const loadPositionChoices = async (
       return [{ nft, pool, positionId: BigInt(nft.tokenSubID) }];
     },
   );
+  // Read each one's live state so the picker can offer a choice someone can
+  // actually make. Bounded, though a wallet holding enough positions for this
+  // to matter is unlikely — the cost is two contract reads apiece.
+  return mapLimited(held, 4, async (choice) => ({
+    ...choice,
+    state: await readFxPositionState(chainName, choice.pool.name, choice.positionId),
+  }));
 };
 
 /**
@@ -611,6 +621,30 @@ const previewAdjustLegs = async (
   return defiLegs({ stepOutputs: build.steps } as never, await symbolResolver(chainName));
 };
 
+/**
+ * The recipe a manage card's sliders resolve to, recomputed at submit.
+ *
+ * Not carried over from the preview: the preview is a display, and the send
+ * path must not depend on it having been rendered or being current — the same
+ * rule the send gates follow.
+ */
+const managePlanFor = (s: BuilderState): FxManagePlan | undefined => {
+  const held = s.position?.state;
+  if (!held) return undefined;
+  const collateralDelta =
+    s.amount && s.token ? parseUnits(s.amount, s.token.decimals) : 0n;
+  const debtDelta = s.debt ? parseUnits(s.debt, 18) : 0n;
+  const signed = (s.debtDeltaFrac ?? 0) < 0 ? -debtDelta : debtDelta;
+  return planFxManage({ collateralDelta, debtDelta: signed });
+};
+
+const TYPE_FOR_ACTION: Record<FxAdjustAction, RailgunTransaction> = {
+  topup: RailgunTransaction.FxMintTopup,
+  "topup-and-borrow": RailgunTransaction.FxMintTopupBorrow,
+  "borrow-more": RailgunTransaction.FxMintBorrowMore,
+  repay: RailgunTransaction.FxMintRepay,
+};
+
 const submitAdjust = async (
   chainName: NetworkName,
   action: FxAdjustAction,
@@ -633,6 +667,28 @@ const submitAdjust = async (
       applyGasDetailsConfirm(s.gas, legsView(s)),
     ),
   );
+};
+
+const previewManageLegs = async (
+  chainName: NetworkName,
+  s: BuilderState,
+): Promise<DefiLeg[]> => {
+  const plan = managePlanFor(s);
+  if (!plan?.ok) return [];
+  return previewAdjustLegs(chainName, plan.action, s);
+};
+
+const submitManage = async (
+  chainName: NetworkName,
+  s: BuilderState,
+): Promise<SubmitResult> => {
+  const plan = managePlanFor(s);
+  // Refused rather than approximated. The four recipes do not span every pair
+  // of deltas, and running the nearest one would move collateral the user
+  // never agreed to move.
+  if (!plan) return { ok: false, error: "select a position first" };
+  if (!plan.ok) return { ok: false, error: plan.reason };
+  return submitAdjust(chainName, plan.action, TYPE_FOR_ACTION[plan.action], s);
 };
 
 const submitFxMintClose = async (
@@ -1198,25 +1254,29 @@ export const txBuilderConfigs: Record<
     submit: (s: BuilderState) => submitFxMintOpen(chainName, s),
   }),
 
-  ...Object.fromEntries(
-    ADJUST_CARDS.map((card) => [
-      card.id,
-      (chainName: NetworkName): TxBuilderConfig => ({
-        title: card.title,
-        chainName,
-        verb: card.verb,
-        fields: ["position", ...card.fields, "fee", "gas"],
-        loadPositions: () => loadPositionChoices(chainName),
-        loadTokens: () => getPrivateERC20BalancesForChain(chainName),
-        previewLegs: (s) => previewAdjustLegs(chainName, card.action, s),
-        ...gasInfo(chainName),
-        gasUnitsHint: FXMINT_GAS_FLOOR,
-        relayAdapt: true,
-        submit: (s: BuilderState) =>
-          submitAdjust(chainName, card.action, card.type, s),
-      }),
-    ]),
-  ),
+  /**
+   * One card for the four adjust recipes.
+   *
+   * They were four cards, which asks the wrong question first: nobody decides
+   * to perform a "top-up-and-borrow", they decide they want more collateral in
+   * or less debt owed, and the verb is a consequence. Two sliders express
+   * every pair the recipes support, and `planFxManage` names the one that
+   * runs — so the choice of recipe stops being a thing the user has to know
+   * before they can start.
+   */
+  "fx-mint-manage": (chainName) => ({
+    title: "Manage an f(x) position — Privately",
+    chainName,
+    verb: "Manage",
+    fields: ["position", "token", "collateralPct", "debtDelta", "fee", "gas"],
+    loadPositions: () => loadPositionChoices(chainName),
+    loadTokens: () => getPrivateERC20BalancesForChain(chainName),
+    previewLegs: (s) => previewManageLegs(chainName, s),
+    ...gasInfo(chainName),
+    gasUnitsHint: FXMINT_GAS_FLOOR,
+    relayAdapt: true,
+    submit: (s: BuilderState) => submitManage(chainName, s),
+  }),
 
   "ephemeral-recovery": (chainName) => ({
     title: "Recover stranded funds — back into RAILGUN",

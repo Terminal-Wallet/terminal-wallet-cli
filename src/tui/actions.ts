@@ -49,10 +49,7 @@ export const buildActions = (baseSymbol: string): MenuAction[] => [
   { id: "morpho-vault-redeem", label: "Withdraw", hint: "to private", group: "Morpho" },
 
   { id: "fx-mint-open", label: "Mint fxUSD", hint: "on collateral", group: "f(x)" },
-  { id: "fx-mint-topup", label: "Add collateral", hint: "de-risk", group: "f(x)" },
-  { id: "fx-mint-topup-borrow", label: "Add & borrow", hint: "keep the ratio", group: "f(x)" },
-  { id: "fx-mint-borrow-more", label: "Borrow more", hint: "raise leverage", group: "f(x)" },
-  { id: "fx-mint-repay", label: "Repay", hint: "lower the debt", group: "f(x)" },
+  { id: "fx-mint-manage", label: "Manage", hint: "top up / repay", group: "f(x)" },
   { id: "fx-mint-close", label: "Close", hint: "repay, unwind", group: "f(x)" },
 
   { id: "activity", label: "Activity / History", group: "Utilities" },
