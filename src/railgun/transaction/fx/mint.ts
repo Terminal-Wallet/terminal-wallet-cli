@@ -49,16 +49,26 @@ export const isFxSupportedNetwork = (chainName: NetworkName): boolean =>
 /**
  * The gas floor an fx batch runs with.
  *
- * The recipes' own `MIN_GAS_LIMIT_FXMINT_*` are carried over from a pre-7702
- * version and have never been measured under a relay-adapt batch — the local
- * build's own notes say to expect them to be wrong. The wallet has measured a
- * private swap at ~2.52M and floors it at 2.6M, so an fx batch, which does
- * strictly more, is held to the same floor rather than the recipe's 1.5M.
+ * MEASURED, not guessed. The first real mainnet mint
+ * (0x252155ef…, block 25125410) carried 3,016,590, consumed 2,917,543 getting
+ * as far as minting the position, and then had 99,047 left — of which the
+ * shield sub-call could receive at most 63/64, or 97,499. A RAILGUN shield
+ * writes merkle commitments and needs far more than that, so it reverted: the
+ * transaction mined, the position and the fxUSD were minted, and both were left
+ * at the ephemeral account instead of coming back shielded.
  *
- * Over-flooring costs headroom; under-flooring reverts after the proof is paid
- * for. Until these are measured on a real batch, take the headroom.
+ * The failure is silent by construction — relay-adapt builds its action data
+ * with `requireSuccess = false`, so a starved tail does not fail the batch, it
+ * just does not happen.
+ *
+ * So the floor has to cover the whole batch INCLUDING its shield: ~2.92M
+ * observed to reach the shield, plus room for a two-output shield (the wallet
+ * sizes a wrap-and-shield at 450k), plus headroom. Not set arbitrarily high
+ * either — the floor is baked into the action data as a `gasleft()` require, so
+ * an excessive one makes the transaction carry gas it cannot use and can revert
+ * the estimate on the floor check itself.
  */
-export const FXMINT_GAS_FLOOR = 2_700_000n;
+export const FXMINT_GAS_FLOOR = 4_000_000n;
 
 /**
  * How wide the swap leg may slip when the position is opened with something

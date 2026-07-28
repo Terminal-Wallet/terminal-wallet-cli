@@ -145,13 +145,17 @@ const VAULT_SLIPPAGE_BPS = 100n;
 
 /**
  * The recipes declare 2.9M for a deposit and 2.8M for a redeem, and a combo
- * meal 2.9M. Either card can now carry a swap leg, and the hint sizes both the
- * fee preview and the overspend reservation — so both take the combo figure.
- * Over-reserving costs headroom; under-reserving costs a send that fails after
- * the proof is paid for.
+ * meal 2.9M — but the first real fx mint proved 2.9M is not enough for a batch
+ * whose tail is a shield: it reached the shield with 97k left and the shield
+ * reverted, stranding everything at the ephemeral account.
+ *
+ * A vault combo has the same shape (swap, protocol call, shield) and less work
+ * before the shield, so this is inferred from that measurement rather than
+ * measured directly — hence lower than the fx floor, and still well above what
+ * the recipes ask for. Revise when a vault batch has actually been run.
  */
-const VAULT_DEPOSIT_GAS_UNITS = 2_900_000n;
-const VAULT_REDEEM_GAS_UNITS = 2_900_000n;
+const VAULT_DEPOSIT_GAS_UNITS = 3_500_000n;
+const VAULT_REDEEM_GAS_UNITS = 3_500_000n;
 
 /**
  * The vaults on offer, each paired with the balance its action would spend: the
