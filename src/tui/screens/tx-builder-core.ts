@@ -305,6 +305,18 @@ export interface PreflightInput {
   caps?: FlowCaps;
   /** Tokens whose committed amount plus same-token fee exceeds the balance. */
   overspend: TokenOverspend[];
+  /**
+   * A flow-specific reason this build must not be sent, already worded for the
+   * user.
+   *
+   * The generic gates only know about token balances. Borrowing more than a
+   * position's collateral supports spends nothing you hold and so passes every
+   * one of them, while being exactly the same kind of mistake — a commitment
+   * the wallet cannot cover. Flows that can express such a thing say so here,
+   * and it is refused beside the ordinary overspend rather than in a place of
+   * its own.
+   */
+  blocker?: string;
 }
 
 /**
@@ -325,6 +337,7 @@ export const preflight = ({
   legs,
   caps,
   overspend,
+  blocker,
 }: PreflightInput): Preflight => {
   if (legs && caps) {
     const result = validateLegs(legs, caps);
@@ -345,6 +358,12 @@ export const preflight = ({
       reason: "fields",
       message: `Incomplete — need: ${fieldResult.missing.join(", ")}.`,
     };
+  }
+
+  // Before overspend: a flow that has already decided this cannot be sent
+  // knows more about why than a balance comparison does.
+  if (blocker) {
+    return { ok: false, reason: "overspend", message: blocker };
   }
 
   if (overspend.length) {

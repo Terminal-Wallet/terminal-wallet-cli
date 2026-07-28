@@ -9,6 +9,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { formatUnits } from "ethers";
 import {
+  fxCloseLines,
   fxPositionSummary,
   fxRiskDeltaLines,
 } from "../../../src/tui/format/fx-position";
@@ -110,4 +111,53 @@ test("a slider that has not moved yet shows no step", () => {
     liquidationDebtRatio: 950000000000000000n,
   }).map(strip);
   assert.ok(!lines.some((l) => l.startsWith("was")));
+});
+
+// --- closing --------------------------------------------------------------
+
+const close = (repay: bigint, over: Partial<FxPositionState> = {}) =>
+  fxCloseLines({
+    state: state(over),
+    repayAmount: repay,
+    collateralSymbol: "wstETH",
+    format: fmt,
+  }).map(strip);
+
+test("repaying the whole debt says the position is closed and burnt", () => {
+  const lines = close(1880030086474238325175n);
+  assert.ok(lines.some((l) => /closes the position fully/.test(l)));
+  assert.ok(lines.some((l) => /1\.6067 wstETH/.test(l)), "does not say what comes back");
+});
+
+test("a partial close says how much is still owed", () => {
+  // The distinction the card never made: 940 fxUSD against a 1880 debt leaves
+  // a live position, which is a categorically different outcome to closing.
+  const lines = close(940015043237119162587n);
+  assert.ok(lines.some((l) => /partial/.test(l)));
+  assert.ok(lines.some((l) => /940\.0150 fxUSD owed/.test(l)));
+  assert.ok(!lines.some((l) => /closes the position fully/.test(l)));
+});
+
+test("collateral comes back in proportion to the debt cleared", () => {
+  const lines = close(940015043237119162587n);
+  // Half the debt, half the collateral.
+  assert.ok(lines.some((l) => /0\.8034 wstETH/.test(l)), lines.join(" | "));
+});
+
+test("repaying more than is owed says the excess is not used", () => {
+  // A number larger than the debt reads as if it will all be spent.
+  const lines = close(3000000000000000000000n);
+  assert.ok(lines.some((l) => /is not used/.test(l)));
+  assert.ok(lines.some((l) => /closes the position fully/.test(l)));
+});
+
+test("a swap out is named, so the collateral is not reported as arriving unchanged", () => {
+  const lines = fxCloseLines({
+    state: state(),
+    repayAmount: 1880030086474238325175n,
+    collateralSymbol: "wstETH",
+    receiveSymbol: "USDC",
+    format: fmt,
+  }).map(strip);
+  assert.ok(lines.some((l) => /wstETH → USDC/.test(l)));
 });

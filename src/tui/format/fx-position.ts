@@ -153,3 +153,65 @@ export const fxRiskDeltaLines = (view: FxRiskDeltaView): string[] => {
     ...lines,
   ];
 };
+
+export interface FxCloseView {
+  state: FxPositionState;
+  /** fxUSD being put toward the debt, 18 decimals. */
+  repayAmount: bigint;
+  collateralSymbol: string;
+  /** What the released collateral comes back as, when a swap is folded in. */
+  receiveSymbol?: string;
+  format: (amount: bigint, decimals: number) => string;
+}
+
+/**
+ * What closing actually does to this position.
+ *
+ * "Amount: 1880.03" says nothing about whether that finishes the job. The two
+ * outcomes are categorically different — a full close burns the NFT and
+ * returns everything, a partial one leaves a live position with less collateral
+ * behind it — and which one you get depends on a number you had to look up.
+ */
+export const fxCloseLines = ({
+  state,
+  repayAmount,
+  collateralSymbol,
+  receiveSymbol,
+  format,
+}: FxCloseView): string[] => {
+  const full = repayAmount >= state.debtAmount;
+  const applied = full ? state.debtAmount : repayAmount;
+  // Collateral is released in proportion to the debt cleared. Exact for a full
+  // close; for a partial one the protocol's own accounting is the authority
+  // and this is the shape of the answer, not the answer.
+  const released =
+    state.debtAmount > 0n
+      ? (state.collateralAmount * applied) / state.debtAmount
+      : state.collateralAmount;
+  const back = receiveSymbol && receiveSymbol !== collateralSymbol
+    ? `${collateralSymbol} → ${receiveSymbol}`
+    : collateralSymbol;
+
+  const lines = [
+    full
+      ? tag("closes the position fully — #id is burnt", "yellow")
+      : tag(
+          `partial — leaves ${format(state.debtAmount - applied, 18)} fxUSD owed`,
+          "gray",
+        ),
+    `${tag("repay", "gray")}  ${format(applied, 18)} fxUSD`,
+    `${tag("back", "gray")}   ${format(released, state.collateralDecimals)} ${back}` +
+      (full ? "" : `  ${tag("(approx — the pool settles it)", "gray")}`),
+  ];
+  if (repayAmount > state.debtAmount) {
+    // Overshooting is not an error — the excess simply is not used — but a
+    // number larger than the debt reads as if it will be spent.
+    lines.push(
+      tag(
+        `only ${format(state.debtAmount, 18)} fxUSD is owed; the rest is not used`,
+        "gray",
+      ),
+    );
+  }
+  return lines;
+};

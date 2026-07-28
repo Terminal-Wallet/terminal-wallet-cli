@@ -84,9 +84,9 @@ import {
   fxMaxOpenRatio,
   fxPositionRisk,
 } from "../../railgun/transaction/fx/risk";
-import { clampFraction } from "../format/slider";
+import { clampFraction, asPercent } from "../format/slider";
 import { FxManagePlan, planFxManage, fxManageVerb } from "../../railgun/transaction/fx/manage";
-import { fxRiskLines, fxRiskDeltaLines, fxPositionSummary } from "../format/fx-position";
+import { fxRiskLines, fxRiskDeltaLines, fxPositionSummary, fxCloseLines } from "../format/fx-position";
 import { poolCollateralSymbol } from "../../railgun/transaction/fx/position-state";
 import { DefiLeg, defiLegLines } from "../format/defi-legs";
 import { getFxPool } from "@railgun-community/cookbook";
@@ -351,6 +351,37 @@ export const createBuilder = (host: BuilderHost): Builder => {
   };
 
   /**
+   * Why this build cannot be sent, when the reason is not a token balance.
+   *
+   * Borrowing against a position spends nothing you hold, so every ordinary
+   * gate passes it — but debt the collateral does not cover is the same
+   * mistake as an overspend and has to be refused the same way. The ceiling is
+   * the one the opening slider uses, so a position cannot be adjusted into a
+   * state the builder would refuse to create.
+   */
+  const fxBlocker = (): string | undefined => {
+    const held = state.position?.state;
+    if (!held) return undefined;
+    const plan = managePlan();
+    if (plan && !plan.ok) {
+      // "nothing to change" is the untouched state, not an error to shout
+      // about — the completeness gate already refuses an empty build.
+      return plan.reason === "nothing to change" ? undefined : plan.reason;
+    }
+    if (!plan?.ok || plan.action === "repay") return undefined;
+    const after = fxRisk();
+    if (!after) return undefined;
+    const ceiling = fxMaxOpenRatio(held.rebalanceDebtRatio);
+    if (after.debtRatio <= ceiling) return undefined;
+    const symbol = poolCollateralSymbol(state.position?.pool.name ?? "");
+    return (
+      `The collateral does not cover this much debt — it would leave the ` +
+      `position at ${asPercent(after.debtRatio, 1)}, over the ${asPercent(ceiling, 1)} ` +
+      `ceiling. Borrow less, or add more ${symbol}.`
+    );
+  };
+
+  /**
    * Move a slider and write through to the amount it stands for.
    *
    * The sliders are an input method: `amount` and `debt` remain the only things
@@ -568,7 +599,21 @@ export const createBuilder = (host: BuilderHost): Builder => {
     // consequence is the entire decision.
     const risk = fxRisk();
     const held = state.position?.state;
-    if (risk && held) {
+    // Closing is not an adjustment — the resulting position is either gone or
+    // smaller in both legs, so a debt-ratio meter is the wrong answer. What it
+    // owes, what comes back, and whether this finishes it are the questions.
+    if (held && cfg.amountIsPositionDebt) {
+      lines.push("");
+      lines.push(
+        ...fxCloseLines({
+          state: held,
+          repayAmount: state.amount ? parseUnits(state.amount, 18) : 0n,
+          collateralSymbol: poolCollateralSymbol(state.position?.pool.name ?? ""),
+          receiveSymbol: state.buyToken?.symbol,
+          format: (a, d) => fmtAmount(formatUnits(a, d), 6),
+        }),
+      );
+    } else if (risk && held) {
       lines.push("");
       lines.push(
         ...fxRiskDeltaLines({
@@ -579,16 +624,21 @@ export const createBuilder = (host: BuilderHost): Builder => {
           liquidationDebtRatio: held.liquidationDebtRatio,
         }),
       );
-      // A pair of deltas the shipped recipes cannot express. Said here, beside
-      // the sliders that produced it, rather than at submit after a review.
-      const plan = managePlan();
-      if (plan && !plan.ok && (state.collateralPct || state.debtDeltaFrac)) {
-        lines.push(tag(`▲ ${plan.reason}`, "yellow"));
+      // Why this cannot be sent — an unsupported pair of deltas, or debt the
+      // collateral does not cover. Said here, beside the sliders that produced
+      // it, rather than at submit after a review has been read and accepted.
+      const blocked = fxBlocker();
+      if (blocked && (state.collateralPct || state.debtDeltaFrac)) {
+        lines.push(tag(`▲ ${blocked}`, "yellow"));
       }
     } else if (risk && state.pool && fxThresholds) {
       lines.push("");
+      // The same view the manage card uses, with no `before` — a position
+      // being opened has nothing to have moved from. Sharing it means opening
+      // and adjusting read identically, rather than being two dialects of the
+      // same three numbers.
       lines.push(
-        ...fxRiskLines({
+        ...fxRiskDeltaLines({
           risk,
           collateralSymbol: state.pool.token.symbol,
           ...fxThresholds,
@@ -1172,6 +1222,12 @@ export const createBuilder = (host: BuilderHost): Builder => {
         const choice = choices.find((c) => c.nft.tokenSubID === picked);
         if (choice) {
           state.position = choice;
+          // Closing fully is what "close" means, so offer it. The debt is not
+          // shown anywhere the user could have copied it from, which made the
+          // commonest action the one requiring a lookup.
+          if (cfg.amountIsPositionDebt && choice.state) {
+            state.amount = formatUnits(choice.state.debtAmount, 18);
+          }
           // Its pool decides the collateral and the risk thresholds, exactly as
           // picking a pool does when opening.
           fxThresholds = await getFxPool(
@@ -1424,6 +1480,7 @@ export const createBuilder = (host: BuilderHost): Builder => {
       legs: cfg.multiLeg ? state.legs : undefined,
       caps: cfg.multiLeg ? caps() : undefined,
       overspend: currentOverspend(),
+      blocker: fxBlocker(),
     });
     if (!gate.ok) return getInputProvider().notify(gate.message);
 

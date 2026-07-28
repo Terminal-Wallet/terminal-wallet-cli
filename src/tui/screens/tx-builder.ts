@@ -90,6 +90,15 @@ export interface TxBuilderConfig {
    */
   previewLines?: (state: BuilderState) => Promise<string[]>;
   /**
+   * The amount row means "fxUSD put toward THIS position's debt".
+   *
+   * Set by the close card. Picking a position then prefills the row with the
+   * whole debt, because closing fully is what "close" means and leaving the
+   * field blank made the commonest action the one you had to look a number up
+   * for — the debt is not shown anywhere you could have copied it from.
+   */
+  amountIsPositionDebt?: boolean;
+  /**
    * The steps this build would run, for the clear-signing breakdown.
    *
    * A combo meal is several recipes chained, so one signature can be a swap,
