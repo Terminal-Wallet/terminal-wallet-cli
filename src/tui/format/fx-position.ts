@@ -8,6 +8,7 @@
  * get opened at leverage nobody intended.
  */
 import { FxRisk, FxRiskZone } from "../../railgun/transaction/fx/risk";
+import { FxPositionState } from "../../railgun/transaction/fx/position-state";
 import { tag } from "./tags";
 import { asLeverage, asPercent, asUsdPrice, markedBar } from "./slider";
 
@@ -83,3 +84,72 @@ export const fxCollateralLine = (
   (usd !== undefined && isFinite(usd) && usd > 0
     ? `  ${tag(`≈ $${usd.toFixed(2)}`, "gray")}`
     : "");
+
+/**
+ * A position in one line, for the picker.
+ *
+ * The picker used to list ids. Choosing between "#1980" and "#1981" is not a
+ * choice anyone can make — the whole reason to open this screen is that one of
+ * them needs attention, and the id does not say which. Collateral, debt and the
+ * ratio do, and the zone word says it without arithmetic.
+ */
+export const fxPositionSummary = (
+  state: FxPositionState | undefined,
+  collateralSymbol: string,
+  format: (amount: bigint, decimals: number) => string,
+): string => {
+  // Absent is not zero. A position whose state could not be read must not
+  // render as an empty, healthy one — that is an invitation to borrow against
+  // collateral that may not be there.
+  if (!state) return "state unavailable — could not read this position";
+  const wad = Number(10n ** 18n);
+  const ratio = Number(state.debtRatio) / wad;
+  const zone: FxRiskZone =
+    state.debtRatio >= state.liquidationDebtRatio
+      ? "liquidation"
+      : state.debtRatio >= state.rebalanceDebtRatio
+        ? "rebalance"
+        : "safe";
+  const near =
+    zone === "safe" && ratio >= Number(state.rebalanceDebtRatio) / wad - 0.1
+      ? " ▲ near rebalance"
+      : "";
+  const word =
+    zone === "safe" ? "safe" : zone === "rebalance" ? "▲ rebalancing" : "▲ liquidatable";
+  return (
+    `${format(state.collateralAmount, state.collateralDecimals)} ${collateralSymbol}` +
+    ` · ${format(state.debtAmount, 18)} fxUSD` +
+    ` · ${asPercent(ratio, 1)} ${word}${near}`
+  );
+};
+
+export interface FxRiskDeltaView extends FxRiskView {
+  /** Where the position is before the action. Omitted when opening a new one. */
+  before?: FxRisk;
+}
+
+/**
+ * The risk block for an action on an EXISTING position: where it is now, and
+ * where this puts it.
+ *
+ * A single resulting figure is not enough to decide with. "52.8%" only means
+ * something against the 49.2% it came from — the direction and the size of the
+ * step are the whole content of the decision, and asking someone to remember
+ * the previous number while moving a slider is asking them to do the diff in
+ * their head.
+ */
+export const fxRiskDeltaLines = (view: FxRiskDeltaView): string[] => {
+  const { before, risk } = view;
+  const lines = fxRiskLines(view);
+  if (!before) return lines;
+  const moved = Math.abs(before.debtRatio - risk.debtRatio) > 1e-9;
+  if (!moved) return lines;
+  const colour = zoneColour(risk.zone);
+  // Prepended, so the meter underneath is read as the RESULT of this move.
+  return [
+    `${tag("was", "gray")}    ${tag(asPercent(before.debtRatio, 1), "gray")}` +
+      ` ${tag("→", "gray")} ${tag(asPercent(risk.debtRatio, 1), colour)}` +
+      `   ${tag(asLeverage(before.leverage), "gray")} ${tag("→", "gray")} ${asLeverage(risk.leverage)}`,
+    ...lines,
+  ];
+};
