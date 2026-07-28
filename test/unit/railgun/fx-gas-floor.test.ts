@@ -2,17 +2,18 @@
  * The gas floor, pinned to the transaction that taught us what it should be.
  *
  * The first real mainnet fx mint (0x252155ef…) carried 3,016,590 and consumed
- * 2,917,543 reaching the point where it mints the position. That left 99,047,
- * of which the shield sub-call could receive at most 63/64 — 97,499. A RAILGUN
- * shield writes merkle commitments and needs far more, so it reverted.
+ * 2,917,543 without completing. Traced per leg: unshield 1,121,136, approve +
+ * 0x swap 209,278, fx operate 548,398, shield 885,471 — and the shield's inner
+ * call into the RailgunSmartWallet was given 780,728, consumed 768,540, and
+ * reverted with no revert data. Near-total consumption with no data is out of
+ * gas rather than a `require`.
  *
- * Because relay-adapt builds its action data with `requireSuccess = false`, that
- * did not fail the batch. The transaction mined, the position and the fxUSD were
- * minted, and both were left at the ephemeral account. Nothing said so.
+ * Because relay-adapt builds its action data with `requireSuccess = false`,
+ * that did not fail the batch: the transaction mined, the position and the
+ * fxUSD were minted, and both were left at the ephemeral account.
  *
- * These numbers are the reason the floor is what it is. Lowering it back under
- * what was observed should require re-deriving them, not just editing a
- * constant.
+ * The swap is only 7.5% of the batch, so a bare open would have used ~2.58M and
+ * hit the same wall — which is why the floor is not split per flow.
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -20,23 +21,32 @@ import { NetworkName } from "@railgun-community/shared-models";
 import { FXMINT_GAS_FLOOR } from "../../../src/railgun/transaction/fx/mint";
 import config from "../../../src/config/config-defaults";
 
-/** Observed on mainnet, tx 0x252155ef… */
+/** Observed on mainnet, tx 0x252155ef…, from the call trace. */
 const CARRIED = 3_016_590n;
 const CONSUMED = 2_917_543n;
-/** What a wrap-and-shield is sized at elsewhere in the wallet. */
-const SHIELD_COST = 450_000n;
+const SWAP_LEG = 209_278n;
+/** What the shield's inner RailgunSmartWallet call got before reverting. */
+const SHIELD_INNER_GIVEN = 780_728n;
 
-test("the batch consumed nearly everything it carried", () => {
-  const leftover = CARRIED - CONSUMED;
-  assert.equal(leftover, 99_047n);
-  // 63/64 is all a sub-call can be given.
-  assert.ok((leftover * 63n) / 64n < SHIELD_COST, "the shield could not have fitted");
+test("the swap is a small part of the batch, so the floor is not combo-only", () => {
+  // The intuition is that only the swapping path needs the bigger floor. The
+  // trace says otherwise: the swap is 7.5%, and the expensive legs are the
+  // unshield and the protocol call, which a bare open pays in full.
+  const bare = CONSUMED - SWAP_LEG;
+  assert.ok(SWAP_LEG * 10n < CONSUMED, "the swap should be under 10% of the batch");
+  assert.ok(
+    bare > 2_500_000n,
+    "a bare open still spends most of the batch and hits the same shield",
+  );
 });
 
-test("the floor covers reaching the shield AND running it", () => {
+test("the floor gives the shield materially more than it had when it failed", () => {
+  // It failed with 780,728 available to its inner call. The floor has to buy
+  // enough headroom that the same call gets substantially more.
+  const extraOverTheFailedRun = FXMINT_GAS_FLOOR - CARRIED;
   assert.ok(
-    FXMINT_GAS_FLOOR > CONSUMED + SHIELD_COST,
-    `${FXMINT_GAS_FLOOR} does not cover ${CONSUMED} observed + ${SHIELD_COST} to shield`,
+    extraOverTheFailedRun > SHIELD_INNER_GIVEN,
+    `only ${extraOverTheFailedRun} more than the run that failed with ${SHIELD_INNER_GIVEN} available`,
   );
 });
 

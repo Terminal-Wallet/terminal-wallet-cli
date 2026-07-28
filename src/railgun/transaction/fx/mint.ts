@@ -49,24 +49,27 @@ export const isFxSupportedNetwork = (chainName: NetworkName): boolean =>
 /**
  * The gas floor an fx batch runs with.
  *
- * MEASURED, not guessed. The first real mainnet mint
- * (0x252155ef…, block 25125410) carried 3,016,590, consumed 2,917,543 getting
- * as far as minting the position, and then had 99,047 left — of which the
- * shield sub-call could receive at most 63/64, or 97,499. A RAILGUN shield
- * writes merkle commitments and needs far more than that, so it reverted: the
- * transaction mined, the position and the fxUSD were minted, and both were left
- * at the ephemeral account instead of coming back shielded.
+ * MEASURED. The first real mainnet mint (0x252155ef…) carried 3,016,590 and
+ * consumed 2,917,543 without ever completing. Traced per leg:
  *
- * The failure is silent by construction — relay-adapt builds its action data
- * with `requireSuccess = false`, so a starved tail does not fail the batch, it
- * just does not happen.
+ *   RAILGUN unshield   1,121,136   (40% of the batch)
+ *   approve + 0x swap    209,278   (7.5%)
+ *   fx operate            548,398
+ *   shield               885,471   REVERTED
  *
- * So the floor has to cover the whole batch INCLUDING its shield: ~2.92M
- * observed to reach the shield, plus room for a two-output shield (the wallet
- * sizes a wrap-and-shield at 450k), plus headroom. Not set arbitrarily high
- * either — the floor is baked into the action data as a `gasleft()` require, so
- * an excessive one makes the transaction carry gas it cannot use and can revert
- * the estimate on the floor check itself.
+ * Inside that shield the call into the RailgunSmartWallet was given 780,728,
+ * consumed 768,540 — 98.4% — and reverted with NO revert data at all. No data
+ * plus near-total consumption is out of gas, not a `require`.
+ *
+ * Note what this says about the swap: it is 7.5% of the batch. A BARE open,
+ * with no swap leg at all, would still have used about 2.58M and hit the same
+ * wall — so the floor is not a combo-only concern, and splitting it per flow
+ * would leave the cheaper path just as broken.
+ *
+ * The floor therefore covers the whole batch INCLUDING a shield that actually
+ * completes. Not set arbitrarily high either: it is baked into the action data
+ * as a `gasleft()` require, so an excessive one makes the transaction carry gas
+ * it cannot use and can revert the estimate on the floor check itself.
  */
 export const FXMINT_GAS_FLOOR = 4_000_000n;
 
