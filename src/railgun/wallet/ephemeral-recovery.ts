@@ -41,7 +41,6 @@ import {
 } from "../transaction/private/private-tx";
 import { getOutputGasEstimate } from "../transaction/private/unshield-tx";
 import { PrivateGasDetails } from "../../models/transaction-models";
-import { emitCoreEvent } from "../../core/events";
 import { describeNFT } from "../balance/nft-util";
 import { fxPositionCollections } from "../transaction/fx/position";
 import { NO_CROSS_CONTRACT_GAS_FLOOR } from "../transaction/cross-contract";
@@ -413,6 +412,7 @@ const buildProved7702Batch = async (
   targetIndex: number,
   batch: RelayAdaptBatch,
   broadcasterSelection?: SelectedBroadcaster,
+  onProgress?: (pct: number, note?: string) => void,
 ): Promise<Proved7702RelayAdapt> => {
   const txIDVersion = TXIDVersion.V2_PoseidonMerkle;
   const railgunWalletID = getCurrentRailgunID();
@@ -545,13 +545,11 @@ const buildProved7702Batch = async (
       sendWithPublicWallet,
       batchMinGasPrice,
       recoveryMinGasLimit,
-      (progress: number) =>
-        emitCoreEvent({
-          type: "tx:progress",
-          phase: "prove",
-          pct: progress,
-          message: "Generating 7702 recovery proof",
-        }),
+      // Reported to the CALLER, not straight onto the bus. Whoever emits
+      // progress owes the UI a terminating event that clears it, and this
+      // module cannot promise one — it does not know whether the send
+      // succeeded. Emitting here is what left the bar frozen at 100%.
+      (progress: number) => onProgress?.(progress, "Generating 7702 recovery proof"),
     );
 
     const { transaction, nullifiers, preTransactionPOIsPerTxidLeafPerList } =
@@ -592,6 +590,7 @@ export const getProvedEphemeralRecoveryTransaction = async (
   targetIndex: number,
   selection: RecoverySelection,
   broadcasterSelection?: SelectedBroadcaster,
+  onProgress?: (pct: number, note?: string) => void,
 ): Promise<Proved7702RelayAdapt> => {
   const railgunAddress = getCurrentRailgunAddress();
   const { wrappedAddress } = getWrappedTokenInfoForChain(chainName);

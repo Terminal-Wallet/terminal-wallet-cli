@@ -75,9 +75,7 @@ import { DefiLeg, defiLegs } from "../format/defi-legs";
 import { getCachedEncryptionKey } from "../../railgun/wallet/wallet-password";
 import {
   RECOVERY_GAS_ESTIMATE_FLOOR,
-  getProvedEphemeralRecoveryTransaction,
   scanEphemeralAssets,
-  submitRecoveryTransaction,
 } from "../../railgun/wallet/ephemeral-recovery";
 import {
   getCurrentEphemeralInfo,
@@ -106,6 +104,7 @@ import { getZer0XSwapInputs } from "../../railgun/transaction/zeroX/0x-swap";
 import { runPrivateSwapTransaction, runPublicSwapTransaction } from "../../flows/deps/swap";
 import { PrivateSwapSpec, PublicSwapSpec } from "../../flows/spec";
 import { getERC20TokenInfosForChain } from "../../railgun/balance/token-util";
+import { runRecoveryTransaction } from "../../flows/deps/recovery";
 
 const SWAP_SLIPPAGE_BPS = 320;
 
@@ -807,27 +806,23 @@ const submitRecovery = async (
   const encryptionKey = await requireEncryptionKey();
   if (!encryptionKey) return { ok: false, error: "cancelled" };
   const { scan, index } = s.account;
-  const broadcaster = s.fee?.kind === "broadcaster" ? s.fee.broadcaster : undefined;
-  try {
-    const proved = await getProvedEphemeralRecoveryTransaction(
-      chainName,
-      encryptionKey,
-      index,
-      {
-        erc20s: scan.erc20s,
-        nativeWei: scan.nativeWei > 0n ? scan.nativeWei : undefined,
-        nfts: scan.nfts,
-      },
-      broadcaster,
-    );
-    // NOT runCrossContractTransaction: that sends through the private path,
-    // which ratchets the ephemeral index on any type-4 send. This batch was
-    // built against a PAST index, so ratcheting would skip a live account.
-    await submitRecoveryTransaction(chainName, proved, broadcaster);
-    return { ok: true };
-  } catch (err) {
-    return { ok: false, error: (err as Error).message };
-  }
+  if (!s.fee) return { ok: false, error: "no fee mode selected" };
+  // Through the shared runner, whose deps point `send` at the non-ratcheting
+  // recovery submit. Building the batch here and submitting it directly is what
+  // left the progress bar stuck at 100% with the failure hidden behind it —
+  // `runTransaction` is the only thing that emits the terminating `tx:result`.
+  const result = await runRecoveryTransaction({
+    chainName,
+    encryptionKey,
+    targetIndex: index,
+    selection: {
+      erc20s: scan.erc20s,
+      nativeWei: scan.nativeWei > 0n ? scan.nativeWei : undefined,
+      nfts: scan.nfts,
+    },
+    fee: s.fee,
+  });
+  return result.ok ? { ok: true } : { ok: false, error: result.error };
 };
 
 export const txBuilderConfigs: Record<

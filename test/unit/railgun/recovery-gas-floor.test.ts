@@ -16,6 +16,7 @@ import { RECOVERY_GAS_ESTIMATE_FLOOR } from "../../../src/railgun/wallet/ephemer
 const SRC = resolve(process.cwd(), "src");
 const recovery = readFileSync(join(SRC, "railgun/wallet/ephemeral-recovery.ts"), "utf-8");
 const configs = readFileSync(join(SRC, "tui/screens/tx-builder-configs.ts"), "utf-8");
+const deps = readFileSync(join(SRC, "flows/deps/recovery.ts"), "utf-8");
 
 /** Observed on mainnet, from the call traces. */
 const MINT_SHIELD_GIVEN = 780_728n;
@@ -67,16 +68,55 @@ test("the fee preview quotes the same figure the batch will carry", () => {
 });
 
 test("recovery does not send through the ratcheting path", () => {
-  // runCrossContractTransaction sends via the private path, which ratchets the
-  // ephemeral index on any type-4 send. A recovery is built against a PAST
-  // index, so ratcheting would skip a live account.
+  // sendPrivateTransaction ratchets the ephemeral index on any type-4 send. A
+  // recovery is built against a PAST index, so ratcheting would step over a
+  // live account. `deps.send` is the seam that keeps this true, so it is
+  // asserted where the seam lives rather than at the call site.
+  assert.match(deps, /send: async \(spec, proved\) => \{[\s\S]{0,200}submitRecoveryTransaction\(/);
+  // A CALL, not a mention: the header names sendPrivateTransaction to explain
+  // why it is not used, and a guard that cannot tell the two apart punishes
+  // the comment that documents the invariant.
+  assert.ok(
+    !/sendPrivateTransaction\(/.test(deps),
+    "recovery must not send through the path that ratchets",
+  );
+  assert.ok(
+    !/runCrossContractTransaction\(/.test(deps),
+    "runCrossContractTransaction sends via the ratcheting private path",
+  );
+});
+
+test("recovery runs through the pipeline that emits a terminating tx:result", () => {
+  // The bug this pins: recovery built and submitted its own batch, outside
+  // runTransaction. runTransaction is the ONLY emitter of "tx:result", and that
+  // event is what resets scanProgress, writes the outcome to the log pane, and
+  // recovers the chain's revert reason. Without it the proof's progress events
+  // left the footer bar stuck at 100% — and footerStatus gives the bar
+  // precedence over the status line, so the failure message underneath it was
+  // never rendered. The flow looked hung and left no trace anywhere.
+  assert.match(deps, /runTransaction\(spec, createRecoveryDeps\(\)\)/);
+
   const at = configs.indexOf("const submitRecovery");
   assert.ok(at > 0, "submitRecovery not found");
   const body = configs.slice(at, at + 1400);
-  assert.match(body, /submitRecoveryTransaction\(/);
+  assert.match(body, /runRecoveryTransaction\(/);
   assert.ok(
-    !/runCrossContractTransaction\(/.test(body),
-    "recovery must not send through the path that ratchets",
+    !/getProvedEphemeralRecoveryTransaction\(/.test(body),
+    "building the batch at the call site is what bypassed the runner",
+  );
+});
+
+test("the recovery proof reports progress to its caller, not straight to the bus", () => {
+  // Whoever emits tx:progress owes the UI a terminating event. This module
+  // cannot promise one — it does not know whether the send succeeded — so it
+  // hands progress up to the runner, which does.
+  const at = recovery.indexOf("generateCrossContractCallsProof7702(");
+  assert.ok(at > 0, "the proof call is gone");
+  const body = recovery.slice(at, at + 1200);
+  assert.match(body, /onProgress\?\./, "progress must go to the caller's callback");
+  assert.ok(
+    !/emitCoreEvent\(/.test(body),
+    "emitting progress here is what stranded the bar at 100%",
   );
 });
 
