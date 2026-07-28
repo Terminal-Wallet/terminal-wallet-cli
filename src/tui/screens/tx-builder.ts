@@ -13,7 +13,7 @@
 import { NetworkName } from "@railgun-community/shared-models";
 import { formatUnits } from "ethers";
 import { getInputProvider } from "../../core/input";
-import { setState } from "../store";
+import { setState, setStatusMessage } from "../store";
 import { collectGasSelection } from "../../flows/collect/gas";
 import { collectFeeMode, resolveDefaultFeeAsync } from "../../flows/collect/fee";
 import { evmGasTypeForChain } from "../../railgun/gas/gas-selection";
@@ -401,7 +401,7 @@ export const runTxBuilder = async (
       }
       // Close the builder; proving/broadcast progress shows on the dashboard.
       closeChrome();
-      setState({ status: `${cfg.verb}…` });
+      setStatusMessage(`${cfg.verb}…`);
       const res = await cfg
         .submit(state)
         .catch((e: Error) => ({ ok: false, error: e.message }));
@@ -410,7 +410,7 @@ export const runTxBuilder = async (
         res.error &&
         !["simulated", "cancelled"].includes(res.error)
       ) {
-        setState({ status: `Failed: ${res.error}` });
+        setStatusMessage(`Failed: ${res.error}`);
       }
       resolve();
     };

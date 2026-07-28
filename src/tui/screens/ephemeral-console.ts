@@ -21,7 +21,7 @@ import blessed from "blessed";
 import { NetworkName, isDefined } from "@railgun-community/shared-models";
 import { DeckContext } from "../context";
 import { getInputProvider } from "../../core/input";
-import { setState } from "../store";
+import { setState, setStatusMessage } from "../store";
 import { tag } from "../format/tags";
 import { createModal } from "../widgets/modal";
 import { showText } from "./popout";
@@ -167,7 +167,7 @@ export const openEphemeralConsole = async (ctx: DeckContext): Promise<void> => {
 
     const scanRow = (row: IndexRow) =>
       run("Scan", async () => {
-        setState({ status: `Scanning ephemeral [${row.index}]…` });
+        setStatusMessage(`Scanning ephemeral [${row.index}]…`);
         scans.set(row.index, await scanEphemeralAssets(chainName, row.address));
         await reload();
         provider.notify(
@@ -179,7 +179,7 @@ export const openEphemeralConsole = async (ctx: DeckContext): Promise<void> => {
 
     const showBalances = (row: IndexRow) =>
       run("Balances", async () => {
-        setState({ status: `Reading ephemeral [${row.index}]…` });
+        setStatusMessage(`Reading ephemeral [${row.index}]…`);
         const scan =
           scans.get(row.index) ??
           (await scanEphemeralAssets(chainName, row.address));

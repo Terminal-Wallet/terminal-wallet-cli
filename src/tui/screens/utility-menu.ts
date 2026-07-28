@@ -14,7 +14,7 @@
 import { NetworkName } from "@railgun-community/shared-models";
 import { refreshBalances } from "@railgun-community/wallet";
 import { DeckContext } from "../context";
-import { getState, setState } from "../store";
+import { getState, setState, setStatusMessage } from "../store";
 import { getInputProvider, InputChoice } from "../../core/input";
 import { tag, short } from "../format/tags";
 import { showAddresses, refreshAfterSwitch } from "./addresses";
@@ -70,8 +70,8 @@ const network = (): NetworkName => getState().network as NetworkName;
 /** Report the outcome of work that was started rather than awaited. */
 const report = (label: string, work: Promise<unknown>, done: string) => {
   void work
-    .then(() => setState({ status: done }))
-    .catch((err: Error) => setState({ status: `${label} failed: ${err.message}` }));
+    .then(() => setStatusMessage(done))
+    .catch((err: Error) => setStatusMessage(`${label} failed: ${err.message}`));
 };
 
 /**
@@ -83,11 +83,11 @@ const report = (label: string, work: Promise<unknown>, done: string) => {
 let refreshing = false;
 export const refreshNow = async (ctx: DeckContext): Promise<void> => {
   if (refreshing) {
-    setState({ status: "Refresh already in progress…" });
+    setStatusMessage("Refresh already in progress…");
     return;
   }
   refreshing = true;
-  setState({ status: "Refreshing balances…" });
+  setStatusMessage("Refreshing balances…");
   try {
     refreshBalances(getChainForName(network()), [getCurrentRailgunID()]);
     await ctx.refreshBalances();
@@ -95,9 +95,9 @@ export const refreshNow = async (ctx: DeckContext): Promise<void> => {
     // Deliberately not a terminal message: the scan reports its own completion
     // (adapter, scan:complete) and replaces this. Claiming "will populate as it
     // completes" and then never updating is what made the footer look frozen.
-    setState({ status: "Scanning…" });
+    setStatusMessage("Scanning…");
   } catch (err) {
-    setState({ status: `Refresh failed: ${(err as Error).message}` });
+    setStatusMessage(`Refresh failed: ${(err as Error).message}`);
   } finally {
     refreshing = false;
   }
@@ -243,7 +243,7 @@ export const showDestruct = async (): Promise<void> => {
     provider.notify("Password did not match — aborted.");
     return;
   }
-  setState({ status: "Wiping all data…" });
+  setStatusMessage("Wiping all data…");
   await processDestroyExit();
 };
 
@@ -287,15 +287,15 @@ export const dispatchUtility = async (
       await runEditRpcFlow(net);
       break;
     case "waku-start":
-      setState({ status: "Starting Waku…" });
+      setStatusMessage("Starting Waku…");
       report("Waku start", startWakuClient(net), "Waku started.");
       break;
     case "waku-stop":
-      setState({ status: "Stopping Waku…" });
+      setStatusMessage("Stopping Waku…");
       report("Waku stop", stopWakuClient(), "Waku stopped.");
       break;
     case "reset-broadcasters":
-      setState({ status: "Refreshing Waku / broadcasters…" });
+      setStatusMessage("Refreshing Waku / broadcasters…");
       report(
         "Reset",
         resetWakuClient(),
@@ -311,14 +311,14 @@ export const dispatchUtility = async (
       await refreshNow(ctx);
       break;
     case "txid-rescan":
-      setState({ status: "Full TXID rescan started…" });
+      setStatusMessage("Full TXID rescan started…");
       report("TXID rescan", fullTxidRescan(net), "TXID rescan complete.");
       break;
     case "full-rescan":
       // Hard resync of both trees. The latched sync state is cleared so the
       // bars regenerate visibly rather than sitting on a stale ✓.
+      setStatusMessage("Full UTXO + TXID rescan started — watch the sync card.");
       setState({
-        status: "Full UTXO + TXID rescan started — watch the sync card.",
         utxoReady: false,
         txidReady: false,
         utxoSynced: false,
@@ -334,7 +334,7 @@ export const dispatchUtility = async (
       await runPOITools(net);
       break;
     case "activity":
-      setState({ status: "Loading activity…" });
+      setStatusMessage("Loading activity…");
       report(
         "History",
         loadTransactionHistory(net, getCurrentRailgunID()),
@@ -348,9 +348,9 @@ export const dispatchUtility = async (
       break;
     case "toggle-sender":
       toggleShouldShowSender();
-      setState({
-        status: `Private TX sender ${shouldShowSender() ? "shown" : "hidden"}.`,
-      });
+      setStatusMessage(
+        `Private TX sender ${shouldShowSender() ? "shown" : "hidden"}.`,
+      );
       break;
     case "ephemeral-accounts":
       await openEphemeralConsole(ctx);

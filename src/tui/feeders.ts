@@ -20,7 +20,7 @@ import { emitCoreEvent } from "../core/events";
 import { getPrivateNFTsForChain } from "../railgun/balance/balance-cache";
 import { describeNFTs } from "../railgun/balance/nft-util";
 import { fxPositionCollections } from "../railgun/transaction/fx/position";
-import { getState, setState } from "./store";
+import { getState, setState, setStatusMessage } from "./store";
 import { pushSeries } from "./format/deck";
 import { RailgunDisplayBalance } from "../models/balance-models";
 import { CustomGasEstimate } from "../models/gas-models";
@@ -218,7 +218,7 @@ export const createFeeders = (render: () => void): Feeders => {
         getCurrentRailgunID(),
       );
     } catch (err) {
-      setState({ status: `History failed: ${(err as Error).message}` });
+      setStatusMessage(`History failed: ${(err as Error).message}`);
     }
   };
 

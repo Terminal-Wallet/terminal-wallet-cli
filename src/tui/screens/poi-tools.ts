@@ -12,7 +12,7 @@
  */
 import { NetworkName } from "@railgun-community/shared-models";
 import { getInputProvider } from "../../core/input";
-import { setState } from "../store";
+import { setState, setStatusMessage } from "../store";
 import {
   generateWalletPOIs,
   refreshReceivedPOIs,
@@ -41,14 +41,14 @@ export const runPOITools = async (network: NetworkName): Promise<void> => {
   }
 
   const action = ACTIONS[chosen as ActionId];
-  setState({ status: `POI: ${chosen} started…` });
+  setStatusMessage(`POI: ${chosen} started…`);
 
   // Deliberately not awaited — see the note above. Both outcomes report through
   // the store so a failure is visible rather than silently never finishing.
   void action
     .run(network)
-    .then(() => setState({ status: `POI: ${chosen} complete.` }))
+    .then(() => setStatusMessage(`POI: ${chosen} complete.`))
     .catch((err: Error) =>
-      setState({ status: `POI ${chosen} failed: ${err.message}` }),
+      setStatusMessage(`POI ${chosen} failed: ${err.message}`),
     );
 };

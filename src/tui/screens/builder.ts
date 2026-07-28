@@ -20,7 +20,7 @@
 import blessed from "blessed";
 import { formatUnits } from "ethers";
 import { DeckContext } from "../context";
-import { getState, setState } from "../store";
+import { getState, setState, setStatusMessage } from "../store";
 import { getInputProvider } from "../../core/input";
 import { tag, short } from "../format/tags";
 import { fmtAmount } from "../format/deck";
@@ -1208,7 +1208,7 @@ export const createBuilder = (host: BuilderHost): Builder => {
     editing = true;
     const note = loadingNote(key);
     if (note !== undefined) {
-      setState({ status: note });
+      setStatusMessage(note);
       ctx.render();
     }
     try {
@@ -1310,7 +1310,7 @@ export const createBuilder = (host: BuilderHost): Builder => {
     if (requireReauthBeforeSend({ isSimulation: false })) {
       const authorised = await confirmPassword().catch(() => false);
       if (!authorised) {
-        setState({ status: "Send cancelled — password did not match." });
+        setStatusMessage("Send cancelled — password did not match.");
         list.focus();
         ctx.screen.render();
         return;
@@ -1321,14 +1321,14 @@ export const createBuilder = (host: BuilderHost): Builder => {
     const active = cfg;
     const submitted = state;
     closeBuilder();
-    setState({ status: `${active.verb}…` });
+    setStatusMessage(`${active.verb}…`);
     const result = await active
       .submit(submitted)
       .catch((err: Error) => ({ ok: false, error: err.message }));
     if (!result.ok && result.error && !["simulated", "cancelled"].includes(result.error)) {
-      setState({ status: `Failed: ${result.error}` });
+      setStatusMessage(`Failed: ${result.error}`);
     } else if (result.ok) {
-      setState({ status: `${active.verb} sent.` });
+      setStatusMessage(`${active.verb} sent.`);
       void ctx.refreshBalances();
       void ctx.refreshHistory();
     }

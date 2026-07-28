@@ -17,7 +17,7 @@ import { NetworkName } from "@railgun-community/shared-models";
 import { DeckContext } from "./context";
 import { ensureFocus } from "./widgets/focus-guard";
 import { createFeeders } from "./feeders";
-import { getState, setState, subscribe, WalletState } from "./store";
+import { getState, setState, setStatusMessage, subscribe, WalletState } from "./store";
 import { footerStatus } from "./format/footer";
 import { attachCoreAdapter } from "./adapter";
 import { createBlessedInputProvider } from "./input-provider";
@@ -172,7 +172,7 @@ export const runDeck = async (): Promise<void> => {
   const deckClick = (fn: () => void) => () => {
     switch (deckClickVerdict(mode, openModalCount())) {
       case "refuse":
-        setState({ status: "Finish or close the transaction first (Esc)." });
+        setStatusMessage("Finish or close the transaction first (Esc).");
         render();
         return;
       case "closeThenAct":
@@ -525,12 +525,19 @@ export const runDeck = async (): Promise<void> => {
   startFlow = (flowId) => {
     mode = "build";
     homeBox.hide();
+    // A progress bar is only ever cleared by the tx:result that ends the send
+    // it belongs to. A flow that ends without one — a crash, a kill, anything
+    // that skips the terminator — leaves the bar pinned at its last percentage,
+    // and footerStatus gives the bar precedence, so every message for the rest
+    // of the session renders behind it. Starting a new flow is a safe point to
+    // say the previous one is over.
+    setState({ scanProgress: -1, scanLabel: "" });
     // A flow entered from a screen rather than the palette — recovery hands
     // off this way. Its loaders reach the network before `open` draws
     // anything, and until then the centre pane is blank: say what is happening
     // now, or the handover reads as the action having quietly failed.
     center.setLabel(" build ");
-    setState({ status: "Opening…" });
+    setStatusMessage("Opening…");
     render();
     void builder.open(flowId);
   };
@@ -683,7 +690,7 @@ export const runDeck = async (): Promise<void> => {
       baseSymbol: getWrappedTokenInfoForChain(seedNetwork as NetworkName).symbol,
     });
   }
-  setState({ status: "Booting wallet…" });
+  setStatusMessage("Booting wallet…");
   relayout(true);
   leftRail.focus();
   render();
@@ -703,7 +710,7 @@ export const runDeck = async (): Promise<void> => {
       log.error(verdict.message);
       process.exit(69);
     }
-    if (verdict.newer) setState({ status: verdict.newer });
+    if (verdict.newer) setStatusMessage(verdict.newer);
 
     // After the remote config lands and before anything can quote: that fetch
     // is what fills configDefaults.apiKeys, and this is what hands the 0x key
@@ -712,11 +719,11 @@ export const runDeck = async (): Promise<void> => {
     updateApiKey();
     await initializeWalletSystems();
   } catch (err) {
-    setState({ status: `Boot failed: ${(err as Error).message}` });
+    setStatusMessage(`Boot failed: ${(err as Error).message}`);
     log.error("deck boot failed", err);
     return;
   }
-  setState({ status: "Wallet ready." });
+  setStatusMessage("Wallet ready.");
   installRevertCapture(getCurrentNetwork());
 
   // Balances are re-read when a scan reports something new — not on a timer.

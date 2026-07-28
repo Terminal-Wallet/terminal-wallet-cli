@@ -116,5 +116,24 @@ export const setState = (patch: Partial<WalletState>): void => {
   for (const fn of listeners) fn(state);
 };
 
+/** How long a status message stays worth showing. Mirrors the adapter's default. */
+export const DEFAULT_STATUS_MS = 8000;
+
+/**
+ * Say something on the status bar, for a while.
+ *
+ * The expiry is the whole point. `statusLive` (format/footer.ts) treats a
+ * status whose `statusUntil` has passed as stale and renders "ready" instead —
+ * so a bare `setState({ status })`, which leaves the PREVIOUS message's expiry
+ * in place, is discarded before it can be drawn as soon as that older window
+ * has closed. Every builder and screen outcome was written that way, which is
+ * why a failed send reported nothing: not because the message was wrong, but
+ * because it arrived already expired.
+ */
+export const setStatusMessage = (
+  text: string,
+  durationMs: number = DEFAULT_STATUS_MS,
+): void => setState({ status: text, statusUntil: Date.now() + durationMs });
+
 export const togglePrivate = (): void =>
   setState({ showPrivate: !state.showPrivate });
