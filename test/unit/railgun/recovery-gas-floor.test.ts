@@ -126,3 +126,14 @@ test("the on-chain floor stays at no-floor, which is a different lever", () => {
   // limit is the lever being used here.
   assert.match(recovery, /recoveryMinGasLimit = NO_CROSS_CONTRACT_GAS_FLOOR/);
 });
+
+test("a recovery that mines and reverts is not reported as sent", () => {
+  // Relay-adapt builds its action data with requireSuccess = false, so a batch
+  // mines whether or not its inner calls succeeded — which is exactly how the
+  // funds this flow rescues got stranded. Reporting success at broadcast would
+  // let a recovery fail the same way and be recorded as a success.
+  assert.match(deps, /getRelayAdaptFailure\(/);
+  assert.match(deps, /waitForRelayedTx\(/);
+  assert.match(deps, /did not complete/);
+  assert.match(deps, /resetBalanceScan\(\)/);
+});

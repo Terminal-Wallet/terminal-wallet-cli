@@ -27,6 +27,10 @@ import {
   submitRecoveryTransaction,
 } from "../../railgun/wallet/ephemeral-recovery";
 import { getTransactionURLForChain } from "../../railgun/network/network-util";
+import { waitForRelayedTx } from "../../railgun/transaction/public/public-tx";
+import { resetBalanceScan } from "../../railgun/wallet/private-wallet";
+import { getRelayAdaptFailure } from "../../railgun/transaction/relay-adapt-error";
+import { emitCoreEvent } from "../../core/events";
 
 export interface RecoverySpec {
   chainName: NetworkName;
@@ -39,6 +43,44 @@ export interface RecoverySpec {
 
 const broadcasterFor = (fee: FeeMode) =>
   fee.kind === "broadcaster" ? fee.broadcaster : undefined;
+
+/**
+ * Say what the batch actually did, once it mines.
+ *
+ * A relay-adapt batch reports success at broadcast and can still revert
+ * internally — `requireSuccess = false` means the transaction mines either way.
+ * The private send path already reports this; recovery has to as well, or the
+ * one flow whose entire job is rescuing a batch that mined and reverted would
+ * itself mine, revert, and be reported as "sent".
+ */
+const watchRelayAdaptOutcome = async (
+  chainName: NetworkName,
+  hash: string,
+  url: string,
+): Promise<void> => {
+  try {
+    await waitForRelayedTx(chainName, hash);
+    const failure = await getRelayAdaptFailure(chainName, hash);
+    emitCoreEvent({
+      type: "status:message",
+      text: failure
+        ? `Recovery mined but the batch did not complete (${failure}). The funds are still at the ephemeral account — ${url}`
+        : `Recovery mined: ${url}`,
+      durationMs: 30000,
+      replace: true,
+    });
+  } catch (err) {
+    // Watching is best-effort; the transaction is already broadcast and the
+    // explorer link is the fallback. Saying nothing would be worse than saying
+    // it could not be checked.
+    emitCoreEvent({
+      type: "status:message",
+      text: `Recovery broadcast, but its outcome could not be confirmed (${(err as Error).message}) — ${url}`,
+      durationMs: 30000,
+      replace: true,
+    });
+  }
+};
 
 export const createRecoveryDeps = (): TransactionRunDeps<
   RecoverySpec,
@@ -62,13 +104,26 @@ export const createRecoveryDeps = (): TransactionRunDeps<
     ),
   // NOT sendPrivateTransaction: that ratchets the ephemeral index, and this
   // batch was built against a past one. See the header.
+  //
+  // Everything else that path does after the broadcast still has to happen,
+  // because relay-adapt builds its action data with `requireSuccess = false`
+  // and a batch can therefore MINE and still have failed inside. That is
+  // exactly how the funds this flow is rescuing got stranded in the first
+  // place, so reporting "sent" the moment the broadcaster accepts would let a
+  // recovery fail the same way and be recorded as a success.
   send: async (spec, proved) => {
     const hash = await submitRecoveryTransaction(
       spec.chainName,
       proved,
       broadcasterFor(spec.fee),
     );
-    return { hash, url: getTransactionURLForChain(spec.chainName, hash) };
+    const url = getTransactionURLForChain(spec.chainName, hash);
+    // Deliberately NOT awaited: the send has succeeded as far as the pipeline
+    // is concerned, and the batch's own outcome arrives whenever it mines.
+    // Balances change either way, so the scan is reset regardless.
+    resetBalanceScan();
+    void watchRelayAdaptOutcome(spec.chainName, hash, url);
+    return { hash, url };
   },
 });
 
