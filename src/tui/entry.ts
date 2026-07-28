@@ -525,12 +525,17 @@ export const runDeck = async (): Promise<void> => {
   startFlow = (flowId) => {
     mode = "build";
     homeBox.hide();
-    // A progress bar is only ever cleared by the tx:result that ends the send
-    // it belongs to. A flow that ends without one — a crash, a kill, anything
-    // that skips the terminator — leaves the bar pinned at its last percentage,
-    // and footerStatus gives the bar precedence, so every message for the rest
-    // of the session renders behind it. Starting a new flow is a safe point to
-    // say the previous one is over.
+    // A flow that ends without emitting tx:result leaves the bar pinned at its
+    // last percentage, and footerStatus gives the bar precedence over the
+    // status line — so every later message renders behind it.
+    //
+    // What makes that hard to recognise is that it does eventually clear: a
+    // merkletree scan finishing both trees also resets it (adapter.ts,
+    // "scan:complete"). So the symptom is not a bar that is stuck forever but
+    // one that un-sticks at an unrelated moment, which reads as flaky rather
+    // than as a missing terminator. Starting a new flow is a point where the
+    // previous one is definitely over, so say so rather than waiting for a
+    // scan to do it by coincidence.
     setState({ scanProgress: -1, scanLabel: "" });
     // A flow entered from a screen rather than the palette — recovery hands
     // off this way. Its loaders reach the network before `open` draws
