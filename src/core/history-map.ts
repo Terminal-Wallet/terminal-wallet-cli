@@ -68,6 +68,19 @@ export const looksLikeSwap = (item: TransactionHistoryItem): boolean => {
   );
 };
 
+/**
+ * Whether an item put funds into the shielded pool.
+ *
+ * An explicit shield, or a relay-adapt bundle that received tokens back — the
+ * re-shield half of a swap, a vault deposit, an fx mint. A private transfer IN
+ * also receives tokens but was already shielded, so it starts no shield clock
+ * and is excluded by category.
+ */
+export const isShielding = (item: TransactionHistoryItem): boolean =>
+  item.category === TransactionHistoryItemCategory.ShieldERC20s ||
+  (item.category === TransactionHistoryItemCategory.Unknown &&
+    item.receiveERC20Amounts.length > 0);
+
 /** The label for an item, including the shapes the SDK reports as Unknown. */
 export const categoryLabel = (item: TransactionHistoryItem): string => {
   const known = CATEGORY_LABEL[item.category];
@@ -146,6 +159,7 @@ export const mapHistoryItems = async (
         fee,
         via: fee ? "broadcaster" : "self-signed",
         change,
+        shielded: isShielding(item),
       };
     }),
   );

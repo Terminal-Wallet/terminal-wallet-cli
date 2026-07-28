@@ -29,6 +29,7 @@ const shield = (secondsAgo: number, txid = `0x${secondsAgo}`): CoreHistoryItem =
     direction: "in",
     timestamp: NOW - secondsAgo,
     amounts: [],
+    shielded: true,
   }) as CoreHistoryItem;
 
 const other = (secondsAgo: number): CoreHistoryItem =>
@@ -71,7 +72,7 @@ test("no history means no clock, rather than a wrong one", () => {
   // History that has not loaded must not produce a countdown to the epoch.
   assert.equal(nextShieldMaturity([], NOW), undefined);
   assert.equal(
-    nextShieldMaturity([{ txid: "0x", category: "Shield", direction: "in", amounts: [] } as CoreHistoryItem], NOW),
+    nextShieldMaturity([{ txid: "0x", category: "Shield", direction: "in", amounts: [], shielded: true } as CoreHistoryItem], NOW),
     undefined,
     "a shield with no timestamp produced a countdown",
   );
@@ -102,6 +103,37 @@ test("the note keeps the bare summary when there is no clock", () => {
   assert.match(
     pendingNote("0.002 shielding", { readyAt: 0, remainingSec: 900 }),
     /spendable in 15m$/,
+  );
+});
+
+test("a relay-adapt re-shield still starts the clock", () => {
+  // A 7702 bundle that unshields, does something, and re-shields arrives from
+  // the SDK as Unknown, so the feed labels it "Swap" or "Activity" — never
+  // "Shield". Matching on the label meant the countdown never appeared for the
+  // funds the DeFi flows actually produce, which are the ones most likely to
+  // be sitting in ShieldPending.
+  const now = 1_000_000;
+  const found = nextShieldMaturity(
+    [
+      {
+        txid: "0x1", category: "Swap", direction: "neutral",
+        timestamp: now - 600, amounts: [], shielded: true,
+      } as never,
+    ],
+    now,
+  );
+  assert.ok(found, "a re-shield puts funds in ShieldPending and has to be counted");
+  assert.equal(found?.readyAt, now - 600 + POI_SHIELD_PENDING_SEC);
+});
+
+test("an unshield does not start a shield clock", () => {
+  const now = 1_000_000;
+  assert.equal(
+    nextShieldMaturity(
+      [{ txid: "0x1", category: "Unshield", direction: "out", timestamp: now - 60, amounts: [], shielded: false } as never],
+      now,
+    ),
+    undefined,
   );
 });
 

@@ -27,4 +27,14 @@ export interface CoreHistoryItem {
   fee?: CoreHistoryAmount; // broadcaster fee, formatted (absent = self-signed)
   via?: "broadcaster" | "self-signed";
   change?: CoreHistoryAmount[]; // change returned to the wallet
+  /**
+   * Whether this put funds INTO the shielded pool, and so started a
+   * shield-pending clock.
+   *
+   * Not derivable from `category`. A 7702 relay-adapt bundle that unshields,
+   * acts and re-shields arrives from the SDK as Unknown and is labelled "Swap"
+   * or "Activity" — so anything keyed on the label misses exactly the shields
+   * this wallet's DeFi flows produce.
+   */
+  shielded?: boolean;
 }

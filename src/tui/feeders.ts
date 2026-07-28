@@ -101,7 +101,7 @@ export const createFeeders = (render: () => void): Feeders => {
     }
   };
 
-  const refreshBalances = async (): Promise<void> => {
+  const readBalances = async (): Promise<void> => {
     try {
       const network = getCurrentNetwork();
       // Private balances are split per (token, bucket) for display, so funds
@@ -211,7 +211,7 @@ export const createFeeders = (render: () => void): Feeders => {
     }
   };
 
-  const refreshHistory = async (): Promise<void> => {
+  const readHistory = async (): Promise<void> => {
     try {
       await loadTransactionHistory(
         getCurrentNetwork() as NetworkName,
@@ -221,6 +221,47 @@ export const createFeeders = (render: () => void): Feeders => {
       setStatusMessage(`History failed: ${(err as Error).message}`);
     }
   };
+
+  /**
+   * Run `work`, and if more requests arrive while it is running, run it once
+   * more afterwards — never concurrently.
+   *
+   * Both of these read a cache the engine is still filling. The engine emits
+   * one balance event per bucket, so `balances:refreshed` arrives in a burst
+   * and fired a burst of overlapping reads; each does several awaits (balances,
+   * public balances, prices) before emitting, so they finish out of order and
+   * the LAST TO FINISH wins — which is not the last to start. A read that began
+   * against a half-filled cache could land after one that saw everything, and
+   * the rail would sit on the older picture until something happened to trigger
+   * another refresh. Which is what "doesn't fully load until you refresh by
+   * hand" was.
+   *
+   * Coalescing rather than dropping: the trailing run is what guarantees the
+   * final state reflects the last event, instead of whichever request happened
+   * to win the race.
+   */
+  const coalesce = (work: () => Promise<void>): (() => Promise<void>) => {
+    let running = false;
+    let again = false;
+    return async () => {
+      if (running) {
+        again = true;
+        return;
+      }
+      running = true;
+      try {
+        do {
+          again = false;
+          await work();
+        } while (again);
+      } finally {
+        running = false;
+      }
+    };
+  };
+
+  const refreshBalances = coalesce(readBalances);
+  const refreshHistory = coalesce(readHistory);
 
   const poll = async (): Promise<void> => {
     while (polling) {

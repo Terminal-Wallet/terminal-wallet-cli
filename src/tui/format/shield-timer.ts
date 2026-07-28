@@ -38,7 +38,10 @@ export const nextShieldMaturity = (
   const pending = items
     .filter(
       (item) =>
-        item.category === "Shield" &&
+        // The FLAG, not the label. A relay-adapt re-shield is labelled "Swap"
+        // or "Activity" and shields all the same; keying on the label meant no
+        // countdown for the funds the DeFi flows produce.
+        item.shielded === true &&
         typeof item.timestamp === "number" &&
         item.timestamp > windowStart &&
         item.timestamp <= now,
