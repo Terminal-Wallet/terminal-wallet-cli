@@ -23,6 +23,7 @@ import { FeeMode } from "../spec";
 import {
   Proved7702RelayAdapt,
   RecoverySelection,
+  RecoveryGasChoice,
   getProvedEphemeralRecoveryTransaction,
   submitRecoveryTransaction,
 } from "../../railgun/wallet/ephemeral-recovery";
@@ -39,6 +40,15 @@ export interface RecoverySpec {
   targetIndex: number;
   selection: RecoverySelection;
   fee: FeeMode;
+  /**
+   * The gas tier chosen on the builder's gas row.
+   *
+   * Carried explicitly because the builder tears down before the submit is
+   * awaited, and its teardown clears the process-wide gas override — so a
+   * recovery that read the override at build time always found it gone and
+   * silently fell back to the cheapest tier.
+   */
+  gas?: RecoveryGasChoice;
 }
 
 const broadcasterFor = (fee: FeeMode) =>
@@ -101,6 +111,7 @@ export const createRecoveryDeps = (): TransactionRunDeps<
       spec.selection,
       broadcasterFor(spec.fee),
       onProgress,
+      spec.gas,
     ),
   // NOT sendPrivateTransaction: that ratchets the ephemeral index, and this
   // batch was built against a past one. See the header.

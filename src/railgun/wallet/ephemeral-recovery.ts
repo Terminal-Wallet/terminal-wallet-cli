@@ -11,7 +11,8 @@ import {
 } from "@railgun-community/shared-models";
 import { Contract, ContractTransaction, parseUnits } from "ethers";
 import { RelayAdapt__factory } from "@railgun-community/engine";
-import { getGasEstimates, getGasFeeSelection } from "../gas/gas-fee";
+import { getGasEstimates, getGasFeeSelection, maxFeeFor } from "../gas/gas-fee";
+import { GasOverride } from "../gas/gas-selection";
 import {
   EphemeralKeyManager,
   fullWalletForID,
@@ -50,6 +51,9 @@ import { mapLimited } from "../../util/concurrency";
 // or failed relay-adapt (or a swap whose bought token wasn't shielded) can strand assets at a
 // prior ephemeral address. Recovery discovers and moves those out. Discovery is PER ADDRESS —
 // every recovery function takes an explicit ephemeral address, never "the current index".
+
+/** The gas tier a recovery was told to use, if the user picked one. */
+export type RecoveryGasChoice = GasOverride | "keep" | undefined;
 
 export type RecoverableERC20 = {
   tokenAddress: string;
@@ -413,6 +417,7 @@ const buildProved7702Batch = async (
   batch: RelayAdaptBatch,
   broadcasterSelection?: SelectedBroadcaster,
   onProgress?: (pct: number, note?: string) => void,
+  gasChoice?: RecoveryGasChoice,
 ): Promise<Proved7702RelayAdapt> => {
   const txIDVersion = TXIDVersion.V2_PoseidonMerkle;
   const railgunWalletID = getCurrentRailgunID();
@@ -440,26 +445,43 @@ const buildProved7702Batch = async (
     overallBatchMinGasPrice,
   } = gasDetailsResult;
 
-  // Gas PRICE: if the user picked a tier via the gas matrix, getTransactionGasDetails already
-  // reflects it — respect that. Otherwise apply a conservative default, because the shared 80th-
-  // percentile fallback massively overpays at low congestion (observed ~0.73 gwei vs ~0.13 base):
-  // slow (60th) tip with a small inclusion floor + a base-fee buffer for drift.
-  if (!isDefined(getGasFeeSelection(chainName))) {
-    try {
-      const { baseFeePerGas, slow } = await getGasEstimates(chainName);
-      const minTip = parseUnits("0.02", "gwei");
-      const priority = slow > minTip ? slow : minTip;
-      const conservativeMaxFee = (baseFeePerGas * 5n) / 4n + priority;
-      const g = originalGasDetails as unknown as {
-        maxFeePerGas?: bigint;
-        maxPriorityFeePerGas?: bigint;
-      };
-      if (isDefined(g.maxFeePerGas)) {
-        g.maxFeePerGas = conservativeMaxFee;
-        g.maxPriorityFeePerGas = priority;
+  // Gas PRICE.
+  //
+  // This used to say "if the user picked a tier the details already reflect it,
+  // so only apply a default otherwise" — and then gate that on
+  // `getGasFeeSelection`. The premise was false. `closeBuilder()` calls
+  // `clearGasFeeSelection()` BEFORE the submit is awaited, so by the time this
+  // runs there is never a selection: the guard was always true, the default
+  // always won, and the tier chosen on the gas row did nothing at all. Every
+  // other flow survives that teardown because it passes the choice through
+  // `applyGasDetailsConfirm`; recovery offered the row and dropped the answer.
+  //
+  // The default it always fell back to was the SLOW tier, which floors at
+  // MIN_PRIORITY_FEE — 0.025 gwei. A broadcaster asked to carry ~4M gas for a
+  // tip at the very bottom of the distribution rejects it outright as an
+  // unmineable tip, and raising the tier in the UI changed nothing, so it
+  // failed identically every time.
+  //
+  // So: honour the choice when there is one, and when there is not, default to
+  // the tip a normal transaction pays rather than the cheapest one that has
+  // ever been included. A recovery is a rescue — the funds are already
+  // stranded, a refusal costs another attempt, and unused gas is refunded.
+  const g = originalGasDetails as unknown as {
+    maxFeePerGas?: bigint;
+    maxPriorityFeePerGas?: bigint;
+  };
+  if (isDefined(g.maxFeePerGas)) {
+    if (gasChoice && gasChoice !== "keep" && gasChoice.evmGasType === EVMGasType.Type2) {
+      g.maxFeePerGas = gasChoice.maxFeePerGas;
+      g.maxPriorityFeePerGas = gasChoice.maxPriorityFeePerGas;
+    } else if (!isDefined(getGasFeeSelection(chainName))) {
+      try {
+        const { baseFeePerGas, average } = await getGasEstimates(chainName);
+        g.maxPriorityFeePerGas = average;
+        g.maxFeePerGas = maxFeeFor(average, baseFeePerGas);
+      } catch {
+        // Keep the default gas details if the estimate call fails.
       }
-    } catch {
-      // Keep the default gas details if the estimate call fails.
     }
   }
 
@@ -591,6 +613,7 @@ export const getProvedEphemeralRecoveryTransaction = async (
   selection: RecoverySelection,
   broadcasterSelection?: SelectedBroadcaster,
   onProgress?: (pct: number, note?: string) => void,
+  gasChoice?: RecoveryGasChoice,
 ): Promise<Proved7702RelayAdapt> => {
   const railgunAddress = getCurrentRailgunAddress();
   const { wrappedAddress } = getWrappedTokenInfoForChain(chainName);
@@ -649,6 +672,8 @@ export const getProvedEphemeralRecoveryTransaction = async (
       crossContractCalls,
     },
     broadcasterSelection,
+    onProgress,
+    gasChoice,
   );
 };
 

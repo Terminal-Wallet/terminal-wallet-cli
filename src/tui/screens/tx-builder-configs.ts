@@ -821,6 +821,7 @@ const submitRecovery = async (
       nfts: scan.nfts,
     },
     fee: s.fee,
+    gas: s.gas,
   });
   return result.ok ? { ok: true } : { ok: false, error: result.error };
 };

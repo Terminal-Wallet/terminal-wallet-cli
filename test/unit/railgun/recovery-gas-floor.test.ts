@@ -106,6 +106,43 @@ test("recovery runs through the pipeline that emits a terminating tx:result", ()
   );
 });
 
+test("the progress callback is actually wired from the entry point", () => {
+  // The previous version of this guard only checked that the proof call
+  // MENTIONS onProgress. Both signatures had the parameter and nothing passed
+  // it between them, so every recovery reported no progress at all and the
+  // guard was green throughout.
+  const at = recovery.indexOf("return buildProved7702Batch(");
+  assert.ok(at > 0, "the build call is gone");
+  const call = recovery.slice(at, at + 500);
+  assert.match(call, /onProgress,/, "onProgress must be passed down, not just declared");
+  assert.match(call, /gasChoice,/, "the chosen gas tier must be passed down too");
+});
+
+test("a recovery uses the gas tier it was given, not the cheapest one", () => {
+  // The gas row was decorative. trySend calls closeBuilder() — which runs
+  // clearGasFeeSelection() — BEFORE awaiting the submit, so the build always
+  // found no selection and took its "conservative" branch: the SLOW tier,
+  // floored at MIN_PRIORITY_FEE (0.025 gwei). A broadcaster asked to carry ~4M
+  // gas for a tip at the bottom of the distribution rejects it as an
+  // unmineable tip, and raising the tier changed nothing.
+  assert.match(recovery, /gasChoice\.maxPriorityFeePerGas/);
+  // The fallback is now the tip a normal transaction pays, with the shared
+  // headroom, rather than a hand-rolled cheaper one.
+  assert.match(recovery, /maxFeeFor\(average, baseFeePerGas\)/);
+  assert.ok(
+    !/parseUnits\("0\.02", "gwei"\)/.test(recovery),
+    "the hand-rolled 0.02 gwei floor is what made this unmineable",
+  );
+  assert.ok(
+    !/baseFeePerGas \* 5n\) \/ 4n/.test(recovery),
+    "1.25x base headroom was below the shared maxFeeFor",
+  );
+  // And the choice has to reach the spec at all.
+  assert.match(deps, /gas\?: RecoveryGasChoice/);
+  assert.match(deps, /spec\.gas/);
+  assert.match(configs, /gas: s\.gas,/);
+});
+
 test("the recovery proof reports progress to its caller, not straight to the bus", () => {
   // Whoever emits tx:progress owes the UI a terminating event. This module
   // cannot promise one — it does not know whether the send succeeded — so it
