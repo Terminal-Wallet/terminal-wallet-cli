@@ -19,14 +19,21 @@ import {
   EphemeralAssetScan,
   RecoverableNFT,
   RecoverableERC20,
+  RECOVERY_GAS_ESTIMATE_FLOOR,
 } from "../../railgun/wallet/ephemeral-recovery";
 import { collectFeeMode } from "../../flows/collect/fee";
 import { runGasTierPrompt } from "./gas-tier";
 import { clearGasFeeSelection } from "../../railgun/gas/gas-fee";
 import { getTransactionURLForChain } from "../../railgun/network/network-util";
 
-/** Nominal gas units for a relay-adapt recovery bundle, for the fee preview. */
-const RECOVERY_GAS_UNITS = 2_800_000n;
+/**
+ * Gas units for the fee preview and the tier prompt.
+ *
+ * Kept in step with the floor the build applies — quoting a recovery at 2.8M
+ * while the batch carries the floor x1.2 would show the user a fee smaller than
+ * the one they pay.
+ */
+const RECOVERY_GAS_UNITS = RECOVERY_GAS_ESTIMATE_FLOOR;
 
 /** The native asset's sentinel in the reshield picker. */
 const NATIVE = "__native__";

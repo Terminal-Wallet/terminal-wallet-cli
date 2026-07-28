@@ -282,6 +282,21 @@ export const scanEphemeralAssets = async (
 // target index for the whole build (setCurrentEphemeralWallet), so the persisted index is never
 // moved and the recovery MUST NOT ratchet afterward.
 
+/**
+ * The smallest gas estimate a recovery is allowed to be built from.
+ *
+ * Sized from two real failures rather than a guess. A recovery shields
+ * everything it finds in one batch — two ERC-20s and a position NFT, in the
+ * case that produced these numbers — and that shield has been observed needing
+ * more than 881,920 on top of roughly a million for the transact half.
+ *
+ * The carried limit is this x1.2 (`calculateGasLimit`), so this is deliberately
+ * the estimate rather than the limit. Generous on purpose: unused gas is
+ * refunded, while a recovery that runs out leaves the funds exactly where they
+ * were and costs another fee to try again.
+ */
+export const RECOVERY_GAS_ESTIMATE_FLOOR = 3_400_000n;
+
 export type RecoverySelection = {
   erc20s: RecoverableERC20[]; // stranded ERC20s to reshield (may be empty)
   nativeWei?: bigint; // stranded native ETH to wrap+reshield (omit/0n to skip)
@@ -373,6 +388,9 @@ const buildProved7702Batch = async (
   // forces the tx to CARRY that much gas and over-provisions the limit the
   // broadcaster charges on. Without it the estimate reflects actual execution
   // and the submitted limit is that estimate x1.2.
+  //
+  // That last sentence is only true when the batch SUCCEEDS. See
+  // RECOVERY_GAS_FLOOR below for why it is not enough on its own.
   const recoveryMinGasLimit = NO_CROSS_CONTRACT_GAS_FLOOR;
 
   // The override is process-wide for the whole estimate -> prove -> populate
@@ -395,9 +413,31 @@ const buildProved7702Batch = async (
       recoveryMinGasLimit,
     );
 
+    // The estimate cannot be trusted to size this batch. Relay-adapt builds its
+    // action data with `requireSuccess = false`, so when the shield reverts
+    // during estimation the estimate measures a batch that did NOT shield —
+    // and every figure derived from it, including the carried limit of
+    // estimate x1.2, is then too small for the batch that does. It is
+    // self-consistently wrong, so retrying at the same size fails identically.
+    //
+    // Observed twice on mainnet: the first fx mint (0x252155ef…) gave the
+    // shield's inner call 780,728, the first recovery attempt (0xef3e9dd2…)
+    // gave it 881,920. Both reverted with no revert data after consuming 98.4%
+    // of what they were given.
+    //
+    // Floored HERE rather than on the populated transaction so the broadcaster
+    // fee is quoted from the same figure the transaction will carry — flooring
+    // afterwards would have them price a batch smaller than the one submitted.
+    // Unused gas is refunded, so an over-large floor costs nothing; being under
+    // it costs the whole attempt and leaves the funds where they were.
+    const flooredEstimate =
+      gasEstimate < RECOVERY_GAS_ESTIMATE_FLOOR
+        ? RECOVERY_GAS_ESTIMATE_FLOOR
+        : gasEstimate;
+
     const privateGasEstimate = await getOutputGasEstimate(
       originalGasDetails,
-      gasEstimate,
+      flooredEstimate,
       feeTokenInfo,
       feeTokenDetails,
       broadcasterSelection,
