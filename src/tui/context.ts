@@ -28,6 +28,18 @@ export interface DeckContext {
   refreshIdentity: () => void;
 
   /**
+   * Hand over to a transaction flow, by builder-config id.
+   *
+   * Here because a screen that has found something to act on should not build
+   * its own review-and-send: the builder owns the gates — completeness,
+   * overspend, a review that IS the confirmation, and a fresh password — and a
+   * screen driving its own modals over its own list gets the focus and the
+   * escape key wrong. The caller closes itself first; whatever runs next owns
+   * the centre pane.
+   */
+  openFlow: (flowId: string) => void;
+
+  /**
    * Re-read balances and prices and publish them. Call after a send, a scan, or
    * a chain switch — anything that can have moved funds.
    */

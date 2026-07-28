@@ -142,6 +142,7 @@ const FIELD_LABELS: Record<FieldKey, string> = {
   vault: "Vault",
   pool: "Pool",
   position: "Position",
+  account: "Account",
   amount: "Amount",
   collateralPct: "Collateral",
   debt: "Mint",
@@ -181,6 +182,8 @@ export const createBuilder = (host: BuilderHost): Builder => {
   let swapPreview: SwapQuotePreview | undefined;
   /** The steps the current build would run, and what they were built for. */
   let legsPreview: { legs: DefiLeg[]; forKey: string } | undefined;
+  /** Breakdown lines a flow contributes itself, when it has no token/amount. */
+  let extraLines: string[] = [];
   /**
    * The chosen pool's risk thresholds, read from the chain when it is picked.
    * They are governance parameters — the long pools rebalance at 0.88 and the
@@ -299,6 +302,18 @@ export const createBuilder = (host: BuilderHost): Builder => {
    * Keyed on the inputs so moving a slider does not re-quote on every keypress
    * — for a combo this reaches 0x, which is rate-limited and slow.
    */
+  const computeExtraLines = async () => {
+    if (!cfg?.previewLines) {
+      extraLines = [];
+      return;
+    }
+    try {
+      extraLines = validate(cfg.fields, state).ok ? await cfg.previewLines(state) : [];
+    } catch {
+      extraLines = [];
+    }
+  };
+
   const computeLegsPreview = async () => {
     if (!cfg?.previewLegs) return;
     if (!validate(cfg.fields, state).ok) {
@@ -428,6 +443,11 @@ export const createBuilder = (host: BuilderHost): Builder => {
       lines.push(
         `${tag("buy", "gray")}    ${swapBuyLine(state.buyToken.symbol, swapPreview, (s) => fmtAmount(s, 6))}`,
       );
+    }
+
+    if (extraLines.length) {
+      lines.push("");
+      lines.push(...extraLines);
     }
 
     if (legsPreview?.legs.length) {
@@ -663,6 +683,7 @@ export const createBuilder = (host: BuilderHost): Builder => {
     // showing the previous action's batch and risk until an edit happens to
     // recompute them — which reads as a description of what you are about to do.
     legsPreview = undefined;
+    extraLines = [];
     fxThresholds = undefined;
     feePreview = undefined;
     feeReservation = undefined;
@@ -1029,6 +1050,22 @@ export const createBuilder = (host: BuilderHost): Builder => {
             .catch(() => undefined);
         }
       }
+    } else if (key === "account" && cfg.loadAccounts) {
+      const choices = await cfg.loadAccounts();
+      if (!choices.length) {
+        provider.notify("Nothing stranded on any recent ephemeral account.");
+      } else {
+        const picked = await provider.select(
+          "Recover from",
+          choices.map((c) => ({
+            label: `[${c.index}] ${short(c.address)}`,
+            value: String(c.index),
+            hint: c.summary,
+          })),
+        );
+        const choice = choices.find((c) => String(c.index) === picked);
+        if (choice) state.account = choice;
+      }
     } else if (key === "debt") {
       const debt = await provider.input("Amount of fxUSD to mint", {
         hint: "the debt this position will owe, before the pool's borrow fee",
@@ -1120,6 +1157,7 @@ export const createBuilder = (host: BuilderHost): Builder => {
       await computeSwapPreview();
     }
     await computeLegsPreview();
+    await computeExtraLines();
     buildRows();
     list.focus();
     ctx.render();

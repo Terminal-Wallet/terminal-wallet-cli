@@ -125,9 +125,13 @@ export const runDeck = async (): Promise<void> => {
   let leavePalette: () => void = () => undefined;
 
   const feeders = createFeeders(render);
+  // Late-bound: the builder is created below and needs `ctx` itself, the same
+  // shape as `drawBuilder`.
+  let startFlow: (flowId: string) => void = () => undefined;
   const ctx: DeckContext = {
     screen,
     render,
+    openFlow: (flowId) => startFlow(flowId),
     refreshIdentity: () => feeders.refreshIdentity(),
     refreshBalances: () => feeders.refreshBalances(),
     refreshChainStats: () => feeders.refreshChainStats(),
@@ -518,6 +522,11 @@ export const runDeck = async (): Promise<void> => {
   // Closes the render cycle: `render` draws the builder, and the builder is
   // built from `render`. Same shape as `draw` above.
   drawBuilder = builder.render;
+  startFlow = (flowId) => {
+    mode = "build";
+    homeBox.hide();
+    void builder.open(flowId);
+  };
 
   const palette = createPalette({
     ctx,

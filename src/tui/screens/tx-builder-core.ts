@@ -12,6 +12,7 @@ import { LegsState, FlowCaps, validateLegs } from "../../flows/caps";
 import { TokenOverspend } from "../../flows/balance";
 import { FxPoolEntry } from "@railgun-community/cookbook";
 import { RailgunDisplayNFT } from "../../models/balance-models";
+import { EphemeralAssetScan } from "../../railgun/wallet/ephemeral-recovery";
 import { MorphoVaultRef } from "../../railgun/transaction/morpho/vault";
 import { asPercent, sliderBar } from "../format/slider";
 import { fmtAmount } from "../format/deck";
@@ -22,6 +23,7 @@ export type FieldKey =
   | "vault"
   | "pool"
   | "position"
+  | "account"
   | "amount"
   | "collateralPct"
   | "debt"
@@ -71,12 +73,27 @@ export interface PositionChoice {
   positionId: bigint;
 }
 
+/**
+ * An ephemeral account holding stranded value, and what is on it.
+ *
+ * Recovery picks an ACCOUNT rather than a token: a partly-failed batch leaves
+ * whatever it left, and the answer is almost always "all of it".
+ */
+export interface RecoveryChoice {
+  index: number;
+  address: string;
+  /** What is stranded there, in one phrase, for the row and the review. */
+  summary: string;
+  scan: EphemeralAssetScan;
+}
+
 export interface BuilderState {
   token?: RailgunDisplayBalance; // for swaps: the SELL token
   buyToken?: RailgunDisplayBalance; // swaps: the BUY token
   vault?: VaultChoice; // vault flows: the vault, and the token it spends
   pool?: PoolChoice; // fx flows: the pool, and the collateral it takes
   position?: PositionChoice; // fx flows acting on a position the wallet holds
+  account?: RecoveryChoice; // recovery: the stranded ephemeral account
   debt?: string; // fx flows: how much fxUSD to mint against the collateral
   /**
    * Slider positions, 0..1.
@@ -175,6 +192,10 @@ export const fieldDisplay = (key: FieldKey, s: BuilderState): string => {
       return s.pool ? s.pool.pool.name : "‹select pool›";
     case "position":
       return s.position ? s.position.nft.label : "‹select position›";
+    case "account":
+      return s.account
+        ? `[${s.account.index}] ${s.account.summary}`
+        : "‹select account›";
     case "debt":
       return s.debt ? s.debt : "‹enter amount to mint›";
     case "collateralPct":
@@ -218,6 +239,7 @@ export const validate = (
   if (fields.includes("vault") && !s.vault) missing.push("vault");
   if (fields.includes("pool") && !s.pool) missing.push("pool");
   if (fields.includes("position") && !s.position) missing.push("position");
+  if (fields.includes("account") && !s.account) missing.push("account");
   if (fields.includes("debt")) {
     const n = Number(s.debt);
     if (!s.debt || !isFinite(n) || n <= 0) missing.push("an amount to mint");

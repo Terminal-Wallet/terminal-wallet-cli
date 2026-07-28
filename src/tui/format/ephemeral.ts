@@ -115,29 +115,3 @@ export const historyLines = (
   }
   return lines;
 };
-
-export interface RecoverySummary {
-  /** "1.5 ETH, 200 USDC" — what is being reshielded. */
-  assets: string;
-  index: number;
-  funding: string;
-  gasLimit: bigint;
-  maxFeePerGas?: bigint;
-  estimatedCost: string;
-  feeSymbol: string;
-}
-
-/** The last thing shown before a recovery is submitted. */
-export const recoverySummaryLines = (s: RecoverySummary): string[] => {
-  const gwei = (value?: bigint) =>
-    value === undefined ? "n/a" : `${formatUnits(value, "gwei")} gwei`;
-  return [
-    tag("Recovery summary", "yellow"),
-    "",
-    `  reshield : ${tag(s.assets, "green")}  → your RAILGUN balance`,
-    `  from     : ephemeral [${tag(`${s.index}`, "cyan")}]`,
-    `  funding  : ${s.funding}`,
-    `  gas      : limit ${tag(`${s.gasLimit}`, "cyan")}, maxFee ${gwei(s.maxFeePerGas)}`,
-    `  est cost : ${tag(s.estimatedCost, "cyan")} ${s.feeSymbol}`,
-  ];
-};

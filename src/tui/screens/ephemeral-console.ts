@@ -52,7 +52,6 @@ import {
 } from "../../railgun/wallet/ephemeral-recovery";
 import { getSaltedPassword } from "../../railgun/wallet/wallet-password";
 import { getCurrentNetwork } from "../../railgun/engine/engine";
-import { runRecovery } from "./ephemeral-recover";
 
 /**
  * Spelled out on screen rather than left to a footer.
@@ -193,21 +192,20 @@ export const openEphemeralConsole = async (ctx: DeckContext): Promise<void> => {
         );
       });
 
-    const recover = (row: IndexRow) =>
-      run("Recovery", async () => {
-        // Said before the scan, not after. An unscanned account costs several
-        // RPC round-trips to read, and silence for that long is indistinguish-
-        // able from the key having done nothing.
-        setState({ status: `Reading ephemeral [${row.index}]…` });
-        const scan =
-          scans.get(row.index) ??
-          (await scanEphemeralAssets(chainName, row.address));
-        scans.set(row.index, scan);
-        await runRecovery(ctx, chainName, encryptionKey, row.index, scan);
-        // The recovery moves funds out, so what is left here has changed.
-        scans.delete(row.index);
-        await reload();
-      });
+    /**
+     * Hand recovery to the transaction builder rather than driving it here.
+     *
+     * It used to run its own sequence of modals over this list: an
+     * informational summary that could only be dismissed, then a separate
+     * yes/no that opened behind it, with this list still holding the escape
+     * key and tearing the whole stack down when it was pressed. The builder
+     * already owns that job — one review that IS the confirmation, a password
+     * re-auth, and a send — so this closes and defers to it.
+     */
+    const recover = async (_row: IndexRow): Promise<void> => {
+      done();
+      ctx.openFlow("ephemeral-recovery");
+    };
 
     const makeCurrent = (row: IndexRow) =>
       run("Set index", async () => {

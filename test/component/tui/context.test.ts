@@ -18,6 +18,7 @@ const fakeContext = () => {
     // about that rather than stubbing a widget tree nobody uses.
     screen: undefined as unknown as DeckContext["screen"],
     render: () => calls.push("render"),
+    openFlow: (flowId: string) => calls.push(`flow:${flowId}`),
     refreshIdentity: () => calls.push("identity"),
     refreshBalances: async () => {
       calls.push("balances");
@@ -73,6 +74,7 @@ test("a slow feeder is awaited, not fired and forgotten", async () => {
   const ctx: DeckContext = {
     screen: undefined as unknown as DeckContext["screen"],
     render: () => order.push("render"),
+    openFlow: (flowId: string) => order.push(`flow:${flowId}`),
     refreshIdentity: () => order.push("identity"),
     refreshBalances: () =>
       new Promise((resolve) =>

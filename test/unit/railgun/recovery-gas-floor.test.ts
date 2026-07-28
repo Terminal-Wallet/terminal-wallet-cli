@@ -15,7 +15,7 @@ import { RECOVERY_GAS_ESTIMATE_FLOOR } from "../../../src/railgun/wallet/ephemer
 
 const SRC = resolve(process.cwd(), "src");
 const recovery = readFileSync(join(SRC, "railgun/wallet/ephemeral-recovery.ts"), "utf-8");
-const screen = readFileSync(join(SRC, "tui/screens/ephemeral-recover.ts"), "utf-8");
+const configs = readFileSync(join(SRC, "tui/screens/tx-builder-configs.ts"), "utf-8");
 
 /** Observed on mainnet, from the call traces. */
 const MINT_SHIELD_GIVEN = 780_728n;
@@ -57,9 +57,27 @@ test("the floor is applied to the estimate, not to the populated transaction", (
 });
 
 test("the fee preview quotes the same figure the batch will carry", () => {
-  // Quoting 2.8M while carrying the floor would show a fee smaller than the
-  // one actually paid.
-  assert.match(screen, /RECOVERY_GAS_UNITS = RECOVERY_GAS_ESTIMATE_FLOOR/);
+  // Quoting less than the floor would show a fee smaller than the one paid.
+  const at = configs.indexOf('"ephemeral-recovery": (chainName)');
+  assert.ok(at > 0, "the recovery flow has no builder config");
+  assert.match(
+    configs.slice(at, at + 700),
+    /gasUnitsHint: RECOVERY_GAS_ESTIMATE_FLOOR/,
+  );
+});
+
+test("recovery does not send through the ratcheting path", () => {
+  // runCrossContractTransaction sends via the private path, which ratchets the
+  // ephemeral index on any type-4 send. A recovery is built against a PAST
+  // index, so ratcheting would skip a live account.
+  const at = configs.indexOf("const submitRecovery");
+  assert.ok(at > 0, "submitRecovery not found");
+  const body = configs.slice(at, at + 1400);
+  assert.match(body, /submitRecoveryTransaction\(/);
+  assert.ok(
+    !/runCrossContractTransaction\(/.test(body),
+    "recovery must not send through the path that ratchets",
+  );
 });
 
 test("the on-chain floor stays at no-floor, which is a different lever", () => {

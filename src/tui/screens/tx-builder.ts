@@ -26,6 +26,7 @@ import {
   VaultChoice,
   PoolChoice,
   PositionChoice,
+  RecoveryChoice,
   fieldDisplay,
   validate,
   summarize,
@@ -78,6 +79,16 @@ export interface TxBuilderConfig {
    * holds, read from the shielded NFT set.
    */
   loadPositions?: () => Promise<PositionChoice[]>;
+  /** Recovery: the ephemeral accounts currently holding stranded value. */
+  loadAccounts?: () => Promise<RecoveryChoice[]>;
+  /**
+   * Extra breakdown lines a flow contributes.
+   *
+   * The standard breakdown is built from a token and an amount; a flow shaped
+   * differently — recovery moves whatever it finds — has nothing to put there
+   * and would otherwise be reviewed against a blank panel.
+   */
+  previewLines?: (state: BuilderState) => Promise<string[]>;
   /**
    * The steps this build would run, for the clear-signing breakdown.
    *
@@ -99,6 +110,7 @@ const FIELD_LABELS: Record<FieldKey, string> = {
   vault: "Vault",
   pool: "Pool",
   position: "Position",
+  account: "Account",
   amount: "Amount",
   collateralPct: "Collateral",
   debt: "Mint",
@@ -280,6 +292,24 @@ export const runTxBuilder = async (
         case "pool":
           await editPool();
           break;
+        case "account": {
+          const accounts = (await cfg.loadAccounts?.()) ?? [];
+          if (!accounts.length) {
+            provider.notify("Nothing stranded on any recent ephemeral account.");
+            break;
+          }
+          const chosen = await provider.select(
+            "Recover from",
+            accounts.map((a) => ({
+              label: `[${a.index}]`,
+              value: String(a.index),
+              hint: a.summary,
+            })),
+          );
+          const account = accounts.find((a) => String(a.index) === chosen);
+          if (account) state.account = account;
+          break;
+        }
         case "position": {
           const choices = (await cfg.loadPositions?.()) ?? [];
           if (!choices.length) {

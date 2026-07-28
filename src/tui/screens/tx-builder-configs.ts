@@ -57,6 +57,7 @@ import {
   VaultChoice,
   PoolChoice,
   PositionChoice,
+  RecoveryChoice,
   FieldKey,
 } from "./tx-builder-core";
 import { listMorphoVaults } from "../../railgun/transaction/morpho/vault-registry";
@@ -72,6 +73,17 @@ import { getTokenInfo } from "../../railgun/balance/token-util";
 import { runCrossContractTransaction } from "../../flows/deps/cross-contract";
 import { DefiLeg, defiLegs } from "../format/defi-legs";
 import { getCachedEncryptionKey } from "../../railgun/wallet/wallet-password";
+import {
+  RECOVERY_GAS_ESTIMATE_FLOOR,
+  getProvedEphemeralRecoveryTransaction,
+  scanEphemeralAssets,
+  submitRecoveryTransaction,
+} from "../../railgun/wallet/ephemeral-recovery";
+import {
+  getCurrentEphemeralInfo,
+  getEphemeralAddressForIndex,
+} from "../../railgun/wallet/ephemeral-util";
+import { tag as tagText } from "../format/tags";
 import {
   FXMINT_GAS_FLOOR,
   getFxMintOpenInputs,
@@ -89,7 +101,7 @@ import { fxPositionCollections } from "../../railgun/transaction/fx/position";
 import {
   LegsState, Leg, toRecipients } from "../../flows/caps";
 import { isNativeChoice, makeNativeEntry } from "../../flows/native-token";
-import { parseUnits } from "ethers";
+import { formatUnits, parseUnits } from "ethers";
 import { getZer0XSwapInputs } from "../../railgun/transaction/zeroX/0x-swap";
 import { runPrivateSwapTransaction, runPublicSwapTransaction } from "../../flows/deps/swap";
 import { PrivateSwapSpec, PublicSwapSpec } from "../../flows/spec";
@@ -691,6 +703,93 @@ const submitFxMintOpen = async (
   );
 };
 
+/** How far back to look for a stranded account. */
+const RECOVERY_SCAN_DEPTH = 8;
+
+/**
+ * The ephemeral accounts currently holding stranded value.
+ *
+ * Scans the recent indices rather than asking for one: an account only ends up
+ * holding anything because a batch failed partway, and the user has no reason
+ * to know which index that was.
+ */
+const loadRecoveryChoices = async (
+  chainName: NetworkName,
+): Promise<RecoveryChoice[]> => {
+  const encryptionKey = getCachedEncryptionKey();
+  if (!encryptionKey) return [];
+  const { index: current } = await getCurrentEphemeralInfo(chainName, encryptionKey);
+  const choices: RecoveryChoice[] = [];
+  // Backwards from the current index: a stranded account is one the wallet has
+  // already ratcheted past, and the recent ones are where a failure lands.
+  for (let index = current; index >= Math.max(0, current - RECOVERY_SCAN_DEPTH); index--) {
+    const address = await getEphemeralAddressForIndex(chainName, encryptionKey, index);
+    const scan = await scanEphemeralAssets(chainName, address).catch(() => undefined);
+    if (!scan) continue;
+    const parts = [
+      ...(scan.nativeWei > 0n ? [`${formatUnits(scan.nativeWei, 18)} ETH`] : []),
+      ...scan.erc20s.map((t) => `${formatUnits(t.balance, t.decimals)} ${t.symbol}`),
+      ...scan.nfts.map((n) => n.label),
+    ];
+    if (!parts.length) continue;
+    choices.push({ index, address, summary: parts.join(", "), scan });
+  }
+  return choices;
+};
+
+/**
+ * Recovery moves whatever it finds, so the breakdown has to be built from the
+ * scan rather than from a token and an amount.
+ */
+const recoveryLines = async (s: BuilderState): Promise<string[]> => {
+  if (!s.account) return [];
+  const { scan, index, address } = s.account;
+  const lines = [
+    `${tagText("recover", "gray")}  from ephemeral [${index}]`,
+    `${tagText("account", "gray")}  ${address}`,
+  ];
+  if (scan.nativeWei > 0n) lines.push(`  ${formatUnits(scan.nativeWei, 18)} ETH  ${tagText("wrap → shield", "gray")}`);
+  for (const t of scan.erc20s) {
+    lines.push(`  ${formatUnits(t.balance, t.decimals)} ${t.symbol}  ${tagText("shield", "gray")}`);
+  }
+  for (const n of scan.nfts) lines.push(`  ${n.label}  ${tagText("position → shield", "gray")}`);
+  if (scan.method === "tokenlist") {
+    lines.push(tagText("! curated-list scan only — an arbitrary token may be missed", "yellow"));
+  }
+  return lines;
+};
+
+const submitRecovery = async (
+  chainName: NetworkName,
+  s: BuilderState,
+): Promise<SubmitResult> => {
+  if (!s.account) return { ok: false, error: "incomplete" };
+  const encryptionKey = await requireEncryptionKey();
+  if (!encryptionKey) return { ok: false, error: "cancelled" };
+  const { scan, index } = s.account;
+  const broadcaster = s.fee?.kind === "broadcaster" ? s.fee.broadcaster : undefined;
+  try {
+    const proved = await getProvedEphemeralRecoveryTransaction(
+      chainName,
+      encryptionKey,
+      index,
+      {
+        erc20s: scan.erc20s,
+        nativeWei: scan.nativeWei > 0n ? scan.nativeWei : undefined,
+        nfts: scan.nfts,
+      },
+      broadcaster,
+    );
+    // NOT runCrossContractTransaction: that sends through the private path,
+    // which ratchets the ephemeral index on any type-4 send. This batch was
+    // built against a PAST index, so ratcheting would skip a live account.
+    await submitRecoveryTransaction(chainName, proved, broadcaster);
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: (err as Error).message };
+  }
+};
+
 export const txBuilderConfigs: Record<
   string,
   (chainName: NetworkName) => TxBuilderConfig
@@ -1082,6 +1181,20 @@ export const txBuilderConfigs: Record<
       }),
     ]),
   ),
+
+  "ephemeral-recovery": (chainName) => ({
+    title: "Recover stranded funds — back into RAILGUN",
+    chainName,
+    verb: "Recover",
+    // No token or amount: a recovery moves whatever the failed batch left.
+    fields: ["account", "fee", "gas"],
+    loadAccounts: () => loadRecoveryChoices(chainName),
+    previewLines: recoveryLines,
+    ...gasInfo(chainName),
+    gasUnitsHint: RECOVERY_GAS_ESTIMATE_FLOOR,
+    relayAdapt: true,
+    submit: (s: BuilderState) => submitRecovery(chainName, s),
+  }),
 
   "fx-mint-close": (chainName) => ({
     title: "Close an f(x) position — Privately",
