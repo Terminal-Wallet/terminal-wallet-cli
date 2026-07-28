@@ -192,6 +192,8 @@ export const createBuilder = (host: BuilderHost): Builder => {
   let fxThresholds:
     | { rebalanceDebtRatio: bigint; liquidationDebtRatio: bigint }
     | undefined;
+  /** Whether a field edit is already in flight; see `editField`. */
+  let editing = false;
 
   const caps = () => flowCaps(cfg?.flowId ?? "");
   const findLeg = (id: string): Leg | undefined =>
@@ -1201,7 +1203,6 @@ export const createBuilder = (host: BuilderHost): Builder => {
    * first, while with no status the pane simply sits there. Both together are
    * why opening a field read as the screen having locked up.
    */
-  let editing = false;
   const editField = async (key: FieldKey) => {
     if (editing) return;
     editing = true;
