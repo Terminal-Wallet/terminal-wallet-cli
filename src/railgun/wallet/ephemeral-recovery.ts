@@ -462,10 +462,17 @@ const buildProved7702Batch = async (
   // unmineable tip, and raising the tier in the UI changed nothing, so it
   // failed identically every time.
   //
-  // So: honour the choice when there is one, and when there is not, default to
-  // the tip a normal transaction pays rather than the cheapest one that has
-  // ever been included. A recovery is a rescue — the funds are already
-  // stranded, a refusal costs another attempt, and unused gas is refunded.
+  // So: honour the choice when there is one, and when there is not, bid the
+  // top of the market rather than the bottom.
+  //
+  // `fast` (the 75th-percentile tip) rather than a hardcoded floor, because a
+  // constant ages badly and this has to track conditions. It is the right
+  // trade for a RESCUE specifically: a broadcaster advertises no minimum
+  // anywhere in its fee payload, so there is nothing to pre-check against and
+  // the only way to find the threshold is to be refused by it. That refusal
+  // happens before anything is submitted, so a rejected attempt costs nothing
+  // — while an accepted one that sat unmined would leave the funds stranded
+  // for another round. The tip is only paid if the batch is included.
   const g = originalGasDetails as unknown as {
     maxFeePerGas?: bigint;
     maxPriorityFeePerGas?: bigint;
@@ -476,9 +483,9 @@ const buildProved7702Batch = async (
       g.maxPriorityFeePerGas = gasChoice.maxPriorityFeePerGas;
     } else if (!isDefined(getGasFeeSelection(chainName))) {
       try {
-        const { baseFeePerGas, average } = await getGasEstimates(chainName);
-        g.maxPriorityFeePerGas = average;
-        g.maxFeePerGas = maxFeeFor(average, baseFeePerGas);
+        const { baseFeePerGas, fast } = await getGasEstimates(chainName);
+        g.maxPriorityFeePerGas = fast;
+        g.maxFeePerGas = maxFeeFor(fast, baseFeePerGas);
       } catch {
         // Keep the default gas details if the estimate call fails.
       }

@@ -126,9 +126,10 @@ test("a recovery uses the gas tier it was given, not the cheapest one", () => {
   // gas for a tip at the bottom of the distribution rejects it as an
   // unmineable tip, and raising the tier changed nothing.
   assert.match(recovery, /gasChoice\.maxPriorityFeePerGas/);
-  // The fallback is now the tip a normal transaction pays, with the shared
-  // headroom, rather than a hand-rolled cheaper one.
-  assert.match(recovery, /maxFeeFor\(average, baseFeePerGas\)/);
+  // The fallback now bids the top of the market with the shared headroom,
+  // rather than a hand-rolled cheaper one. A refusal is free; a batch that
+  // sits unmined is not.
+  assert.match(recovery, /maxFeeFor\(fast, baseFeePerGas\)/);
   assert.ok(
     !/parseUnits\("0\.02", "gwei"\)/.test(recovery),
     "the hand-rolled 0.02 gwei floor is what made this unmineable",
