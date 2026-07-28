@@ -61,6 +61,7 @@ const holding: EphemeralAssetScan = {
   nfts: [],
   erc20s: [],
   method: "logs",
+  unreadable: 0,
 };
 
 beforeEach(() => {

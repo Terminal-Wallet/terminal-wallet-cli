@@ -712,6 +712,11 @@ const RECOVERY_SCAN_DEPTH = 8;
  * Scans the recent indices rather than asking for one: an account only ends up
  * holding anything because a batch failed partway, and the user has no reason
  * to know which index that was.
+ *
+ * The indices are scanned CONCURRENTLY. Run one after another this was nine
+ * scans of a dozen-odd RPC round trips each — well over a hundred calls in
+ * series — behind a field that gives no sign it is working, so opening the
+ * account picker looked like the screen had locked up.
  */
 const loadRecoveryChoices = async (
   chainName: NetworkName,
@@ -719,22 +724,38 @@ const loadRecoveryChoices = async (
   const encryptionKey = getCachedEncryptionKey();
   if (!encryptionKey) return [];
   const { index: current } = await getCurrentEphemeralInfo(chainName, encryptionKey);
-  const choices: RecoveryChoice[] = [];
   // Backwards from the current index: a stranded account is one the wallet has
   // already ratcheted past, and the recent ones are where a failure lands.
+  const indices: number[] = [];
   for (let index = current; index >= Math.max(0, current - RECOVERY_SCAN_DEPTH); index--) {
-    const address = await getEphemeralAddressForIndex(chainName, encryptionKey, index);
-    const scan = await scanEphemeralAssets(chainName, address).catch(() => undefined);
-    if (!scan) continue;
-    const parts = [
-      ...(scan.nativeWei > 0n ? [`${formatUnits(scan.nativeWei, 18)} ETH`] : []),
-      ...scan.erc20s.map((t) => `${formatUnits(t.balance, t.decimals)} ${t.symbol}`),
-      ...scan.nfts.map((n) => n.label),
-    ];
-    if (!parts.length) continue;
-    choices.push({ index, address, summary: parts.join(", "), scan });
+    indices.push(index);
   }
-  return choices;
+  const scanned = await Promise.all(
+    indices.map(async (index): Promise<RecoveryChoice | undefined> => {
+      const address = await getEphemeralAddressForIndex(chainName, encryptionKey, index);
+      const scan = await scanEphemeralAssets(chainName, address).catch(() => undefined);
+      if (!scan) return undefined;
+      const parts = [
+        ...(scan.nativeWei > 0n ? [`${formatUnits(scan.nativeWei, 18)} ETH`] : []),
+        ...scan.erc20s.map((t) => `${formatUnits(t.balance, t.decimals)} ${t.symbol}`),
+        ...scan.nfts.map((n) => n.label),
+      ];
+      if (!parts.length) {
+        // Found nothing — but "found nothing" and "could not look" are not the
+        // same answer, and dropping the second from the list is what turns a
+        // throttled RPC into a stranded account the user never sees offered.
+        if (scan.unreadable === 0) return undefined;
+        return {
+          index,
+          address,
+          summary: `${scan.unreadable} balance(s) unreadable — not confirmed empty`,
+          scan,
+        };
+      }
+      return { index, address, summary: parts.join(", "), scan };
+    }),
+  );
+  return scanned.filter((c): c is RecoveryChoice => c !== undefined);
 };
 
 /**
@@ -753,6 +774,17 @@ const recoveryLines = async (s: BuilderState): Promise<string[]> => {
     lines.push(`  ${formatUnits(t.balance, t.decimals)} ${t.symbol}  ${tagText("shield", "gray")}`);
   }
   for (const n of scan.nfts) lines.push(`  ${n.label}  ${tagText("position → shield", "gray")}`);
+  if (scan.nativeWei === 0n && !scan.erc20s.length && !scan.nfts.length) {
+    lines.push(`  ${tagText("nothing found to move", "gray")}`);
+  }
+  if (scan.unreadable > 0) {
+    lines.push(
+      tagText(
+        `! ${scan.unreadable} balance(s) could not be read — rescan before trusting this list`,
+        "red",
+      ),
+    );
+  }
   if (scan.method === "tokenlist") {
     lines.push(tagText("! curated-list scan only — an arbitrary token may be missed", "yellow"));
   }
@@ -764,6 +796,14 @@ const submitRecovery = async (
   s: BuilderState,
 ): Promise<SubmitResult> => {
   if (!s.account) return { ok: false, error: "incomplete" };
+  const { scan: picked } = s.account;
+  if (picked.nativeWei === 0n && !picked.erc20s.length && !picked.nfts.length) {
+    // Only reachable for an account listed because its scan was incomplete.
+    return {
+      ok: false,
+      error: "nothing found at this account to recover — rescan and try again",
+    };
+  }
   const encryptionKey = await requireEncryptionKey();
   if (!encryptionKey) return { ok: false, error: "cancelled" };
   const { scan, index } = s.account;

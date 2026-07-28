@@ -44,6 +44,7 @@ const scan = (
   erc20s,
   nfts,
   method: "logs",
+  unreadable: 0,
 });
 
 const weth = {
@@ -51,6 +52,12 @@ const weth = {
   symbol: "WETH",
   decimals: 18,
   balance: parseUnits("1.5", 18),
+};
+
+const position = {
+  nftAddress: "0xc6dee5c8ea6ee2b0f3f4d5e3f0e7b8a9c0d1e2f3",
+  tokenSubID: "0x7bd",
+  label: "f(x) position #1981",
 };
 
 test("newest index first", () => {
@@ -86,6 +93,27 @@ test("a scanned but empty row reads empty", () => {
   const [row] = buildIndexRows(35, entries(34), scans);
   assert.equal(assetSummary(row), "empty");
   assert.equal(holdsAssets(row), false);
+});
+
+test("a row holding only a position says so instead of reading empty", () => {
+  // The f(x) mint that stranded position #1981 left the NFT and nothing else
+  // recoverable by symbol. `holdsAssets` counts it, so a summary that ignores
+  // it prints a row highlighted as holding funds and labelled "empty" — the
+  // list contradicting itself about the one asset worth rescuing.
+  const scans = new Map([[34, scan(0n, [], [position])]]);
+  const [row] = buildIndexRows(35, entries(34), scans);
+  assert.equal(holdsAssets(row), true);
+  assert.notEqual(assetSummary(row), "empty");
+  assert.match(assetSummary(row), /f\(x\) position #1981/);
+});
+
+test("positions are summarised alongside tokens, not instead of them", () => {
+  const scans = new Map([[34, scan(parseUnits("0.01", 18), [weth], [position])]]);
+  const [row] = buildIndexRows(35, entries(34), scans);
+  const summary = assetSummary(row);
+  assert.match(summary, /ETH/);
+  assert.match(summary, /WETH/);
+  assert.match(summary, /#1981/);
 });
 
 test("a row holding native ETH is flagged", () => {

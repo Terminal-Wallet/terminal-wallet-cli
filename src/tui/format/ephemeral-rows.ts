@@ -71,6 +71,15 @@ export const assetSummary = (row: IndexRow): string => {
   } else if (row.scan.erc20s.length > 1) {
     parts.push(`${row.scan.erc20s.length} tokens`);
   }
+  // A position is the most valuable thing that can be sitting here and the
+  // least visible: it has no symbol and no balance, so a summary built only
+  // from tokens calls an account holding one "empty" while `holdsAssets`
+  // highlights the same row as holding funds.
+  if (row.scan.nfts.length === 1) {
+    parts.push(row.scan.nfts[0].label);
+  } else if (row.scan.nfts.length > 1) {
+    parts.push(`${row.scan.nfts.length} positions`);
+  }
   return parts.length ? parts.join(" · ") : "empty";
 };
 

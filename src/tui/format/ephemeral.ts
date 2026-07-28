@@ -74,8 +74,22 @@ export const balanceLines = (
       )}  ${tag(token.tokenAddress, "gray")}`,
     );
   }
-  if (scan.nativeWei === 0n && scan.erc20s.length === 0) {
+  for (const nft of scan.nfts) {
+    lines.push(`  ${"position".padEnd(8)} ${tag(nft.label, "green")}  ${tag(nft.nftAddress, "gray")}`);
+  }
+  if (scan.nativeWei === 0n && scan.erc20s.length === 0 && scan.nfts.length === 0) {
     lines.push(`  ${tag("(nothing stranded at this ephemeral)", "gray")}`);
+  }
+  if (scan.unreadable > 0) {
+    // Louder than the curated-list note: that one says the scan may not have
+    // looked everywhere, this one says part of it looked and got no answer.
+    lines.push(
+      "",
+      tag(
+        `warning: ${scan.unreadable} balance(s) could not be read — this account is NOT confirmed empty. Retry before writing it off.`,
+        "red",
+      ),
+    );
   }
   if (scan.method === "tokenlist") {
     // Worth saying plainly: an empty result from this scan is not proof the

@@ -25,7 +25,6 @@ import {
   getWrappedTokenInfoForChain,
 } from "../network/network-util";
 import {
-  getERC20Balance,
   getERC20TokenInfosForChain,
   getTokenInfo,
 } from "../balance/token-util";
@@ -46,6 +45,7 @@ import { emitCoreEvent } from "../../core/events";
 import { describeNFT } from "../balance/nft-util";
 import { fxPositionCollections } from "../transaction/fx/position";
 import { NO_CROSS_CONTRACT_GAS_FLOOR } from "../transaction/cross-contract";
+import { mapLimited } from "../../util/concurrency";
 
 // EIP-7702 ephemeral accounts are per-op and never intended to hold a balance, but a partial
 // or failed relay-adapt (or a swap whose bought token wasn't shielded) can strand assets at a
@@ -82,6 +82,50 @@ export type EphemeralAssetScan = {
   // window (eth_getLogs). "tokenlist": curated list only (getLogs unavailable/capped) — can miss
   // arbitrary tokens; surface this.
   method: "logs" | "tokenlist";
+  /**
+   * How many balance reads the RPC refused to answer.
+   *
+   * A read that fails is not a balance of zero, and the difference decides
+   * whether an account is safe to walk away from. Counted rather than thrown
+   * on, because a scan that found five tokens and could not read a sixth is
+   * still worth showing — it just must not be presented as complete.
+   */
+  unreadable: number;
+};
+
+/**
+ * Fan-out width for the balance reads behind one scan.
+ *
+ * A scan is a dozen-plus independent `balanceOf`/`ownerOf` calls and, run one
+ * after another, took long enough that the screen looked hung. Concurrent, but
+ * bounded: the public endpoints this talks to rate-limit a flood, and a
+ * throttled read comes back as a failure — which, before `unreadable` existed,
+ * was indistinguishable from an empty account.
+ */
+const SCAN_CONCURRENCY = 6;
+
+const ERC20_BALANCE_ABI = [
+  "function balanceOf(address) view returns (uint256)",
+];
+
+/**
+ * `balanceOf`, allowed to fail loudly.
+ *
+ * The shared `getERC20Balance` maps any RPC error to 0n, which is right for a
+ * portfolio figure and wrong here: this scan decides whether funds are stranded,
+ * and "the node would not answer" must never render as "there is nothing here".
+ */
+const readERC20Balance = async (
+  chainName: NetworkName,
+  tokenAddress: string,
+  owner: string,
+): Promise<bigint> => {
+  const contract = new Contract(
+    tokenAddress,
+    ERC20_BALANCE_ABI,
+    getProviderForChain(chainName),
+  );
+  return (await contract.balanceOf(owner)) as bigint;
 };
 
 // keccak256("Transfer(address,address,uint256)")
@@ -119,11 +163,22 @@ const sanitizeSymbol = (symbol: string): string => {
 const scanViaTokenList = async (
   chainName: NetworkName,
   address: string,
-): Promise<RecoverableERC20[]> => {
+): Promise<{ erc20s: RecoverableERC20[]; unreadable: number }> => {
   const infos = await getERC20TokenInfosForChain(chainName);
+  const read = await mapLimited(infos, SCAN_CONCURRENCY, async (info) => {
+    try {
+      return { info, balance: await readERC20Balance(chainName, info.tokenAddress, address) };
+    } catch {
+      return { info, balance: undefined };
+    }
+  });
   const out: RecoverableERC20[] = [];
-  for (const info of infos) {
-    const balance = await getERC20Balance(chainName, info.tokenAddress, address);
+  let unreadable = 0;
+  for (const { info, balance } of read) {
+    if (balance === undefined) {
+      unreadable++;
+      continue;
+    }
     if (balance > 0n) {
       out.push({
         tokenAddress: info.tokenAddress,
@@ -133,7 +188,7 @@ const scanViaTokenList = async (
       });
     }
   }
-  return out;
+  return { erc20s: out, unreadable };
 };
 
 // Portable best-effort discovery: any token contract that sent an ERC20 Transfer TO the
@@ -146,6 +201,9 @@ const scanViaLogs = async (
 ): Promise<{
   erc20s: RecoverableERC20[];
   nftCandidates: { nftAddress: string; tokenSubID: string }[];
+  /** Whether the log query itself ran. False means the curated list is all there was. */
+  ok: boolean;
+  unreadable: number;
 }> => {
   try {
     const provider = getProviderForChain(chainName);
@@ -177,26 +235,38 @@ const scanViaLogs = async (
         tokenSubID,
       });
     }
-    const out: RecoverableERC20[] = [];
-    for (const tokenAddress of tokenAddresses) {
-      const balance = await getERC20Balance(chainName, tokenAddress, address);
-      if (balance <= 0n) {
-        continue;
-      }
-      let symbol = "???";
-      let decimals = 18;
-      try {
-        const info = await getTokenInfo(chainName, tokenAddress);
-        symbol = sanitizeSymbol(info.symbol);
-        decimals = Number(info.decimals);
-      } catch {
-        // keep placeholder
-      }
-      out.push({ tokenAddress, symbol, decimals, balance });
-    }
-    return { erc20s: out, nftCandidates: [...nftCandidates.values()] };
+    const read = await mapLimited(
+      tokenAddresses,
+      SCAN_CONCURRENCY,
+      async (tokenAddress) => {
+        try {
+          const balance = await readERC20Balance(chainName, tokenAddress, address);
+          if (balance <= 0n) return undefined;
+          let symbol = "???";
+          let decimals = 18;
+          try {
+            const info = await getTokenInfo(chainName, tokenAddress);
+            symbol = sanitizeSymbol(info.symbol);
+            decimals = Number(info.decimals);
+          } catch {
+            // keep placeholder
+          }
+          return { tokenAddress, symbol, decimals, balance };
+        } catch {
+          // A token the logs say arrived, whose balance the node would not
+          // report. Counted, never silently dropped.
+          return null;
+        }
+      },
+    );
+    return {
+      erc20s: read.filter((t): t is RecoverableERC20 => t != null),
+      nftCandidates: [...nftCandidates.values()],
+      ok: true,
+      unreadable: read.filter((t) => t === null).length,
+    };
   } catch {
-    return { erc20s: [], nftCandidates: [] };
+    return { erc20s: [], nftCandidates: [], ok: false, unreadable: 0 };
   }
 };
 
@@ -216,35 +286,39 @@ const stillOwned = async (
   if (!candidates.length) return [];
   const provider = getProviderForChain(chainName);
   const known = fxPositionCollections();
-  const out: RecoverableNFT[] = [];
-  for (const candidate of candidates) {
-    try {
-      const contract = new Contract(
-        candidate.nftAddress,
-        ["function ownerOf(uint256) view returns (address)"],
-        provider,
-      );
-      const owner: string = await contract.ownerOf(BigInt(candidate.tokenSubID));
-      if (owner.toLowerCase() !== address.toLowerCase()) continue;
-      out.push({
-        nftAddress: candidate.nftAddress,
-        tokenSubID: candidate.tokenSubID,
-        label: describeNFT(
-          {
-            nftAddress: candidate.nftAddress,
-            tokenSubID: candidate.tokenSubID,
-            nftTokenType: NFTTokenType.ERC721,
-            amount: 1n,
-          },
-          known,
-        ).label,
-      });
-    } catch {
-      // Burnt, not an ERC-721, or an RPC that will not say — either way it is
-      // not something this can move.
-    }
-  }
-  return out;
+  const owned = await mapLimited(
+    candidates,
+    SCAN_CONCURRENCY,
+    async (candidate): Promise<RecoverableNFT | undefined> => {
+      try {
+        const contract = new Contract(
+          candidate.nftAddress,
+          ["function ownerOf(uint256) view returns (address)"],
+          provider,
+        );
+        const owner: string = await contract.ownerOf(BigInt(candidate.tokenSubID));
+        if (owner.toLowerCase() !== address.toLowerCase()) return undefined;
+        return {
+          nftAddress: candidate.nftAddress,
+          tokenSubID: candidate.tokenSubID,
+          label: describeNFT(
+            {
+              nftAddress: candidate.nftAddress,
+              tokenSubID: candidate.tokenSubID,
+              nftTokenType: NFTTokenType.ERC721,
+              amount: 1n,
+            },
+            known,
+          ).label,
+        };
+      } catch {
+        // Burnt, not an ERC-721, or an RPC that will not say — either way it is
+        // not something this can move.
+        return undefined;
+      }
+    },
+  );
+  return owned.filter((n): n is RecoverableNFT => n !== undefined);
 };
 
 // Discover every recoverable asset sitting at an ephemeral address: native gas token + all
@@ -262,7 +336,7 @@ export const scanEphemeralAssets = async (
     scanViaTokenList(chainName, address),
   ]);
   const deduped = new Map<string, RecoverableERC20>();
-  for (const t of [...viaLogs.erc20s, ...viaTokenList]) {
+  for (const t of [...viaLogs.erc20s, ...viaTokenList.erc20s]) {
     deduped.set(t.tokenAddress.toLowerCase(), t);
   }
   return {
@@ -270,7 +344,13 @@ export const scanEphemeralAssets = async (
     nativeWei,
     erc20s: [...deduped.values()],
     nfts: await stillOwned(chainName, address, viaLogs.nftCandidates),
-    method: viaLogs.erc20s.length > 0 ? "logs" : "tokenlist",
+    // Whether the log query RAN, not whether it happened to find an ERC-20.
+    // Keyed on the find, an account whose only arrival was a position NFT
+    // reported "log scan unavailable" and warned about missed tokens — a scan
+    // that had in fact worked perfectly, crying wolf on the one screen whose
+    // job is to say whether anything is left behind.
+    method: viaLogs.ok ? "logs" : "tokenlist",
+    unreadable: viaLogs.unreadable + viaTokenList.unreadable,
   };
 };
 

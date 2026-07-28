@@ -525,6 +525,13 @@ export const runDeck = async (): Promise<void> => {
   startFlow = (flowId) => {
     mode = "build";
     homeBox.hide();
+    // A flow entered from a screen rather than the palette — recovery hands
+    // off this way. Its loaders reach the network before `open` draws
+    // anything, and until then the centre pane is blank: say what is happening
+    // now, or the handover reads as the action having quietly failed.
+    center.setLabel(" build ");
+    setState({ status: "Opening…" });
+    render();
     void builder.open(flowId);
   };
 

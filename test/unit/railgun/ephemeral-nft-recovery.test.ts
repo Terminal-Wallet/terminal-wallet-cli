@@ -29,6 +29,7 @@ const scan = (over: Partial<EphemeralAssetScan> = {}): EphemeralAssetScan => ({
   erc20s: [],
   nfts: [],
   method: "logs",
+  unreadable: 0,
   ...over,
 });
 

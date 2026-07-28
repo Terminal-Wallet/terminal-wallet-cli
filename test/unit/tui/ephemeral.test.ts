@@ -129,6 +129,62 @@ test("balances list the native asset and every token found", () => {
   assert.ok(lines.some((l) => l.includes("USDC") && l.includes("200")));
 });
 
+test("balances list a stranded position", () => {
+  const lines = balanceLines(
+    1,
+    "0xabc",
+    scan({
+      nfts: [
+        {
+          nftAddress: "0xc6de",
+          tokenSubID: "0x7bd",
+          label: "f(x) position #1981",
+        },
+      ],
+    }),
+  ).map(strip);
+  assert.ok(lines.some((l) => l.includes("f(x) position #1981")));
+});
+
+test("an account holding only a position is not reported as empty", () => {
+  // The state a failed f(x) mint actually leaves: the position minted, the
+  // re-shield reverted, so the NFT is the only thing there. Saying "nothing
+  // stranded" here tells the user to walk away from a live position.
+  const lines = balanceLines(
+    1,
+    "0xabc",
+    scan({
+      nfts: [
+        {
+          nftAddress: "0xc6de",
+          tokenSubID: "0x7bd",
+          label: "f(x) position #1981",
+        },
+      ],
+    }),
+  ).map(strip);
+  assert.ok(
+    !lines.some((l) => l.includes("nothing stranded at this ephemeral")),
+    "a held position must not read as an empty account",
+  );
+});
+
+test("balance reads the node refused are not reported as an empty account", () => {
+  // The scanner maps a failed read to "no balance found". If the screen then
+  // prints an unqualified "nothing stranded", a throttled RPC gives a stranded
+  // account a clean bill of health and the user walks away from it.
+  const lines = balanceLines(2, "0xabc", scan({ unreadable: 3 })).map(strip);
+  assert.ok(
+    lines.some((l) => /3 .*could not be read|could not read 3/i.test(l)),
+    "the count of unreadable balances must be stated",
+  );
+});
+
+test("a fully readable scan makes no such caveat", () => {
+  const lines = balanceLines(2, "0xabc", scan({ unreadable: 0 })).map(strip);
+  assert.ok(!lines.some((l) => /could not be read/i.test(l)));
+});
+
 test("history marks the current index and distinguishes how each was used", () => {
   const lines = historyLines(2, 3, [
     { index: 1, address: "0x1", usedForUnshield: true },

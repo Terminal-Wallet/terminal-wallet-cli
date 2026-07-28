@@ -688,6 +688,10 @@ export const createBuilder = (host: BuilderHost): Builder => {
     feePreview = undefined;
     feeReservation = undefined;
     loadedBalances = [];
+    // Not derived state but a latch, and it belongs here for the same reason:
+    // closing a flow while a field edit is still awaiting leaves it set, and
+    // the next flow would open with every field refusing to edit.
+    editing = false;
 
     // Best-effort: USD figures are an aid, and a price outage must not stop a
     // send. Unknown tokens simply show no USD.
@@ -924,7 +928,7 @@ export const createBuilder = (host: BuilderHost): Builder => {
     refreshLegs();
   };
 
-  const editField = async (key: FieldKey) => {
+  const runFieldEdit = async (key: FieldKey) => {
     if (!cfg) return;
     const provider = getInputProvider();
     if (key === "token" && cfg.loadTokens) {
@@ -1161,6 +1165,56 @@ export const createBuilder = (host: BuilderHost): Builder => {
     buildRows();
     list.focus();
     ctx.render();
+  };
+
+  /**
+   * What a field says while its options are being fetched.
+   *
+   * Only the ones that go to the network. The rest open a prompt immediately
+   * and would just flicker a message nobody can read.
+   */
+  const loadingNote = (key: FieldKey): string | undefined => {
+    switch (key) {
+      case "token":
+        return "Reading balances…";
+      case "buyToken":
+        return "Loading swap targets…";
+      case "vault":
+        return "Reading Morpho vaults…";
+      case "pool":
+        return "Reading f(x) pools…";
+      case "position":
+        return "Reading positions…";
+      case "account":
+        return "Scanning recent ephemeral accounts…";
+      default:
+        return undefined;
+    }
+  };
+
+  /**
+   * One field edit at a time, and never in silence.
+   *
+   * The row handler fires this and forgets it. Some loaders are slow — the
+   * recovery picker scans every recent ephemeral account before it can offer a
+   * list — and with no guard a second Enter starts a second scan alongside the
+   * first, while with no status the pane simply sits there. Both together are
+   * why opening a field read as the screen having locked up.
+   */
+  let editing = false;
+  const editField = async (key: FieldKey) => {
+    if (editing) return;
+    editing = true;
+    const note = loadingNote(key);
+    if (note !== undefined) {
+      setState({ status: note });
+      ctx.render();
+    }
+    try {
+      await runFieldEdit(key);
+    } finally {
+      editing = false;
+    }
   };
 
   // --- send ------------------------------------------------------------------
