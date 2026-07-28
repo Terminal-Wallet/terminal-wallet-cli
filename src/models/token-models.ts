@@ -21,6 +21,17 @@ export enum TokenAddressEthereum {
   DAI = "0x6B175474E89094C44Da98b954EedeAC495271d0F",
   USDC = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
   RAIL = "0xe76C6c83af64e4C60245D8C7dE953DF673a7A33D",
+  /**
+   * The tokens the DeFi flows deal in.
+   *
+   * Listed so the ephemeral recovery scanner can find them. That scanner walks
+   * the curated list plus any token seen in a recent Transfer log, and the log
+   * window is ~10,000 blocks — so without an entry here, value stranded at an
+   * ephemeral account becomes invisible about a day and a half later. The first
+   * real fx mint stranded fxUSD exactly this way.
+   */
+  wstETH = "0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0",
+  fxUSD = "0x085780639CC2cACd35E474e71f4d000e2405d8f6",
 }
 
 export enum TokenAddressBSC {

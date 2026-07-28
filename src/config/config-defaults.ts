@@ -61,6 +61,8 @@ export default {
       TokenAddressEthereum.DAI,
       TokenAddressEthereum.USDC,
       TokenAddressEthereum.RAIL,
+      TokenAddressEthereum.wstETH,
+      TokenAddressEthereum.fxUSD,
     ],
     [NetworkName.BNBChain]: [
       TokenAddressBSC.BTCB,

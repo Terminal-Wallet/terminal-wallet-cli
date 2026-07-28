@@ -53,3 +53,21 @@ test("the floor is not so high it starves the estimate", () => {
   // the estimate on the floor check itself.
   assert.ok(FXMINT_GAS_FLOOR <= 8_000_000n, "an unusable floor is its own failure");
 });
+
+test("fxUSD and the pool collateral are in the token list the scanner walks", async () => {
+  // Recovery finds a stranded token two ways: the curated list, or a Transfer
+  // log within ~10,000 blocks. Relying on the log window means value stranded
+  // at an ephemeral account goes invisible about a day and a half later —
+  // which is exactly what the first real mint would have done with its fxUSD.
+  const { default: config } = await import("../../../src/config/config-defaults");
+  const { NetworkName } = await import("@railgun-community/shared-models");
+  const listed = config.tokenConfig[NetworkName.Ethereum].map((a) => a.toLowerCase());
+  assert.ok(
+    listed.includes("0x085780639cc2cacd35e474e71f4d000e2405d8f6"),
+    "fxUSD is not listed, so stranded fxUSD becomes unfindable",
+  );
+  assert.ok(
+    listed.includes("0x7f39c581f595b53c5cb19bd0b3f8da6c935e2ca0"),
+    "wstETH is not listed, so stranded collateral becomes unfindable",
+  );
+});
