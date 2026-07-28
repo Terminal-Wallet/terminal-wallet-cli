@@ -332,6 +332,23 @@ export const runTxBuilder = async (
           if (d) state.debt = d;
           break;
         }
+        case "debtDelta": {
+          // Signed, and this renderer has no centred slider — so the direction
+          // is asked for rather than inferred from a typed minus sign, which
+          // is too easy to omit on a field that can repay a position's debt.
+          const direction = await provider.select("Debt", [
+            { label: "Borrow more fxUSD", value: "borrow" },
+            { label: "Repay fxUSD", value: "repay" },
+          ]);
+          if (!direction) break;
+          const d = await provider.input(
+            direction === "repay" ? "fxUSD to repay" : "fxUSD to borrow",
+          );
+          if (!d) break;
+          state.debt = d;
+          state.debtDeltaFrac = direction === "repay" ? -1 : 1;
+          break;
+        }
         case "collateralPct": {
           const c = await provider.input(
             `Collateral${state.token ? ` in ${state.token.symbol}` : ""}`,
