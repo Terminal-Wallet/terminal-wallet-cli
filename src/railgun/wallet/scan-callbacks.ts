@@ -105,10 +105,18 @@ export const utxoMerkletreeScanCallback = makeMerkletreeScanCallback("utxo");
 export const txidMerkletreeScanCallback = makeMerkletreeScanCallback("txid");
 
 const drainBalanceQueue = async (queued: RailgunBalancesEvent[]) => {
-  // Dedupe to the latest event per bucket.
+  // Dedupe to the latest event per (txid version, bucket).
+  //
+  // The bucket alone is not the event's identity. ACTIVE_TXID_VERSIONS is
+  // [V2, V3] and the engine runs a full per-bucket emission for each, so keying
+  // on the bucket made a V3 event replace the V2 event for the same bucket
+  // before either was applied — and a wallet that has only ever transacted on
+  // V2 gets V3 events carrying nothing, so V2's balances were dropped on the
+  // floor without ever reaching the cache.
   const buckets: MapType<RailgunBalancesEvent> = {};
   for (const balanceEvent of queued) {
-    buckets[balanceEvent.balanceBucket] = balanceEvent;
+    buckets[`${balanceEvent.txidVersion}:${balanceEvent.balanceBucket}`] =
+      balanceEvent;
   }
 
   // Applied as they arrive rather than gated on merkelScanComplete: these

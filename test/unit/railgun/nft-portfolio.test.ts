@@ -7,6 +7,8 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import {
   NFTTokenType,
   NetworkName,
@@ -198,5 +200,83 @@ test("a position pending a shield is still shown, and only once", async () => {
     getPrivateNFTsForChain(NetworkName.Ethereum, WALLET).length,
     1,
     "the same position in two buckets is one position",
+  );
+});
+
+test("a second txid version does not erase the first's positions", async () => {
+  // ACTIVE_TXID_VERSIONS is [V2_PoseidonMerkle, V3_PoseidonMerkle] and the
+  // engine runs onBalancesUpdate for EACH, emitting one event per bucket per
+  // version. A wallet that has only ever transacted on V2 still gets V3 events,
+  // carrying V3's (empty) set.
+  //
+  // The cache ignored txidVersion, so V2's positions and V3's emptiness landed
+  // on the same key and the later one won. ERC20s survived this because they
+  // are written per token address — a merge — while the NFT set is written as a
+  // whole map, so an empty V3 event erased everything V2 had just reported.
+  const WALLET = "txid-version-wallet";
+  const event = (nfts: unknown[], txidVersion: string) =>
+    ({
+      txidVersion,
+      chain: { type: 0, id: 1 },
+      erc20Amounts: [],
+      nftAmounts: nfts,
+      balanceBucket: RailgunWalletBalanceBucket.Spendable,
+      railgunWalletID: WALLET,
+    }) as never;
+
+  await updatePrivateBalancesForChain(
+    NetworkName.Ethereum,
+    event([nft(), nft({ tokenSubID: "0x1" })], "V2_PoseidonMerkle"),
+  );
+  assert.equal(getPrivateNFTsForChain(NetworkName.Ethereum, WALLET).length, 2);
+
+  await updatePrivateBalancesForChain(
+    NetworkName.Ethereum,
+    event([], "V3_PoseidonMerkle"),
+  );
+  assert.equal(
+    getPrivateNFTsForChain(NetworkName.Ethereum, WALLET).length,
+    2,
+    "an empty V3 event must not erase what V2 reported",
+  );
+});
+
+test("positions from both txid versions are shown together, once each", async () => {
+  const WALLET = "both-versions-wallet";
+  const event = (nfts: unknown[], txidVersion: string) =>
+    ({
+      txidVersion,
+      chain: { type: 0, id: 1 },
+      erc20Amounts: [],
+      nftAmounts: nfts,
+      balanceBucket: RailgunWalletBalanceBucket.Spendable,
+      railgunWalletID: WALLET,
+    }) as never;
+
+  await updatePrivateBalancesForChain(NetworkName.Ethereum, event([nft()], "V2_PoseidonMerkle"));
+  await updatePrivateBalancesForChain(
+    NetworkName.Ethereum,
+    event([nft(), nft({ tokenSubID: "0x2" })], "V3_PoseidonMerkle"),
+  );
+  const held = getPrivateNFTsForChain(NetworkName.Ethereum, WALLET);
+  assert.equal(held.length, 2, "the same position in both versions is one position");
+  assert.deepEqual(
+    held.map((n) => n.tokenSubID).sort(),
+    ["0x2", "0x7bd"],
+  );
+});
+
+test("the drain queue keys events by version AND bucket", () => {
+  // The cache fix alone is not enough: drainBalanceQueue dedupes the queue
+  // before applying it, so keying that map on the bucket dropped the V2 event
+  // for a bucket entirely whenever a V3 event for the same bucket was queued
+  // alongside it — the V2 balances never reached the cache to be stored.
+  const src = readFileSync(
+    resolve(process.cwd(), "src/railgun/wallet/scan-callbacks.ts"),
+    "utf-8",
+  );
+  assert.ok(
+    src.includes("buckets[`${balanceEvent.txidVersion}:${balanceEvent.balanceBucket}`]"),
+    "the dedupe key must carry both fields, or one version's events discard the other's",
   );
 });

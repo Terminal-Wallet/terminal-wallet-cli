@@ -3,6 +3,7 @@ import {
   RailgunBalancesEvent,
   RailgunNFTAmount,
   RailgunWalletBalanceBucket,
+  TXIDVersion,
 } from "@railgun-community/shared-models";
 import {
   BalanceBucketCacheMap,
@@ -37,7 +38,7 @@ export const privateERC20BalanceCache: BalanceBucketCacheMap = {};
  * much of it is spendable".
  */
 export const privateNFTCache: NumMapType<
-  NumMapType<MapType<MapType<MapType<RailgunNFTAmount>>>>
+  NumMapType<MapType<MapType<MapType<MapType<RailgunNFTAmount>>>>>
 > = {};
 
 /** An NFT's identity — a collection plus a token id within it. */
@@ -104,6 +105,7 @@ export const initPrivateBalanceCachesForChain = (
   chainName: NetworkName,
   balanceBucket: RailgunWalletBalanceBucket = RailgunWalletBalanceBucket.Spendable,
   railgunWalletID: string,
+  txidVersion: string = TXIDVersion.V2_PoseidonMerkle,
 ) => {
   const chain = getChainForName(chainName);
   privateERC20BalanceCache[chain.type] ??= {};
@@ -114,8 +116,9 @@ export const initPrivateBalanceCachesForChain = (
   ] ??= {};
   privateNFTCache[chain.type] ??= {};
   privateNFTCache[chain.type][chain.id] ??= {};
-  privateNFTCache[chain.type][chain.id][balanceBucket] ??= {};
-  privateNFTCache[chain.type][chain.id][balanceBucket][railgunWalletID] ??= {};
+  privateNFTCache[chain.type][chain.id][txidVersion] ??= {};
+  privateNFTCache[chain.type][chain.id][txidVersion][balanceBucket] ??= {};
+  privateNFTCache[chain.type][chain.id][txidVersion][balanceBucket][railgunWalletID] ??= {};
 };
 
 export const resetPublicBalanceCachesForChain = (chainName: NetworkName) => {
@@ -133,25 +136,31 @@ export const resetPrivateBalanceCachesForChain = (chainName: NetworkName) => {
 };
 
 /**
- * The shielded NFTs this wallet holds on a chain, across every bucket.
+ * The shielded NFTs this wallet holds on a chain, across every txid version and
+ * bucket.
  *
- * Unioned rather than read from Spendable alone: a position that has been
- * shielded but has not finished maturing is held, and showing nothing until it
- * clears hides a position the wallet owns. Deduped by collection:id, because
- * the same position appearing in two buckets is still one position.
+ * Unioned rather than read from V2/Spendable alone: the wallet's holdings are
+ * the sum of what each txid version reports, and a position that has been
+ * shielded but has not finished maturing is held — showing nothing until it
+ * clears hides a position the wallet owns. Deduped by collection:id, so the
+ * same position seen under two versions or two buckets is still one position.
  */
 export const getPrivateNFTsForChain = (
   chainName: NetworkName,
   railgunWalletID: string = getCurrentRailgunID(),
 ): RailgunNFTAmount[] => {
   const chain = getChainForName(chainName);
-  const byBucket = privateNFTCache[chain.type]?.[chain.id];
-  if (!byBucket) return [];
+  const byVersion = privateNFTCache[chain.type]?.[chain.id];
+  if (!byVersion) return [];
   const merged: MapType<RailgunNFTAmount> = {};
-  for (const bucket of Object.keys(byBucket)) {
-    const owned = byBucket[bucket]?.[railgunWalletID];
-    if (!owned) continue;
-    for (const key of Object.keys(owned)) merged[key] = owned[key];
+  for (const version of Object.keys(byVersion)) {
+    const byBucket = byVersion[version];
+    if (!byBucket) continue;
+    for (const bucket of Object.keys(byBucket)) {
+      const owned = byBucket[bucket]?.[railgunWalletID];
+      if (!owned) continue;
+      for (const key of Object.keys(owned)) merged[key] = owned[key];
+    }
   }
   return Object.values(merged);
 };
@@ -205,25 +214,40 @@ export const updatePrivateBalancesForChain = async (
 ): Promise<void> => {
   const chain = getChainForName(chainName);
 
-  const { erc20Amounts, nftAmounts, balanceBucket, railgunWalletID } =
+  const { erc20Amounts, nftAmounts, balanceBucket, railgunWalletID, txidVersion } =
     erc20Balances;
-  initPrivateBalanceCachesForChain(chainName, balanceBucket, railgunWalletID);
+  // Defaulted rather than required: an event without one is treated as V2, so a
+  // caller that predates this keeps the behaviour it had.
+  const version = txidVersion ?? TXIDVersion.V2_PoseidonMerkle;
+  initPrivateBalanceCachesForChain(
+    chainName,
+    balanceBucket,
+    railgunWalletID,
+    version,
+  );
 
   // Replacement rather than a merge, so an NFT spent since the last event
   // disappears instead of lingering as a position the wallet no longer holds.
   //
-  // Scoped to the BUCKET, which is the whole point. The engine emits one event
-  // per bucket and `drainBalanceQueue` applies every one of them, so an
-  // unbucketed set was replaced by whichever bucket happened to be applied
-  // last: a position appeared when Spendable landed and vanished the moment any
-  // other bucket arrived carrying no NFTs. Per bucket, each event only speaks
-  // for its own, which is all it was ever describing.
+  // Scoped to the (TXID VERSION, BUCKET) the event is describing, which is the
+  // whole point. `ACTIVE_TXID_VERSIONS` is [V2, V3] and the engine runs a full
+  // per-bucket emission for EACH, so an event's identity is both fields — and
+  // any coarser key lets one event speak for another's funds.
+  //
+  // Both halves of that bit. Keyed on neither, a position appeared when
+  // Spendable landed and vanished when any other bucket arrived without NFTs.
+  // Keyed on bucket alone, a wallet that has only ever transacted on V2 still
+  // receives V3 events carrying an empty set, and that emptiness erased what V2
+  // had just reported. ERC20 balances survived the same collision only because
+  // they are written per token address — a merge — while the NFT set is written
+  // as a whole map.
   if (nftAmounts) {
     const owned: MapType<RailgunNFTAmount> = {};
     for (const nft of nftAmounts) {
       if (nft.amount > 0n) owned[nftKey(nft)] = nft;
     }
-    privateNFTCache[chain.type][chain.id][balanceBucket][railgunWalletID] = owned;
+    privateNFTCache[chain.type][chain.id][version][balanceBucket][railgunWalletID] =
+      owned;
   }
 
   for (const erc20Amount of erc20Amounts) {
