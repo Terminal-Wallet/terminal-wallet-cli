@@ -280,3 +280,56 @@ test("the drain queue keys events by version AND bucket", () => {
     "the dedupe key must carry both fields, or one version's events discard the other's",
   );
 });
+
+test("the whole position, detail included, reaches the renderer", () => {
+  // buildPortfolioRows owns the section structure; what a row LOOKS like is
+  // the shell's job. So what it has to guarantee is that it hands the renderer
+  // everything the position carries, rather than a name.
+  const seen: { detail?: string }[] = [];
+  buildPortfolioRows([], [], "—", "—", {
+    ...renderers,
+    nftRow: (n: { label: string; detail?: string }) => {
+      seen.push(n);
+      return `  ${n.label}`;
+    },
+  } as never, undefined, [
+    {
+      label: "wstETH-Long #1981",
+      amount: "1",
+      kind: "fx-position",
+      detail: "82.1% ▲ near rebal · 0.0002 wstETH · 0.4911 fxUSD",
+    },
+  ]);
+  assert.equal(seen.length, 1);
+  assert.match(seen[0].detail ?? "", /near rebal/);
+});
+
+test("the rail's own renderer draws the detail, and colours a warning", () => {
+  // The rail listed positions by name alone. A position is the one holding
+  // that can move against you while nobody is looking, so the screen most
+  // likely to be open was the one least able to say it was near rebalance.
+  const entry = readFileSync(
+    resolve(process.cwd(), "src/tui/entry.ts"),
+    "utf-8",
+  );
+  const at = entry.indexOf("const nftRow =");
+  assert.ok(at > 0, "nftRow is gone");
+  const body = entry.slice(at, at + 700);
+  assert.match(body, /n\.detail/, "the renderer ignores the position's risk");
+  assert.match(body, /includes\("▲"\)/, "a warned position is not coloured");
+});
+
+test("a two-line position row becomes two list items", () => {
+  // One item per LINE. An embedded newline draws two lines from one item and
+  // every row below it is then one off the index a click maps back to — the
+  // rail would seed the builder with the wrong token.
+  const rows = buildPortfolioRows([], [], "—", "—", {
+    ...renderers,
+    nftRow: (n: { label: string }) => `  ${n.label}\n     detail line`,
+  } as never, undefined, [{ label: "wstETH-Long #1981", amount: "1" }]);
+  assert.ok(
+    !rows.some((r) => r.text.includes("\n")),
+    "a row still carries an embedded newline",
+  );
+  assert.ok(rows.some((r) => r.text.includes("detail line")));
+});

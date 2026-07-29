@@ -46,7 +46,29 @@ test("a position close to the threshold says so before it crosses", () => {
   // not.
   const line = strip(fxPositionSummary(state({ debtRatio: 808535649149876513n }), "wstETH", fmt));
   assert.match(line, /80\.9%/);
-  assert.match(line, /near rebalance/);
+  assert.match(line, /near rebal/);
+});
+
+test("a warned position is never also called safe", () => {
+  // It rendered "82.2% safe ▲" once the tail was clipped: the word reassuring,
+  // the marker meaningless without the phrase it belonged to, on a position
+  // eight points off being rebalanced.
+  for (const ratio of [808535649149876513n, 900000000000000000n, 960000000000000000n]) {
+    const line = strip(fxPositionSummary(state({ debtRatio: ratio }), "wstETH", fmt));
+    assert.ok(!/safe/.test(line), `"${line}" says safe and warns at once`);
+    assert.match(line, /▲/);
+  }
+});
+
+test("the risk comes before the holdings, so clipping cannot eat the warning", () => {
+  // Any list can be narrower than a line. Ordering is the only defence that
+  // survives a width nobody measured.
+  const line = strip(fxPositionSummary(state({ debtRatio: 808535649149876513n }), "wstETH", fmt));
+  assert.ok(
+    line.indexOf("▲") < line.indexOf("wstETH"),
+    `holdings precede the warning: "${line}"`,
+  );
+  assert.match(line, /^80\.9%/, "the line does not open with the ratio");
 });
 
 test("past the threshold it is not called safe", () => {

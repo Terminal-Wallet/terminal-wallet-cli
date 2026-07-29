@@ -17,6 +17,15 @@ export interface NftBalance {
   amount: string;
   /** Set when the collection is recognised, so a picker can filter on it. */
   kind?: string;
+  /**
+   * The position's live risk, in one line.
+   *
+   * A position is the one holding that can change against you while nobody is
+   * looking, and the rail listed them by name alone — so the portfolio, the
+   * screen most likely to be open, was the screen least able to say a position
+   * was approaching rebalance.
+   */
+  detail?: string;
 }
 
 export interface TokenBalance {

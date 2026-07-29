@@ -20,6 +20,14 @@ import { emitCoreEvent } from "../core/events";
 import { getPrivateNFTsForChain } from "../railgun/balance/balance-cache";
 import { describeNFTs } from "../railgun/balance/nft-util";
 import { fxPositionCollections } from "../railgun/transaction/fx/position";
+import {
+  poolCollateralSymbol,
+  readFxPositionState,
+} from "../railgun/transaction/fx/position-state";
+import { fxPositionSummary } from "./format/fx-position";
+import { mapLimited } from "../util/concurrency";
+import { KNOWN_POOLS } from "@railgun-community/cookbook";
+import { fmtAmount } from "./format/deck";
 import { getState, setState, setStatusMessage } from "./store";
 import { pushSeries } from "./format/deck";
 import { RailgunDisplayBalance } from "../models/balance-models";
@@ -151,15 +159,14 @@ export const createFeeders = (render: () => void): Feeders => {
         public: pub.map(format),
         // A position is one indivisible thing, so it carries a count rather
         // than a formatted balance, and no USD — an fx position is worth its
-        // collateral minus its debt, which is a read the rail does not do.
-        nfts: describeNFTs(
-          getPrivateNFTsForChain(network),
-          fxPositionCollections(),
-        ).map((nft) => ({
-          label: nft.label,
-          amount: nft.amount.toString(),
-          kind: nft.kind,
-        })),
+        // collateral minus its debt, which is not a single number.
+        //
+        // It DOES carry its risk. The rail listed positions by name alone,
+        // which says nothing about the one thing a position can do to you
+        // while you are not looking; a wallet whose portfolio shows a position
+        // approaching rebalance is the only place that gets noticed without
+        // going to find it.
+        nfts: await positionRows(network),
         // Omitted rather than zero when no price is known — a portfolio total of
         // $0.00 is a claim, and the wrong one.
         privateUSD: havePrices
@@ -176,6 +183,40 @@ export const createFeeders = (render: () => void): Feeders => {
         text: `[balance] display read failed: ${(err as Error).message}`,
       });
     }
+  };
+
+  /**
+   * The position rows, each with its live risk.
+   *
+   * Best-effort per position: one that cannot be read still appears, saying so,
+   * because a position missing from the portfolio is worse than one with no
+   * figures. Bounded, though a wallet holding enough of these for the ceiling
+   * to matter does not exist yet.
+   */
+  const positionRows = async (
+    network: NetworkName,
+  ): Promise<{ label: string; amount: string; kind?: string; detail?: string }[]> => {
+    const collections = fxPositionCollections();
+    const held = describeNFTs(getPrivateNFTsForChain(network), collections);
+    return mapLimited(held, 4, async (nft) => {
+      const base = { label: nft.label, amount: nft.amount.toString(), kind: nft.kind };
+      if (nft.kind !== "fx-position") return base;
+      const pool = KNOWN_POOLS.find(
+        (p) => p.address.toLowerCase() === nft.nftAddress.toLowerCase(),
+      );
+      if (!pool) return base;
+      const state = await readFxPositionState(
+        network,
+        pool.name,
+        BigInt(nft.tokenSubID),
+      ).catch(() => undefined);
+      return {
+        ...base,
+        detail: fxPositionSummary(state, poolCollateralSymbol(pool.name), (a, d) =>
+          fmtAmount(formatUnits(a, d), 4),
+        ),
+      };
+    });
   };
 
   const refreshChainStats = async (): Promise<void> => {

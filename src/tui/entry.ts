@@ -403,10 +403,17 @@ export const runDeck = async (): Promise<void> => {
 
   // A position has a name and a count, not an amount and a price — the columns
   // the token rows use would all be empty.
-  const nftRow = (n: WalletState["privateNFTs"][number]) =>
-    `  ${tag("◆", "magenta")} ${n.label.slice(0, 28).padEnd(28)}${
+  const nftRow = (n: WalletState["privateNFTs"][number]) => {
+    const head = `  ${tag("◆", "magenta")} ${n.label.slice(0, 28).padEnd(28)}${
       n.amount === "1" ? "" : tag(` x${n.amount}`, "gray")
     }`;
+    if (!n.detail) return head;
+    // Warned positions are coloured, so one approaching its threshold is
+    // visible without reading the number. The detail leads with the risk, so
+    // a rail too narrow for the line loses the amounts rather than the reason.
+    const warned = n.detail.includes("▲");
+    return `${head}\n     ${tag(n.detail, warned ? "yellow" : "gray")}`;
+  };
 
   const privBucket = (b: WalletState["privateBalances"][number]) => {
     const bucket = bucketTag(b.bucket);

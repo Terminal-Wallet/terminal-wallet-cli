@@ -171,7 +171,13 @@ export const buildPortfolioRows = (
     // Its own section rather than a row among the tokens: a position is not a
     // balance, it has no USD figure here, and it is not spendable by amount.
     rows.push({ text: r.tag("POSITIONS", "white") });
-    for (const nft of nfts) rows.push({ text: r.nftRow(nft) });
+    for (const nft of nfts) {
+      // One list item per LINE. A renderer returning an embedded newline draws
+      // two lines from one item, and every row below it is then one off the
+      // index a click maps back to — the rail would seed the builder with the
+      // wrong token.
+      for (const line of r.nftRow(nft).split("\n")) rows.push({ text: line });
+    }
   }
 
   rows.push({ text: "" });

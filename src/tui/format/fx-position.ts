@@ -104,22 +104,30 @@ export const fxPositionSummary = (
   if (!state) return "state unavailable — could not read this position";
   const wad = Number(10n ** 18n);
   const ratio = Number(state.debtRatio) / wad;
-  const zone: FxRiskZone =
-    state.debtRatio >= state.liquidationDebtRatio
-      ? "liquidation"
-      : state.debtRatio >= state.rebalanceDebtRatio
-        ? "rebalance"
-        : "safe";
-  const near =
-    zone === "safe" && ratio >= Number(state.rebalanceDebtRatio) / wad - 0.1
-      ? " ▲ near rebalance"
-      : "";
+  const rebalance = Number(state.rebalanceDebtRatio) / wad;
+
+  // The zone word carries the warning ON ITS OWN. It used to be "safe" with a
+  // separate "▲ near rebalance" appended, and in a list narrow enough to clip
+  // the tail that rendered as "82.2% safe ▲" — the word reassuring, the marker
+  // meaningless without the phrase it belonged to, on a position eight points
+  // off being rebalanced. A position is never both.
   const word =
-    zone === "safe" ? "safe" : zone === "rebalance" ? "▲ rebalancing" : "▲ liquidatable";
+    state.debtRatio >= state.liquidationDebtRatio
+      ? "▲ liquidatable"
+      : state.debtRatio >= state.rebalanceDebtRatio
+        ? "▲ rebalancing"
+        : ratio >= rebalance - 0.1
+          ? "▲ near rebal"
+          : "safe";
+
+  // Risk FIRST, holdings after. Any list can be narrower than a line, and when
+  // something has to be cut it must be the amounts rather than the reason to
+  // look. Ordering is the only clipping defence that survives a width nobody
+  // measured.
   return (
-    `${format(state.collateralAmount, state.collateralDecimals)} ${collateralSymbol}` +
-    ` · ${format(state.debtAmount, 18)} fxUSD` +
-    ` · ${asPercent(ratio, 1)} ${word}${near}`
+    `${asPercent(ratio, 1)} ${word}` +
+    ` · ${format(state.collateralAmount, state.collateralDecimals)} ${collateralSymbol}` +
+    ` · ${format(state.debtAmount, 18)} fxUSD`
   );
 };
 
