@@ -71,24 +71,14 @@ export const formFieldDisplay = (
   return String(v);
 };
 
-const HEX40 = /^0x[0-9a-fA-F]{40}$/;
-const ZK_PREFIX = /^0zk[0-9a-z]+$/i;
-
 /**
- * Validate a pasted/typed address against the expected kind; returns an error
- * string or undefined. Catches the foot-gun of a 0x in a 0zk field (and vice
- * versa). Shared by the form fields and the tx-builder recipient picker.
+ * Address validation lives in `flows/` — it is the guard between a typo and an
+ * irreversible send, which every host needs and no renderer owns. Re-exported
+ * here so the form fields and the tx-builder recipient picker are unchanged.
  */
-export const addressKindError = (
-  kind: "0x" | "0zk",
-  raw: string,
-): string | undefined => {
-  const a = raw.trim();
-  if (kind === "0zk") {
-    return ZK_PREFIX.test(a) && a.length >= 20 ? undefined : "Not a RAILGUN 0zk address.";
-  }
-  return HEX40.test(a) ? undefined : "Not a valid 0x… address.";
-};
+import { addressKindError } from "../flows/address";
+
+export { addressKindError };
 
 /** Mirror of tx-builder-core's amount rule (positive, finite number). */
 const isValidAmount = (raw: string): boolean => {
@@ -101,11 +91,11 @@ const builtInFieldError = (
   raw: string,
 ): string | undefined => {
   if (field.type === "address") {
-    if (field.addressKind === "0zk") {
-      if (!ZK_PREFIX.test(raw) || raw.length < 20) return "Not a RAILGUN 0zk address.";
-    } else if (!HEX40.test(raw)) {
-      return "Not a valid 0x… address.";
-    }
+    // The same check the recipient picker uses. This used to be a second copy of
+    // the rule, inline and already drifting — so a field could accept an
+    // address the picker would refuse.
+    const err = addressKindError(field.addressKind === "0zk" ? "0zk" : "0x", raw);
+    if (err) return err;
   }
   if (field.type === "amount" && !isValidAmount(raw)) return "Enter a positive amount.";
   return undefined;

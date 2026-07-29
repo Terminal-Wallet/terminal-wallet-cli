@@ -106,6 +106,13 @@ import { formatUnits, parseUnits } from "ethers";
 import { getZer0XSwapInputs } from "../../railgun/transaction/zeroX/0x-swap";
 import { runPrivateSwapTransaction, runPublicSwapTransaction } from "../../flows/deps/swap";
 import { PrivateSwapSpec, PublicSwapSpec } from "../../flows/spec";
+import {
+  PRIVATE_GAS_UNITS,
+  PUBLIC_GAS_UNITS,
+  SHIELD_BASE_GAS_UNITS,
+  RELAY_ADAPT_BASE_GAS_UNITS,
+  PRIVATE_SWAP_GAS_UNITS,
+} from "../../flows/gas-units";
 import { getERC20TokenInfosForChain } from "../../railgun/balance/token-util";
 import { runRecoveryTransaction } from "../../flows/deps/recovery";
 
@@ -372,20 +379,8 @@ const gasInfo = (chainName: NetworkName) => {
   return { gasSymbol: symbol, gasDecimals: decimals };
 };
 
-// These drive the broadcaster-fee preview AND the amount the overspend check
-// holds back, so an optimistic figure lets a build through that the real fee
-// cannot cover. Where a figure is a bound rather than a measurement it says so:
-// over-reserving costs the user some headroom, under-reserving costs a failed
-// send after a proof.
-const PRIVATE_GAS_UNITS = 250000n;
-const PUBLIC_GAS_UNITS = 65000n;
-/** Base-token shield: a 7702 relay-adapt bundle (wrap + shield), not a transfer.
- *  Upper bound — delegation + execute + wrapBase + a shield commitment. */
-const SHIELD_BASE_GAS_UNITS = 450_000n;
-/** Relay-adapt unshield-to-base: unshield + unwrap. Upper bound, not measured. */
-const RELAY_ADAPT_BASE_GAS_UNITS = 1_700_000n;
-/** Private 0x swap: above the 2,520,949 measured by scripts/swap-estimate-probe. */
-const PRIVATE_SWAP_GAS_UNITS = 2_600_000n;
+// The nominal gas units these flows reserve live in flows/gas-units.ts, so a
+// second host holds back the same amount and computes the same `max`.
 function baseSym(chainName: NetworkName): string {
   return NETWORK_CONFIG[chainName].baseToken.symbol;
 }
