@@ -62,7 +62,7 @@ const rotate = (): void => {
     // One generation. Keeping more would need a retention policy, and the
     // question this file answers is never about last week.
     fs.renameSync(filePath, `${filePath}.1`);
-    fd = fs.openSync(filePath, "a");
+    fd = fs.openSync(filePath, "a", 0o600);
     written = 0;
   } catch {
     disable();
@@ -81,7 +81,14 @@ export const installLogFile = (dir = process.cwd()): void => {
   try {
     fs.mkdirSync(dir, { recursive: true });
     const at = path.join(dir, LOG_NAME);
-    fd = fs.openSync(at, "a");
+    // 0600, for the same reason the crash log is: this sits next to the wallet
+    // database, it outlives the process, and redaction upstream only catches
+    // the shapes it knows — a 64-hex key and a BIP39 phrase. What it leaves is
+    // still a privacy record: recipients, the ephemeral executor address, and
+    // the 0zk address next to the public one. `mode` applies only on create, so
+    // an existing log from a build without it is corrected too.
+    fd = fs.openSync(at, "a", 0o600);
+    fs.fchmodSync(fd, 0o600);
     filePath = at;
     written = fs.statSync(at).size;
   } catch {

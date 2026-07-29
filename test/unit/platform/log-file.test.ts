@@ -86,3 +86,30 @@ test("logging still works when no file was ever installed", () => {
   closeLogFile();
   assert.doesNotThrow(() => createLogger("probe").info("no sink"));
 });
+
+test("the log is not readable by anyone but its owner", () => {
+  // It records what the wallet did, next to the wallet's database, and it
+  // outlives the process. Redaction upstream catches a 64-hex key and a BIP39
+  // phrase; it does not catch a recipient, an ephemeral executor address, or a
+  // 0zk address sitting beside a public one. Opened without a mode it was 0644.
+  const at = openIn(tmp());
+  createLogger("probe").info("hello");
+  closeLogFile();
+  assert.equal(fs.statSync(at).mode & 0o777, 0o600);
+});
+
+test("a log left behind at 0644 is corrected on the next open", () => {
+  const dir = tmp();
+  const at = path.join(dir, "terminal-wallet.log");
+  fs.writeFileSync(at, "from an older build\n", { mode: 0o644 });
+  fs.chmodSync(at, 0o644);
+  openIn(dir);
+  closeLogFile();
+  assert.equal(fs.statSync(at).mode & 0o777, 0o600);
+});
+
+test("the rotated generation is not world-readable either", () => {
+  const at = openIn(tmp());
+  closeLogFile();
+  assert.equal(fs.statSync(at).mode & 0o777, 0o600);
+});
