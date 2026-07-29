@@ -109,6 +109,40 @@ export const createFeeders = (render: () => void): Feeders => {
     }
   };
 
+  /**
+   * The position rows, each with its live risk.
+   *
+   * Best-effort per position: one that cannot be read still appears, saying so,
+   * because a position missing from the portfolio is worse than one with no
+   * figures. Bounded, though a wallet holding enough of these for the ceiling
+   * to matter does not exist yet.
+   */
+  const positionRows = async (
+    network: NetworkName,
+  ): Promise<{ label: string; amount: string; kind?: string; detail?: string }[]> => {
+    const collections = fxPositionCollections();
+    const held = describeNFTs(getPrivateNFTsForChain(network), collections);
+    return mapLimited(held, 4, async (nft) => {
+      const base = { label: nft.label, amount: nft.amount.toString(), kind: nft.kind };
+      if (nft.kind !== "fx-position") return base;
+      const pool = KNOWN_POOLS.find(
+        (p) => p.address.toLowerCase() === nft.nftAddress.toLowerCase(),
+      );
+      if (!pool) return base;
+      const state = await readFxPositionState(
+        network,
+        pool.name,
+        BigInt(nft.tokenSubID),
+      ).catch(() => undefined);
+      return {
+        ...base,
+        detail: fxPositionSummary(state, poolCollateralSymbol(pool.name), (a, d) =>
+          fmtAmount(formatUnits(a, d), 4),
+        ),
+      };
+    });
+  };
+
   const readBalances = async (): Promise<void> => {
     try {
       const network = getCurrentNetwork();
@@ -183,40 +217,6 @@ export const createFeeders = (render: () => void): Feeders => {
         text: `[balance] display read failed: ${(err as Error).message}`,
       });
     }
-  };
-
-  /**
-   * The position rows, each with its live risk.
-   *
-   * Best-effort per position: one that cannot be read still appears, saying so,
-   * because a position missing from the portfolio is worse than one with no
-   * figures. Bounded, though a wallet holding enough of these for the ceiling
-   * to matter does not exist yet.
-   */
-  const positionRows = async (
-    network: NetworkName,
-  ): Promise<{ label: string; amount: string; kind?: string; detail?: string }[]> => {
-    const collections = fxPositionCollections();
-    const held = describeNFTs(getPrivateNFTsForChain(network), collections);
-    return mapLimited(held, 4, async (nft) => {
-      const base = { label: nft.label, amount: nft.amount.toString(), kind: nft.kind };
-      if (nft.kind !== "fx-position") return base;
-      const pool = KNOWN_POOLS.find(
-        (p) => p.address.toLowerCase() === nft.nftAddress.toLowerCase(),
-      );
-      if (!pool) return base;
-      const state = await readFxPositionState(
-        network,
-        pool.name,
-        BigInt(nft.tokenSubID),
-      ).catch(() => undefined);
-      return {
-        ...base,
-        detail: fxPositionSummary(state, poolCollateralSymbol(pool.name), (a, d) =>
-          fmtAmount(formatUnits(a, d), 4),
-        ),
-      };
-    });
   };
 
   const refreshChainStats = async (): Promise<void> => {
