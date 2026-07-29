@@ -21,9 +21,14 @@ import { join, resolve } from "node:path";
 const SRC = resolve(process.cwd(), "src");
 const read = (rel: string) => readFileSync(join(SRC, rel), "utf-8");
 
-test("the quote helper's last parameter is the encryption key", () => {
-  const configs = read("tui/screens/tx-builder-configs.ts");
-  const signature = configs.slice(configs.indexOf("export const buildSwapInputs"));
+// The helper now lives in flows/, so a second host shares its slippage default
+// rather than inheriting getZer0XSwapInputs' own 500bps one. The property being
+// pinned is unchanged.
+const SWAP_INPUTS = "flows/swap-inputs.ts";
+
+test("the quote helper takes the encryption key, not an address", () => {
+  const source = read(SWAP_INPUTS);
+  const signature = source.slice(source.indexOf("export const buildSwapInputs"));
   const params = signature.slice(0, signature.indexOf(") => {"));
   assert.match(params, /encryptionKey\?: string/);
   assert.ok(
@@ -33,13 +38,25 @@ test("the quote helper's last parameter is the encryption key", () => {
 });
 
 test("it forwards that key to getZer0XSwapInputs, not an address", () => {
-  const configs = read("tui/screens/tx-builder-configs.ts");
-  const call = configs.slice(
-    configs.indexOf("await getZer0XSwapInputs("),
-    configs.indexOf("return { inputs, amount"),
+  const source = read(SWAP_INPUTS);
+  const call = source.slice(
+    source.indexOf("await getZer0XSwapInputs("),
+    source.indexOf("return { inputs, amount"),
   );
   assert.match(call, /isPublic,\s*\n\s*encryptionKey,/);
   assert.ok(!/s\.address|privateDest/.test(call), "still passing an address");
+});
+
+test("slippage is a shared default, not re-derived per caller", () => {
+  // getZer0XSwapInputs defaults to 500bps. A host that called it directly would
+  // quote 5% slippage where the deck quotes 3.2%, for the same trade.
+  const source = read(SWAP_INPUTS);
+  assert.match(source, /export const SWAP_SLIPPAGE_BPS = 320;/);
+  assert.match(
+    source,
+    /slippageBps: number = SWAP_SLIPPAGE_BPS/,
+    "the default should be overridable but shared",
+  );
 });
 
 test("the private swap offers no destination field", () => {

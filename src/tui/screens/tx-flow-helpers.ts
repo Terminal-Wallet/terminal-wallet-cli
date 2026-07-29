@@ -160,113 +160,17 @@ export const runErc20Approvals = async (
   }
 };
 
-/** Select an amount of the wrapped base token; returns the single recipient. */
 /**
- * Refuse a send whose real broadcaster fee will not fit.
- *
- * The builder reserves an approximate fee while composing, computed against a
- * nominal gas figure. The estimate returns the measured one, which for a
- * relay-adapt swap is several times larger — so a build that looked affordable
- * can fail at the SDK with "private balance too low to pay broadcaster fee".
- * That is recoverable but only after the user has waited for a proof, and the
- * message does not say by how much.
- *
- * The real fee is known here, before proving. Returns the shortfall, or
- * undefined when it fits.
+ * The confirm gate lives in flows/confirm.ts — refusing a send whose measured
+ * fee will not fit, and folding a chosen gas tier into the estimate, are
+ * properties of the transaction rather than of the screen. Re-exported so the
+ * builder's call sites are unchanged.
  */
-export const feeShortfall = async (
-  legs: LegsState,
-  gas: PrivateGasEstimate,
-  chainName: NetworkName,
-  /** Injection point so the check is testable without an engine. */
-  loadBalances: (
-    chain: NetworkName,
-  ) =>
-    | RailgunDisplayBalance[]
-    | Promise<RailgunDisplayBalance[]> = getPrivateERC20BalancesForChain,
-): Promise<TokenOverspend | undefined> => {
-  const recipient = gas.broadcasterFeeERC20Recipient;
-  if (!recipient) return undefined; // self-signed: gas is paid publicly
-  const fee = {
-    tokenAddress: recipient.tokenAddress,
-    amount: BigInt(recipient.amount),
-  };
-  const [over] = overspentTokens(legs, fee);
-  if (over) return over;
-
-  // overspentTokens only evaluates tokens that appear in the legs, because the
-  // legs are where it gets balances from. A fee paid in a token this send is
-  // not moving is therefore invisible to it — which is exactly the case where
-  // the fee has a whole balance to itself and is easiest to get wrong.
-  const inLegs = legs.legs.some(
-    (l) =>
-      l.token?.tokenAddress.toLowerCase() === fee.tokenAddress.toLowerCase(),
-  );
-  if (inLegs) return undefined;
-
-  // Fails open: a balance read that cannot answer must not block a send the
-  // SDK would have accepted. This gate exists to give a better message than
-  // the SDK's, not to become a second way for a send to die.
-  try {
-    const token = (await loadBalances(chainName)).find(
-      (b) => b.tokenAddress.toLowerCase() === fee.tokenAddress.toLowerCase(),
-    );
-    if (!token) return undefined;
-    return overspentTokens({ legs: [{ id: "__fee", token }], seq: 1 }, fee)[0];
-  } catch {
-    return undefined;
-  }
-};
-
-export const applyGasDetailsConfirm =
-  (choice: GasChoice, legs?: LegsState) =>
-  async (
-    spec: { chainName: NetworkName },
-    gas: PrivateGasEstimate,
-  ): Promise<boolean> => {
-    // The measured fee, checked before a proof is generated. Refusing here
-    // costs nothing; the same refusal from the SDK costs a proof and says
-    // nothing about how much to reduce by.
-    if (legs) {
-      const over = await feeShortfall(legs, gas, spec.chainName);
-      if (over) {
-        getInputProvider().notify(
-          `Broadcaster fee leaves ${over.token.symbol} short by ` +
-            `${formatUnits(over.overBy, over.token.decimals)} — reduce the amount or ` +
-            `pick a different fee token.`,
-        );
-        return false;
-      }
-    }
-    if (choice && choice !== "keep") {
-      const decimals = baseDecimals(spec.chainName);
-      gas.estimatedGasDetails = applyOverrideToDetails(gas.estimatedGasDetails, choice);
-      gas.estimatedCost = recomputeCost(choice, gas.estimatedGasDetails.gasEstimate, decimals);
-    }
-    return true;
-  };
-
-/** Apply a pre-chosen gas override to the populated tx (public). */
-export const applyGasPublicConfirm =
-  (choice: GasChoice) =>
-  async (
-    spec: { chainName: NetworkName },
-    prepared: PublicTransactionDetails,
-  ): Promise<boolean> => {
-    if (choice && choice !== "keep") {
-      const decimals = baseDecimals(spec.chainName);
-      const gasUnits = BigInt(prepared.populatedTransaction.gasLimit ?? 0n);
-      prepared.populatedTransaction = applyOverrideToTx(
-        prepared.populatedTransaction,
-        choice,
-      );
-      prepared.privateGasEstimate.estimatedCost = recomputeCost(
-        choice,
-        gasUnits,
-        decimals,
-      );
-    }
-    return true;
-  };
+export {
+  feeShortfall,
+  applyGasDetailsConfirm,
+  applyGasPublicConfirm,
+} from "../../flows/confirm";
+export type { GateRefusal, ConfirmOptions } from "../../flows/confirm";
 
 /** Public (ethers) gate: applies the choice to the populated tx that gets signed. */

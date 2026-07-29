@@ -116,8 +116,6 @@ import {
 import { getERC20TokenInfosForChain } from "../../railgun/balance/token-util";
 import { runRecoveryTransaction } from "../../flows/deps/recovery";
 
-const SWAP_SLIPPAGE_BPS = 320;
-
 /** Buy-token options for swaps: the chain's known ERC20s (as display balances). */
 const loadBuyTokens = async (chainName: NetworkName): Promise<RailgunDisplayBalance[]> => {
   const infos = await getERC20TokenInfosForChain(chainName);
@@ -127,34 +125,13 @@ const loadBuyTokens = async (chainName: NetworkName): Promise<RailgunDisplayBala
 };
 
 /**
- * Quote a swap.
- *
- * The last argument is the wallet ENCRYPTION KEY, and only a private swap needs
- * it: the 7702 relay-adapt executes from an ephemeral account derived from it,
- * and the quote has to name that account as taker. Passing anything else here
- * derives the wrong account and fails to decrypt the wallet record.
+ * The swap quote and its slippage default live in flows/swap-inputs.ts: calling
+ * getZer0XSwapInputs directly takes its own 500bps default, so a second host
+ * that re-derived this would quote 5% where the deck quotes 3.2%.
  */
-export const buildSwapInputs = async (
-  chainName: NetworkName,
-  sell: RailgunDisplayBalance,
-  buy: RailgunDisplayBalance,
-  amountStr: string,
-  isPublic: boolean,
-  encryptionKey?: string,
-) => {
-  const amount = parseUnits(amountStr, sell.decimals);
-  const wrapped = getWrappedTokenInfoForChain(chainName);
-  const inputs = await getZer0XSwapInputs(
-    chainName,
-    { tokenAddress: sell.tokenAddress, isBaseToken: wrapped.symbol === sell.symbol },
-    { tokenAddress: buy.tokenAddress, isBaseToken: wrapped.symbol === buy.symbol },
-    amount,
-    SWAP_SLIPPAGE_BPS,
-    isPublic,
-    encryptionKey,
-  );
-  return { inputs, amount, sellIsBase: wrapped.symbol === sell.symbol };
-};
+import { buildSwapInputs, SWAP_SLIPPAGE_BPS } from "../../flows/swap-inputs";
+
+export { buildSwapInputs, SWAP_SLIPPAGE_BPS };
 
 /**
  * Vault rates move only with interest accrual and fees, so the quote and the
