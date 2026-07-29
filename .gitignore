@@ -22,3 +22,7 @@ custom-tmp
 *.zSecret
 *.zKey.v1.bak
 twallet-crash.log
+
+# Durable diagnostic log — session-local, never committed.
+terminal-wallet.log
+terminal-wallet.log.1

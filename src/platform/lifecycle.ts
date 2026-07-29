@@ -26,6 +26,7 @@ import { stopWakuClient } from "../railgun/waku/connect-waku";
 import { clearConsoleBuffer } from "./console";
 import { errMessage, withTimeout } from "./errors";
 import { createLogger, redactText, setLogSink } from "./logger";
+import { closeLogFile } from "./log-file";
 
 const log = createLogger("lifecycle");
 
@@ -117,6 +118,7 @@ const reportFatal = (kind: string, err: unknown): void => {
     // Tearing down the renderer must not replace the error being reported.
   }
   setLogSink(undefined);
+  closeLogFile();
   const written = writeCrashReport(kind, err);
   log.error(kind, err);
   if (written) {
@@ -162,6 +164,7 @@ export const processSafeExit = async (code = 0): Promise<never> => {
   // Whatever the renderer diverted logs into is about to stop being drawn.
   // Shutdown reporting belongs on the terminal from here on.
   setLogSink(undefined);
+  closeLogFile();
   log.info("shutting down modules");
   const result = await runBoundedShutdown(killEngineAndWaku);
   if (!result.ok) {
@@ -175,6 +178,7 @@ export const processSafeExit = async (code = 0): Promise<never> => {
 /** Destroy all local wallet state. Irreversible. */
 export const processDestroyExit = async (): Promise<never> => {
   setLogSink(undefined);
+  closeLogFile();
   log.warn("deleting database, artifacts, and keychains");
   const result = await runBoundedShutdown(killEngineAndWaku);
   if (!result.ok) {

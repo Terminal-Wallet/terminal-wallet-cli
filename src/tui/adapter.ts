@@ -182,12 +182,26 @@ const fold = (e: CoreEvent): void => {
       setStatus(e.text, e.durationMs);
       recordLog("›", e.text);
       break;
-    case "tx:progress":
+    case "tx:progress": {
+      // A phase with no percentage still has to show. footerStatus renders the
+      // bar only while scanProgress >= 0, so a progress event carrying just a
+      // message left the label set and invisible — which for a recovery meant
+      // the whole slow 7702 gas estimate happened in silence, and the first
+      // thing the user saw was the proof already underway.
+      //
+      // Zero rather than a fabricated percentage: the phase has started and
+      // nothing has reported how far it is, which is exactly what an empty bar
+      // beside its name says.
+      const pct =
+        typeof e.pct === "number"
+          ? e.pct
+          : Math.max(0, getState().scanProgress);
       setState({
-        scanProgress: typeof e.pct === "number" ? e.pct : getState().scanProgress,
+        scanProgress: pct,
         scanLabel: e.message ?? `Transaction: ${e.phase}`,
       });
       break;
+    }
     case "tx:result": {
       // The full hash and the full error, not the status line's truncation:
       // this is the record someone goes looking for afterwards.

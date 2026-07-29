@@ -67,7 +67,21 @@ test("a queued override does not inherit the previous one's failure", () => {
 
 test("nesting is refused rather than silently clearing the outer window", () => {
   assert.match(override, /class EphemeralOverrideReentry/);
-  assert.match(override, /if \(inside\) throw new EphemeralOverrideReentry\(\)/);
+  assert.match(override, /if \(nested\.getStore\(\)\) throw new EphemeralOverrideReentry\(\)/);
+});
+
+test("the guard can tell nesting from concurrency", () => {
+  // A module-global boolean was true for the whole duration of any override,
+  // so a second CALLER — a recovery started while a swap was mid-build — was
+  // rejected outright rather than queued, which is the opposite of what the
+  // queue directly above it promises. Only a call genuinely inside another
+  // override's own async stack may be refused.
+  assert.match(override, /AsyncLocalStorage/);
+  assert.match(override, /nested\.run\(true, \(\) => fn\(account\.address\)\)/);
+  assert.ok(
+    !/let inside = false/.test(override),
+    "the module-global depth flag is still there, and cannot see call stacks",
+  );
 });
 
 test("the persisted index is never moved by an override", () => {

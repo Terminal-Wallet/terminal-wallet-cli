@@ -15,6 +15,7 @@
  * must not ratchet afterwards: the ratchet belongs to the account that was
  * actually consumed, and an override consumed a different one.
  */
+import { AsyncLocalStorage } from "node:async_hooks";
 import { NetworkName } from "@railgun-community/shared-models";
 import { EphemeralKeyManager, fullWalletForID } from "@railgun-community/wallet";
 import { getChainForName } from "../network/network-util";
@@ -46,8 +47,18 @@ export const overriddenEphemeralIndex = (): number | undefined => activeIndex;
  */
 let queue: Promise<unknown> = Promise.resolve();
 
-/** Depth guard — an override inside an override would clear the outer one early. */
-let inside = false;
+/**
+ * Depth guard — an override inside an override would clear the outer one early.
+ *
+ * Async-context scoped, because the thing being guarded against is NESTING and
+ * a plain boolean cannot tell nesting from concurrency. Module-global, it was
+ * true for the whole duration of any override, so a second CALLER — a recovery
+ * while a swap was mid-build — was rejected outright rather than queued, which
+ * is the opposite of what the queue directly above it promises. A store is set
+ * only inside the callback, so it is present exactly when the call really is
+ * within another override's own stack.
+ */
+const nested = new AsyncLocalStorage<true>();
 
 export class EphemeralOverrideReentry extends Error {
   constructor() {
@@ -71,7 +82,9 @@ export const withEphemeralOverride = async <T>(
   index: number,
   fn: (address: string) => Promise<T>,
 ): Promise<T> => {
-  if (inside) throw new EphemeralOverrideReentry();
+  // Nesting is refused; concurrency queues. A nested call cannot simply wait
+  // its turn — it would be waiting on the override that is waiting on it.
+  if (nested.getStore()) throw new EphemeralOverrideReentry();
 
   const run = async (): Promise<T> => {
     const wallet = fullWalletForID(getCurrentRailgunID());
@@ -80,15 +93,13 @@ export const withEphemeralOverride = async <T>(
       BigInt(getChainForName(chainName).id),
       index,
     );
-    inside = true;
     try {
       await wallet.setCurrentEphemeralWallet(account.signer);
       activeIndex = index;
       log.debug(`acting as ephemeral [${index}] ${account.address}`);
-      return await fn(account.address);
+      return await nested.run(true, () => fn(account.address));
     } finally {
       activeIndex = undefined;
-      inside = false;
       // The engine clears the override when handed undefined; its type only
       // admits a wallet, so this is cast rather than widened.
       await (

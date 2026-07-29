@@ -12,7 +12,9 @@
  *
  * Sinks: by default info -> stdout; debug/warn/error -> stderr (so diagnostics
  * never corrupt piped stdout). A renderer can install its own sink with
- * setLogSink to keep lines off a screen it is drawing. No file sink (deferred).
+ * setLogSink to keep lines off a screen it is drawing, and a DURABLE sink
+ * (setDurableSink) receives every line regardless — see below for why the two
+ * are not the same thing.
  *
  * Redaction: every argument is scrubbed before it is written. Secret-named
  * object keys are masked, and mnemonic/private-key shaped strings are masked,
@@ -164,6 +166,27 @@ export const setLogSink = (next: LogSink | undefined): void => {
   sink = next;
 };
 
+/**
+ * A second sink that receives EVERY line, whatever else is installed.
+ *
+ * The renderer's sink diverts lines into a pane and returns, so a line that
+ * reaches the screen reaches nothing else — and the pane dies with the process.
+ * A wallet that moves real funds, fails, and leaves no trace once the session
+ * ends is one nobody can diagnose after the fact; that is exactly what happened
+ * to a mainnet recovery here, where the only record of why it failed was a
+ * footer line that a stuck progress bar had already hidden.
+ *
+ * Injected rather than opened here so this module keeps importing nothing.
+ * Everything it receives has already been through redaction.
+ */
+let durable: ((line: string) => void) | undefined;
+
+export const setDurableSink = (
+  next: ((line: string) => void) | undefined,
+): void => {
+  durable = next;
+};
+
 const write = (
   level: LogLevel,
   namespace: string,
@@ -173,6 +196,19 @@ const write = (
     return;
   }
   const text = args.map(format).join(" ");
+
+  // Before the pane sink, and never short-circuited by it: the durable record
+  // is the one thing that has to survive whatever else happens to the line.
+  if (durable && !inSink) {
+    inSink = true;
+    try {
+      durable(`${level}:${namespace} ${text}`);
+    } catch {
+      // A failing log file must never take down the thing being logged.
+    } finally {
+      inSink = false;
+    }
+  }
 
   if (sink && !inSink) {
     inSink = true;

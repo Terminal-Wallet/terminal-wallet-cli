@@ -82,6 +82,7 @@ import { overrideMainConfig, versionCheck } from "../config/config-overrides";
 import { updateApiKey } from "../railgun/transaction/zeroX/0x-swap";
 import { configuredDefaultNetwork } from "../config/config-manager";
 import { installProcessHandlers } from "../platform/lifecycle";
+import { installLogFile, logFilePath } from "../platform/log-file";
 import { createLogger } from "../platform/logger";
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -93,6 +94,9 @@ type Mode = "home" | "palette" | "build";
 
 export const runDeck = async (): Promise<void> => {
   installProcessHandlers();
+  // Before anything that can log. The pane sink installed later diverts lines
+  // into the screen and returns; this one is what makes them outlive it.
+  installLogFile();
 
   const screen = blessed.screen({
     smartCSR: true,
@@ -630,7 +634,12 @@ export const runDeck = async (): Promise<void> => {
   screen.key([":", "C-k"], deckKey(() => openPalette()));
   screen.key(["u"], deckKey(() => void openUtilitiesMenu(ctx)));
   screen.key(["t"], deckKey(() => void openStatusMenu(ctx)));
-  screen.key(["l"], deckKey(() => void showLogs(ctx)));
+  // NOT gated on the builder. Every other deck key opens a screen that would
+  // orphan a half-built transaction, which is why `deckKey` refuses them — but
+  // the log pane is read-only and closes back to where it was, and the moment
+  // you most need it is while a send is failing in front of you. It was the one
+  // place the failure detail existed and the one time it could not be opened.
+  screen.key(["l"], () => void showLogs(ctx));
   screen.key(["b"], deckKey(() => {
     wantLeft = !wantLeft;
     relayout(false);
