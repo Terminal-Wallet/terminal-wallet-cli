@@ -8,6 +8,8 @@ export interface SendPublicCalls {
   reset: number;
   watched?: { hash: string };
   mined?: { chain: NetworkName; hash: string };
+  reverted?: { chain: NetworkName; hash: string };
+  unsettled?: { chain: NetworkName; hash: string; reason: string };
 }
 
 const txResponse = (hash: string): TransactionResponse =>
@@ -28,11 +30,19 @@ export const makeSendPublicDeps = (
     resetScan: () => {
       calls.reset += 1;
     },
+    // Settles as mined by default; a revert test overrides it.
     watchSelf: async (tx) => {
       calls.watched = { hash: tx.hash };
+      return { kind: "mined" as const };
     },
     notifyMined: (chain, hash) => {
       calls.mined = { chain, hash };
+    },
+    notifyReverted: (chain, hash) => {
+      calls.reverted = { chain, hash };
+    },
+    notifyUnsettled: (chain, hash, reason) => {
+      calls.unsettled = { chain, hash, reason };
     },
     ...over,
   };

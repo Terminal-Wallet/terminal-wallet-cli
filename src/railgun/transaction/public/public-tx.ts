@@ -24,6 +24,13 @@ import {
 import { getCurrentWalletPublicAddress } from "../../wallet/wallet-util";
 import { PrivateGasEstimate } from "../../../models/transaction-models";
 import { createLogger } from "../../../platform/logger";
+import {
+  ReceiptReader,
+  TxSettlement,
+  settlementFromReceipt,
+} from "./settlement";
+
+export type { TxSettlement } from "./settlement";
 
 const log = createLogger("public-tx");
 
@@ -137,19 +144,23 @@ export const waitOnTx = async (
 export const waitForTx = async (
   txResponse: TransactionResponse,
   txTimeout = 3 * 60 * 1000,
-) => {
+): Promise<TxSettlement> => {
   try {
     await waitOnTx(txResponse, txTimeout);
   } catch (err: Error | any) {
     log.error(`Transaction ${txResponse.hash} error: ${err.message}`);
   }
+  return settlementFromReceipt(
+    txResponse.provider as unknown as ReceiptReader,
+    txResponse.hash,
+  );
 };
 
 export const waitForRelayedTx = async (
   chainName: NetworkName,
   txHash: string,
   txTimeout = 3 * 60 * 1000,
-) => {
+): Promise<TxSettlement> => {
   const provider = getProviderForChain(chainName) as unknown as JsonRpcProvider;
   try {
     let txResponse: TransactionResponse | null = null;
@@ -165,13 +176,17 @@ export const waitForRelayedTx = async (
 
     if (txResponse !== null) {
       await waitOnTx(txResponse, txTimeout);
-      return;
+    } else {
+      await promiseTimeout(
+        provider.waitForTransaction(txHash, 1, txTimeout),
+        txTimeout,
+      );
     }
-    await promiseTimeout(
-      provider.waitForTransaction(txHash, 1, txTimeout),
-      txTimeout,
-    );
   } catch (err: Error | any) {
     log.error(`Transaction ${txHash} error: ${err.message}`);
   }
+  return settlementFromReceipt(
+    provider as unknown as ReceiptReader,
+    txHash,
+  );
 };

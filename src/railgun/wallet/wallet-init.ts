@@ -177,7 +177,19 @@ export const initilizeFreshWallet = async (isInit = false) => {
   return wallet;
 };
 
-export const initializeEthersWallet = async () => {
+/**
+ * Bind the public signer to a chain.
+ *
+ * `chainName` defaults to the keychain's network, which is what every existing
+ * caller means. It is a parameter because it has to be: the signer carries a
+ * provider, so a caller that moves the wallet to another chain without moving
+ * this too gets a signer that builds for one network and submits to another.
+ * `reinitWalletForChain` is exactly that caller — it took a chain, loaded the
+ * engine's providers for it, and then re-derived the signer against whatever
+ * the keychain still said. The deck only escaped it because
+ * `switchRailgunNetwork` writes the keychain first.
+ */
+export const initializeEthersWallet = async (chainName?: NetworkName) => {
   walletManager.hashedPassword = await getSaltedPassword();
   if (!isDefined(walletManager.hashedPassword)) {
     throw new Error("Hashed Password Timed Out");
@@ -193,7 +205,7 @@ export const initializeEthersWallet = async () => {
     const ethersWallet = getEthersWallet(
       walletMnemonic,
       derivationIndex,
-      walletManager.keyChain.currentNetwork ?? NetworkName.Ethereum,
+      chainName ?? walletManager.keyChain.currentNetwork ?? NetworkName.Ethereum,
     );
     walletManager.currentEthersWallet = ethersWallet;
     const { publicAddress } =
@@ -314,5 +326,6 @@ export const initializeWalletSystems = async () => {
 export const reinitWalletForChain = async (chainName: NetworkName) => {
   resetBalanceCachesForChain(chainName);
   await loadEngineProvidersForNetwork(chainName);
-  await initializeEthersWallet();
+  // The chain it was asked for, not the one the keychain happens to hold.
+  await initializeEthersWallet(chainName);
 };

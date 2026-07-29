@@ -16,6 +16,8 @@ export interface SendPrivateCalls {
   reset: number;
   watched?: { kind: "relayed" | "self"; hash: string };
   mined?: { chain: NetworkName; hash: string };
+  reverted?: { chain: NetworkName; hash: string };
+  unsettled?: { chain: NetworkName; hash: string; reason: string };
   /** Whether the mined batch was interrogated for a relay-adapt CallError. */
   failureChecked?: { chain: NetworkName; hash: string };
   batchFailed?: { chain: NetworkName; hash: string; reason: string };
@@ -55,14 +57,25 @@ export const makeSendPrivateDeps = (
     resetScan: () => {
       calls.reset += 1;
     },
+    // Settles as mined by default, so a test that says nothing about the
+    // receipt keeps asserting the success path. A test about a revert overrides
+    // it — which is the only way to reach notifyReverted.
     watchRelayed: async (_chain, hash) => {
       calls.watched = { kind: "relayed", hash };
+      return { kind: "mined" as const };
     },
     watchSelf: async (tx) => {
       calls.watched = { kind: "self", hash: tx.hash };
+      return { kind: "mined" as const };
     },
     notifyMined: (chain, hash) => {
       calls.mined = { chain, hash };
+    },
+    notifyReverted: (chain, hash) => {
+      calls.reverted = { chain, hash };
+    },
+    notifyUnsettled: (chain, hash, reason) => {
+      calls.unsettled = { chain, hash, reason };
     },
     // Clean by default: a test that wants a failed batch overrides it, so the
     // rest keep asserting the success path without saying so.

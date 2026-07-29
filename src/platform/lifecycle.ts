@@ -82,7 +82,20 @@ export const writeCrashReport = (kind: string, err: unknown): string | undefined
     const stack = redactText(raw);
     const target = path.join(process.cwd(), CRASH_LOG);
     rollCrashLog(target);
-    fs.appendFileSync(target, `\n=== ${new Date().toISOString()} ${kind}\n${stack}\n`);
+    // 0600. This file sits next to the wallet's database and outlives the
+    // process, and redaction only catches the shapes it knows — a 64-hex key
+    // and a BIP39 phrase. Everything else a stack carries (recipients, the
+    // ephemeral executor address, calldata) survives it, so the file must not
+    // be readable by anyone but its owner. Without the mode it was created
+    // 0644.
+    fs.appendFileSync(
+      target,
+      `\n=== ${new Date().toISOString()} ${kind}\n${stack}\n`,
+      { mode: 0o600 },
+    );
+    // `mode` only applies when the file is created, so a log that already
+    // exists from a build that lacked it would keep 0644 forever.
+    fs.chmodSync(target, 0o600);
     return target;
   } catch {
     // A crash report that throws would replace the error being reported.

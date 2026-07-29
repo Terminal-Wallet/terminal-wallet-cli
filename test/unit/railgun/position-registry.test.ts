@@ -6,8 +6,11 @@
  * tests that a lost or stale registry degrades into "look again", never into
  * "hand a new position the account of an open one".
  */
-import { test } from "node:test";
+import { test, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { NetworkName } from "@railgun-community/shared-models";
 import {
   allocatePositionAccount,
@@ -19,6 +22,31 @@ import { PositionSlotsExhausted } from "../../../src/railgun/wallet/position-acc
 import { walletManager } from "../../../src/railgun/wallet/wallet-manager";
 
 const WALLET = "registry-test-wallet";
+
+/**
+ * Run in a scratch directory.
+ *
+ * `saveKeychainFile` resolves its path against the cwd, so every registry write
+ * these tests provoke used to land in the working checkout's own `.zKeyChains`
+ * — one `registry-test-<n>.zKey` per invocation, 590 of them by the time it was
+ * noticed. They parse as valid keychains, so boot stopped opening the single
+ * keychain and started asking which of six hundred to use.
+ *
+ * The keychain still gets written; it is written somewhere disposable.
+ */
+let cwd: string;
+let tmp: string;
+
+beforeEach(() => {
+  cwd = process.cwd();
+  tmp = fs.mkdtempSync(path.join(os.tmpdir(), "registry-"));
+  process.chdir(tmp);
+});
+
+afterEach(() => {
+  process.chdir(cwd);
+  fs.rmSync(tmp, { recursive: true, force: true });
+});
 
 /**
  * An in-memory keychain. The real one writes a file on every change, which is

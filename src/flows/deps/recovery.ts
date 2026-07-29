@@ -69,7 +69,22 @@ const watchRelayAdaptOutcome = async (
   url: string,
 ): Promise<void> => {
   try {
-    await waitForRelayedTx(chainName, hash);
+    const settlement = await waitForRelayedTx(chainName, hash);
+    if (settlement.kind !== "mined") {
+      // A recovery that reverts leaves the funds exactly where they were, so
+      // the message has to say the rescue did not happen — "mined" here would
+      // send the user away from funds that are still stranded.
+      emitCoreEvent({
+        type: "status:message",
+        text:
+          settlement.kind === "reverted"
+            ? `Recovery REVERTED — the funds are still at the ephemeral account. ${url}`
+            : `Recovery broadcast, but its outcome could not be confirmed (${settlement.reason}) — ${url}`,
+        durationMs: 120000,
+        replace: true,
+      });
+      return;
+    }
     const failure = await getRelayAdaptFailure(chainName, hash);
     emitCoreEvent({
       type: "status:message",

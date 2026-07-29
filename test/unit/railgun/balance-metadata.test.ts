@@ -69,6 +69,45 @@ test("an unresolved token is not offered to the send flows", () => {
   assert.match(body, /if \(cache\[tokenAddress\]\.unresolved\) continue;/);
 });
 
+test("neither balance reader returns before it has read anything", () => {
+  // Both were built inside `.map(async …)` with nothing awaiting the array it
+  // produced, so `return balances` handed back an EMPTY list that filled some
+  // microtasks later. Whether a caller saw a token came down to how many ticks
+  // had passed before it looked — which is why a funded wallet could report no
+  // spendable tokens, and why the fee gate could not find the fee token and
+  // passed a transaction it should have refused.
+  for (const reader of [
+    "getPublicERC20BalancesForChain",
+    "getPrivateERC20BalancesForChain",
+  ]) {
+    const at = util.indexOf(`export const ${reader}`);
+    assert.ok(at > 0, `${reader} is gone`);
+    const body = util.slice(at, at + 2000);
+    assert.ok(
+      !/\.map\(async \(tokenAddress\)/.test(body),
+      `${reader} still builds its result in a fire-and-forget map`,
+    );
+    assert.match(
+      body,
+      /for \(const tokenAddress of/,
+      `${reader} does not read its tokens in an awaited loop`,
+    );
+  }
+});
+
+test("the spendable reader is async, so a caller cannot read it too early", () => {
+  const at = util.indexOf("export const getPrivateERC20BalancesForChain");
+  const body = util.slice(at, at + 400);
+  assert.match(body, /= async \(/, "the spendable reader is still synchronous");
+  assert.match(body, /Promise<RailgunDisplayBalance\[\]>/);
+});
+
+test("the spendable reader drops unresolved tokens like its siblings", () => {
+  const at = util.indexOf("export const getPrivateERC20BalancesForChain");
+  const body = util.slice(at, at + 2000);
+  assert.match(body, /if \(entry\.unresolved\) continue;/);
+});
+
 test("an unresolved balance is not formatted, and not counted", () => {
   const feeders = readFileSync(join(SRC, "tui/feeders.ts"), "utf-8");
   // Formatting under placeholder decimals turns a 6-decimal token into a

@@ -22,6 +22,7 @@ import { getEthersWalletForSigner } from "../railgun/wallet/public-utils";
 import { getExternalSignerWallet } from "../railgun/wallet/external-signers";
 import { getTransactionURLForChain } from "../railgun/network/network-util";
 import { waitForRelayedTx, waitForTx } from "../railgun/transaction/public/public-tx";
+import { TxSettlement } from "../railgun/transaction/public/settlement";
 import { resetBalanceScan } from "../railgun/wallet/private-wallet";
 import { ratchetEphemeralIfRelayAdapt } from "../railgun/wallet/ephemeral-util";
 import { getRelayAdaptFailure } from "../railgun/transaction/relay-adapt-error";
@@ -43,12 +44,20 @@ export interface SendPrivateDeps {
   txUrl: (chainName: NetworkName, hash: string) => string;
   /** Reset the balance scan so balances refresh after submission. */
   resetScan: () => void;
-  /** Wait for a broadcaster-relayed tx hash to mine. */
-  watchRelayed: (chainName: NetworkName, hash: string) => Promise<void>;
-  /** Wait for a self-signed tx response to mine. */
-  watchSelf: (tx: TransactionResponse) => Promise<void>;
+  /** Wait for a broadcaster-relayed tx hash to settle, and say how it settled. */
+  watchRelayed: (chainName: NetworkName, hash: string) => Promise<TxSettlement>;
+  /** Wait for a self-signed tx response to settle, and say how it settled. */
+  watchSelf: (tx: TransactionResponse) => Promise<TxSettlement>;
   /** Surface a "mined" status. */
   notifyMined: (chainName: NetworkName, hash: string) => void;
+  /** Surface a transaction the chain rejected outright. */
+  notifyReverted: (chainName: NetworkName, hash: string) => void;
+  /** Surface a transaction whose outcome could not be read. */
+  notifyUnsettled: (
+    chainName: NetworkName,
+    hash: string,
+    reason: string,
+  ) => void;
   /**
    * The failure a mined relay-adapt batch is carrying, if any. A relay-adapt
    * transaction can succeed while the work inside it reverts.
@@ -83,6 +92,27 @@ const defaultDeps: SendPrivateDeps = {
       durationMs: 30000,
       replace: true,
     }),
+  notifyReverted: (chainName, hash) =>
+    emitCoreEvent({
+      type: "status:message",
+      text:
+        `Transaction REVERTED — nothing was sent. ` +
+        `${getTransactionURLForChain(chainName, hash)}`,
+      durationMs: 120000,
+      replace: true,
+    }),
+  notifyUnsettled: (chainName, hash, reason) =>
+    emitCoreEvent({
+      type: "status:message",
+      // Not a failure and not a success: the transaction is on chain and its
+      // outcome is simply unread. Saying "mined" here is what this whole path
+      // exists to stop.
+      text:
+        `Transaction broadcast, but its outcome could not be confirmed ` +
+        `(${reason}) — ${getTransactionURLForChain(chainName, hash)}`,
+      durationMs: 120000,
+      replace: true,
+    }),
   relayAdaptFailure: getRelayAdaptFailure,
   notifyBatchFailed: (chainName, hash, reason) =>
     emitCoreEvent({
@@ -99,17 +129,33 @@ const defaultDeps: SendPrivateDeps = {
 };
 
 /**
- * Report the batch, once it has mined.
+ * Report the batch, once the watcher has stopped watching.
  *
- * Relay-adapt is the only path that can mine and still have failed, so it is
- * the only one asked. Anything else goes straight to "mined".
+ * Two questions, asked in order, because the second only makes sense if the
+ * first says yes. Did the transaction execute at all — the receipt's status,
+ * which is the only authority on that? And if it did, did the work inside the
+ * batch complete — the relay-adapt CallError, which is a separate failure a
+ * successful receipt can still be carrying.
+ *
+ * Only a settlement of `mined` reaches the second question. A revert has no
+ * batch to interrogate, and an unread outcome must not be reported as either
+ * one.
  */
 const settled = async (
   deps: SendPrivateDeps,
   chainName: NetworkName,
   hash: string,
   isRelayAdapt: boolean,
+  settlement: TxSettlement,
 ): Promise<void> => {
+  if (settlement.kind === "unknown") {
+    deps.notifyUnsettled(chainName, hash, settlement.reason);
+    return;
+  }
+  if (settlement.kind === "reverted") {
+    deps.notifyReverted(chainName, hash);
+    return;
+  }
   const failure = isRelayAdapt
     ? await deps.relayAdaptFailure(chainName, hash)
     : undefined;
@@ -151,7 +197,9 @@ export const sendPrivateTransaction = async (
     deps.resetScan();
     void deps
       .watchRelayed(chainName, hash)
-      .then(() => settled(deps, chainName, hash, useRelayAdapt(type)));
+      .then((settlement) =>
+        settled(deps, chainName, hash, useRelayAdapt(type), settlement),
+      );
     return { hash, url: deps.txUrl(chainName, hash) };
   }
 
@@ -165,6 +213,8 @@ export const sendPrivateTransaction = async (
   deps.resetScan();
   void deps
     .watchSelf(txResult)
-    .then(() => settled(deps, chainName, txResult.hash, useRelayAdapt(type)));
+    .then((settlement) =>
+      settled(deps, chainName, txResult.hash, useRelayAdapt(type), settlement),
+    );
   return { hash: txResult.hash, url: deps.txUrl(chainName, txResult.hash) };
 };

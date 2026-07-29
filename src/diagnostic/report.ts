@@ -133,7 +133,7 @@ const runStatus = async (network: NetworkName): Promise<void> => {
 
   console.log("\nbalances");
   try {
-    const priv = getPrivateERC20BalancesForChain(network);
+    const priv = await getPrivateERC20BalancesForChain(network);
     const pub = await getPublicERC20BalancesForChain(network);
     line("private tokens", `${priv?.length ?? 0}`);
     line("public tokens", `${pub?.length ?? 0}`);

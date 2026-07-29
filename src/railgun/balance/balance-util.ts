@@ -70,24 +70,25 @@ export const getPublicERC20BalancesForChain = async (
   }
   const erc20Addresses = Object.keys(cache);
   const balances: RailgunDisplayBalance[] = [];
-  erc20Addresses.map(async (tokenAddress) => {
-    const { name, symbol, decimals } = await getTokenInfo(
-      chainName,
-      tokenAddress,
+  // Awaited. This was `.map(async …)` with nothing awaiting the array it
+  // returned, so the list was empty at `return` and filled some ticks later —
+  // whether a caller saw a token depended on how many microtasks happened to
+  // have run by the time it looked. See the note on the private reader below.
+  for (const tokenAddress of erc20Addresses) {
+    const bigIntAmount = BigInt(cache[tokenAddress].balance.amount);
+    if (bigIntAmount <= 0n) continue;
+    const info = await getTokenInfo(chainName, tokenAddress).catch(
+      () => undefined,
     );
-    const { amount } = cache[tokenAddress].balance;
-    const bigIntAmount = BigInt(amount);
-
-    if (bigIntAmount > 0n) {
-      balances.push({
-        tokenAddress,
-        amount: bigIntAmount,
-        decimals,
-        name,
-        symbol,
-      });
-    }
-  });
+    if (!info) continue;
+    balances.push({
+      tokenAddress,
+      amount: bigIntAmount,
+      decimals: info.decimals,
+      name: info.name,
+      symbol: info.symbol,
+    });
+  }
 
   if (showBaseBalance) {
     const wrappedReadableAmount = (await getWrappedTokenBalance(
@@ -105,10 +106,25 @@ export const getPublicERC20BalancesForChain = async (
   return balances;
 };
 
-export const getPrivateERC20BalancesForChain = (
+/**
+ * Spendable private balances — the list every send flow spends from.
+ *
+ * It was declared synchronous and built its result inside `.map(async …)` with
+ * nothing awaiting it, so the array it returned was EMPTY at the moment it
+ * returned and filled some microtasks later. Callers that happened to await
+ * something afterwards saw a full list; callers that read `.length` straight
+ * away saw nothing. That is why a wallet with funds could report no spendable
+ * tokens, and why the fee gate — whose default balance source is this function
+ * — could not find the fee token and passed a transaction it should have
+ * refused.
+ *
+ * Now awaited, like the two readers below it, and in key order rather than
+ * completion order so two reads of an unchanged cache agree.
+ */
+export const getPrivateERC20BalancesForChain = async (
   chainName: NetworkName,
   balanceBucket: RailgunWalletBalanceBucket = RailgunWalletBalanceBucket.Spendable,
-): RailgunDisplayBalance[] => {
+): Promise<RailgunDisplayBalance[]> => {
   const chain = getChainForName(chainName);
   initPrivateBalanceCachesForChain(
     chainName,
@@ -122,25 +138,28 @@ export const getPrivateERC20BalancesForChain = (
   if (!cache) {
     return [];
   }
-  const erc20Addresses = Object.keys(cache);
   const balances: RailgunDisplayBalance[] = [];
-  erc20Addresses.map(async (tokenAddress) => {
-    const { name, symbol, decimals } = await getTokenInfo(
-      chainName,
-      tokenAddress,
+  for (const tokenAddress of Object.keys(cache)) {
+    const entry = cache[tokenAddress];
+    const bigIntAmount = BigInt(entry.balance.amount);
+    if (bigIntAmount <= 0n) continue;
+    // A token whose metadata could not be read is deliberately absent, the same
+    // rule getAllPrivateERC20BalancesForChain applies: this is a spend list, and
+    // an amount typed against guessed decimals is wrong by whatever the guess
+    // was wrong by. It stays visible on the rail through the bucket reader.
+    if (entry.unresolved) continue;
+    const info = await getTokenInfo(chainName, tokenAddress).catch(
+      () => undefined,
     );
-    const { amount } = cache[tokenAddress].balance;
-    const bigIntAmount = BigInt(amount);
-    if (bigIntAmount > 0n) {
-      balances.push({
-        tokenAddress,
-        amount: bigIntAmount,
-        decimals,
-        name,
-        symbol,
-      });
-    }
-  });
+    if (!info) continue;
+    balances.push({
+      tokenAddress,
+      amount: bigIntAmount,
+      decimals: info.decimals,
+      name: info.name,
+      symbol: info.symbol,
+    });
+  }
 
   return balances;
 };
