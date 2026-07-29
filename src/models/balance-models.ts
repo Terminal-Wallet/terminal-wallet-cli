@@ -36,6 +36,16 @@ export type RailgunDisplayNFT = {
 export type RailgunBalanceCache = {
   timestamp: number;
   balance: RailgunBalance;
+  /**
+   * The token's symbol and decimals could not be read.
+   *
+   * The balance is still recorded, because it is real and the wallet holds it.
+   * Dropping the entry — which is what used to happen when the metadata call
+   * failed — hid funds entirely and made the portfolio look like it had fewer
+   * tokens than it does. `decimals` is a placeholder while this is set and must
+   * not be used to format an amount.
+   */
+  unresolved?: boolean;
 };
 
 export type BalanceCacheMap = NumMapType<

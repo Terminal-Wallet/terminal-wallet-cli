@@ -24,6 +24,15 @@ export interface TokenBalance {
   amount: string; // pre-formatted display string
   usd?: string; // formatted USD value, if a price is known
   bucket?: string; // POI bucket label (private rows only)
+  /**
+   * The token's symbol and decimals could not be read.
+   *
+   * The row is shown anyway — the wallet holds this — but `amount` carries a
+   * placeholder rather than a figure, because formatting under guessed
+   * decimals turns a 6-decimal token into a number a trillion times too large.
+   * A wrong figure is worse than an absent one.
+   */
+  unresolved?: boolean;
 }
 
 export interface WalletState {

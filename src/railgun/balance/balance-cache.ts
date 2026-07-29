@@ -9,6 +9,8 @@ import {
   BalanceBucketCacheMap,
   BalanceCacheMap,
 } from "../../models/balance-models";
+import { ERC20Token } from "../../models/token-models";
+import { mapLimited } from "../../util/concurrency";
 import {
   getERC20AddressesForChain,
   getERC20Balance,
@@ -16,7 +18,7 @@ import {
   initTokenDatabase,
   tokenDatabase,
 } from "./token-util";
-import { bigIntToHex, delay } from "../../util/util";
+import { bigIntToHex } from "../../util/util";
 import { TokenDatabaseMap } from "../../models/token-models";
 import { getChainForName } from "../network/network-util";
 import { getCurrentEthersWallet } from "../wallet/public-utils";
@@ -42,6 +44,14 @@ export const privateNFTCache: NumMapType<
 > = {};
 
 /** An NFT's identity — a collection plus a token id within it. */
+/**
+ * How many token-metadata reads run at once.
+ *
+ * Each miss is three sequential contract calls, so this is the real RPC
+ * pressure — kept low because it replaces a deliberate throttle.
+ */
+const TOKEN_INFO_CONCURRENCY = 4;
+
 export const nftKey = (nft: RailgunNFTAmount): string =>
   `${nft.nftAddress.toLowerCase()}:${BigInt(nft.tokenSubID).toString()}`;
 
@@ -180,32 +190,33 @@ export const updatePublicBalancesForChain = async (
   const public0XAddress = getCurrentEthersWallet().address;
   initPublicBalanceCachesForChain(chainName);
   const addresses = getERC20AddressesForChain(chainName);
-  for (const index in addresses) {
-    const tokenAddress = addresses[index];
+  const stale = addresses.filter((tokenAddress) => {
     const cached = publicERC20BalanceCache[chain.type][chain.id][tokenAddress];
-    if (cached) {
-      const timeElapsed = Date.now() - cached.timestamp;
-      if (timeElapsed < CACHE_TIMEOUT && !forceRescan) {
-        continue;
-      }
-    }
+    if (!cached || forceRescan) return true;
+    return Date.now() - cached.timestamp >= CACHE_TIMEOUT;
+  });
 
-    const { decimals } = await getTokenInfo(chainName, tokenAddress);
-    const amount = await getERC20Balance(
-      chainName,
-      tokenAddress,
-      public0XAddress,
-    );
+  // Concurrent and fault-tolerant, for the same two reasons the private side
+  // is. `getTokenInfo` was called bare here, so ONE token in the curated list
+  // whose metadata could not be read threw and abandoned every token after it
+  // in the loop — and the sleep ran per token on a list that is walked again
+  // for every balance bucket.
+  await mapLimited(stale, TOKEN_INFO_CONCURRENCY, async (tokenAddress: string) => {
+    const info = await getTokenInfo(chainName, tokenAddress).catch(() => undefined);
+    // Public balances are a display figure, and one shown under guessed
+    // decimals is wrong rather than merely missing — so an unreadable token is
+    // left out here and picked up whenever its metadata resolves.
+    if (!info) return;
+    const amount = await getERC20Balance(chainName, tokenAddress, public0XAddress);
     publicERC20BalanceCache[chain.type][chain.id][tokenAddress] = {
       timestamp: Date.now(),
       balance: {
         tokenAddress,
         amount: bigIntToHex(amount),
-        decimals,
+        decimals: info.decimals,
       },
     };
-    await delay(500);
-  }
+  });
 };
 
 export const updatePrivateBalancesForChain = async (
@@ -250,22 +261,47 @@ export const updatePrivateBalancesForChain = async (
       owned;
   }
 
+  // Resolve each DISTINCT token once, concurrently.
+  //
+  // This was a sequential loop with a fixed 500ms sleep per token — applied
+  // before the result was even checked, so it slept just as long when the
+  // metadata came from the local database and no RPC happened at all. With
+  // seven buckets across two txid versions that is the same handful of tokens
+  // looked at fourteen times over, and a wallet holding six of them spent
+  // roughly half a minute asleep before `balances:refreshed` was emitted. The
+  // deck's only automatic re-read is on that event, which is why the rail sat
+  // half-empty until it was poked by hand.
+  //
+  // The sleep was rate-limit protection. A bounded pool is the same protection
+  // expressed as a ceiling rather than as a wait, and `getTokenInfo` caches
+  // into a persisted database, so the second bucket onward costs nothing.
+  const resolved = new Map<string, ERC20Token | undefined>();
+  const distinct = [...new Set(erc20Amounts.map((a) => a.tokenAddress))];
+  await mapLimited(distinct, TOKEN_INFO_CONCURRENCY, async (tokenAddress: string) => {
+    resolved.set(
+      tokenAddress,
+      await getTokenInfo(chainName, tokenAddress).catch(() => undefined),
+    );
+  });
+
   for (const erc20Amount of erc20Amounts) {
     const { tokenAddress, amount } = erc20Amount;
-    const info = await getTokenInfo(chainName, tokenAddress).catch((err) => {
-      return undefined;
-    });
-    await delay(500);
-    if (!info) {
-      continue;
-    }
-
-    const { decimals } = info;
+    const info = resolved.get(tokenAddress);
+    // Recorded either way. A token whose symbol could not be read is still a
+    // token the wallet holds, and dropping it — which is what used to happen —
+    // took the balance off the portfolio entirely rather than showing it as
+    // unnamed. `decimals` is a placeholder when unresolved and the read side
+    // refuses to format an amount with it.
     privateERC20BalanceCache[chain.type][chain.id][balanceBucket][
       railgunWalletID
     ][tokenAddress] = {
       timestamp: Date.now(),
-      balance: { tokenAddress, amount: bigIntToHex(amount), decimals },
+      balance: {
+        tokenAddress,
+        amount: bigIntToHex(amount),
+        decimals: info?.decimals ?? 18,
+      },
+      ...(info ? {} : { unresolved: true }),
     };
   }
 };

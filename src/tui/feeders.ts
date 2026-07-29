@@ -113,7 +113,13 @@ export const createFeeders = (render: () => void): Feeders => {
         ...new Set([...priv, ...pub].map((b) => b.tokenAddress)),
       ]);
 
-      const format = (b: RailgunDisplayBalance) => {
+      const format = (b: RailgunDisplayBalance & { unresolved?: boolean }) => {
+        if (b.unresolved) {
+          // No amount and no USD: both would be derived from decimals nobody
+          // could read. The row exists so the holding is visible; the figure
+          // arrives when the metadata does.
+          return { symbol: b.symbol, amount: "unreadable — retrying", unresolved: true };
+        }
         const usd = balanceUSD(b, prices);
         return {
           symbol: b.symbol,
@@ -126,6 +132,9 @@ export const createFeeders = (render: () => void): Feeders => {
       // sampling each would make the sparkline read as volatility.
       const sampled = new Set<string>();
       for (const b of [...priv, ...pub]) {
+        // No decimals means no value; sampling it would push a zero into the
+        // series and draw a crash that did not happen.
+        if ((b as { unresolved?: boolean }).unresolved) continue;
         if (sampled.has(b.symbol)) continue;
         sampled.add(b.symbol);
         priceHistory[b.symbol] = pushSeries(
@@ -154,7 +163,7 @@ export const createFeeders = (render: () => void): Feeders => {
         // Omitted rather than zero when no price is known — a portfolio total of
         // $0.00 is a claim, and the wrong one.
         privateUSD: havePrices
-          ? formatUSD(portfolioTotalUSD(priv, prices))
+          ? formatUSD(portfolioTotalUSD(priv.filter((b) => !b.unresolved), prices))
           : undefined,
         publicUSD: havePrices
           ? formatUSD(portfolioTotalUSD(pub, prices))

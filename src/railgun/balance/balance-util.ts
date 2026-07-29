@@ -27,6 +27,10 @@ import {
   shouldDisplayPrivateBalances,
 } from "../wallet/wallet-util";
 import { readablePrecision } from "../../util/util";
+
+/** An address, shortened, for a token whose symbol could not be read. */
+const short = (address: string): string =>
+  address.length > 12 ? `${address.slice(0, 6)}…${address.slice(-4)}` : address;
 import configDefaults from "../../config/config-defaults";
 import { walletManager } from "../wallet/wallet-manager";
 
@@ -144,6 +148,8 @@ export const getPrivateERC20BalancesForChain = (
 /** A display balance tagged with the POI bucket the amount currently sits in. */
 export interface BucketBalance extends RailgunDisplayBalance {
   bucket: RailgunWalletBalanceBucket;
+  /** The symbol and decimals are unknown, so the amount must not be formatted. */
+  unresolved?: boolean;
 }
 
 /**
@@ -167,6 +173,11 @@ export const getAllPrivateERC20BalancesForChain = async (
     const cache = byChain[bucket]?.[walletID];
     if (!cache) continue;
     for (const tokenAddress of Object.keys(cache)) {
+      // A token whose decimals could not be read is deliberately absent from
+      // this list. It is shown on the rail so the holding is visible, but an
+      // amount typed against guessed decimals is off by whatever the guess was
+      // wrong by — and this is the list the send flows spend from.
+      if (cache[tokenAddress].unresolved) continue;
       totals[tokenAddress] =
         (totals[tokenAddress] ?? 0n) + BigInt(cache[tokenAddress].balance.amount);
     }
@@ -175,8 +186,18 @@ export const getAllPrivateERC20BalancesForChain = async (
   const balances: RailgunDisplayBalance[] = [];
   for (const tokenAddress of Object.keys(totals)) {
     if (totals[tokenAddress] <= 0n) continue;
-    const { name, symbol, decimals } = await getTokenInfo(chainName, tokenAddress);
-    balances.push({ tokenAddress, amount: totals[tokenAddress], decimals, name, symbol });
+    // Unresolved entries are already filtered out, so a failure here is a
+    // token that resolved once and cannot be read now. Skipping it keeps the
+    // rest spendable rather than failing the whole list.
+    const info = await getTokenInfo(chainName, tokenAddress).catch(() => undefined);
+    if (!info) continue;
+    balances.push({
+      tokenAddress,
+      amount: totals[tokenAddress],
+      decimals: info.decimals,
+      name: info.name,
+      symbol: info.symbol,
+    });
   }
   return balances;
 };
@@ -201,19 +222,24 @@ export const getPrivateBalancesByBucketForChain = async (
     const cache = byChain[bucket]?.[walletID];
     if (!cache) continue;
     for (const tokenAddress of Object.keys(cache)) {
-      const amount = BigInt(cache[tokenAddress].balance.amount);
+      const entry = cache[tokenAddress];
+      const amount = BigInt(entry.balance.amount);
       if (amount <= 0n) continue;
-      const { name, symbol, decimals } = await getTokenInfo(
-        chainName,
-        tokenAddress,
-      );
+      // Never throws. This used to call getTokenInfo bare, so a single token
+      // whose metadata could not be read took down the whole read — and the
+      // caller's catch turned that into an empty portfolio rather than one
+      // missing row.
+      const info = entry.unresolved
+        ? undefined
+        : await getTokenInfo(chainName, tokenAddress).catch(() => undefined);
       rows.push({
         tokenAddress,
         amount,
-        decimals,
-        name,
-        symbol,
+        decimals: info?.decimals ?? entry.balance.decimals,
+        name: info?.name ?? tokenAddress,
+        symbol: info?.symbol ?? short(tokenAddress),
         bucket: bucket as RailgunWalletBalanceBucket,
+        ...(info ? {} : { unresolved: true }),
       });
     }
   }
