@@ -132,8 +132,9 @@ export const fxPositionSummary = (
   ];
   if (width === undefined) return segments.join(" · ");
 
-  let line = segments[0];
-  for (const segment of segments.slice(1)) {
+  const [risk, ...rest] = segments;
+  let line = risk;
+  for (const segment of rest) {
     const next = `${line} · ${segment}`;
     if (next.length > width) break;
     line = next;
