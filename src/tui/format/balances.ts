@@ -14,6 +14,14 @@ export interface PortfolioRow {
   text: string;
   token?: TokenBalance;
   kind?: "private" | "public"; // which section the balance row came from
+  /**
+   * Set on both lines of a position, so clicking either opens it.
+   *
+   * A position is not a token — it has no amount to seed a builder with — so
+   * it carries itself rather than a `token`, and the click handler tells the
+   * two apart by which field is set.
+   */
+  nft?: NftBalance;
 }
 
 /** A token's private balance grouped across its buckets, with summed totals. */
@@ -176,7 +184,7 @@ export const buildPortfolioRows = (
       // two lines from one item, and every row below it is then one off the
       // index a click maps back to — the rail would seed the builder with the
       // wrong token.
-      for (const line of r.nftRow(nft).split("\n")) rows.push({ text: line });
+      for (const line of r.nftRow(nft).split("\n")) rows.push({ text: line, nft });
     }
   }
 

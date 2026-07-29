@@ -58,7 +58,7 @@ import { openModalCount, shifted } from "./widgets/modal";
 import { deckClickVerdict, escapeReachesDeck } from "./nav";
 import { createPalette } from "./screens/palette";
 import { createBuilder } from "./screens/builder";
-import { showLogs, showTxReview } from "./screens/popout";
+import { showLogs, showText, showTxReview } from "./screens/popout";
 import {
   openWalletMenu,
   openNetworkMenu,
@@ -601,6 +601,14 @@ export const runDeck = async (): Promise<void> => {
   leftRail.on("select", (_item: unknown, index: number) => {
     deckClick(() => {
       const row = rows[index];
+      // A position is not a token and cannot seed a builder with an amount, so
+      // clicking one opens what it IS. The rail only has room for the risk;
+      // everything else about the position lives here.
+      if (row?.nft) {
+        const lines = row.nft.detailLines;
+        if (lines?.length) void showText(ctx, "f(x) position", lines.join("\n"), "magenta");
+        return;
+      }
       if (!row?.token) return; // headers and spacers carry no token
       seededKind = row.kind;
       void resolveSeed(row.token.symbol).then(() => openPalette());

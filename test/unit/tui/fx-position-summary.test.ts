@@ -10,6 +10,7 @@ import assert from "node:assert/strict";
 import { formatUnits } from "ethers";
 import {
   fxCloseLines,
+  fxPositionDetailLines,
   fxPositionSummary,
   fxRiskDeltaLines,
 } from "../../../src/tui/format/fx-position";
@@ -182,4 +183,59 @@ test("a swap out is named, so the collateral is not reported as arriving unchang
     format: fmt,
   }).map(strip);
   assert.ok(lines.some((l) => /wstETH → USDC/.test(l)));
+});
+
+// --- fitting a narrow rail ------------------------------------------------
+
+const near = () => state({ debtRatio: 808535649149876513n });
+
+test("a narrow rail drops segments rather than chopping one in half", () => {
+  // A hard slice cuts mid-number — "0.015" for 0.0155 — and a truncated figure
+  // still reads as a figure. Dropping says less; slicing says something false.
+  const line = strip(fxPositionSummary(near(), "wstETH", fmt, 37));
+  assert.ok(line.length <= 37, `"${line}" is ${line.length}, over 37`);
+  assert.ok(!line.endsWith("·"), "left a dangling separator");
+  for (const piece of line.split(" · ")) {
+    assert.ok(piece.trim().length > 0, "emitted an empty segment");
+  }
+});
+
+test("the risk survives any width the caller can offer", () => {
+  // It is the first segment and never dropped, so a rail too narrow for
+  // anything else still says the thing worth knowing.
+  for (const width of [18, 24, 37, 60, 200]) {
+    const line = strip(fxPositionSummary(near(), "wstETH", fmt, width));
+    assert.match(line, /80\.9% ▲ near rebal/, `lost the risk at width ${width}`);
+  }
+});
+
+test("no width means everything", () => {
+  const line = strip(fxPositionSummary(near(), "wstETH", fmt));
+  assert.match(line, /wstETH/);
+  assert.match(line, /fxUSD/);
+});
+
+test("debt outranks collateral when only one fits", () => {
+  // Debt is what moves the ratio and what a repay acts on; collateral is
+  // visible from the pool name in the label beside it.
+  const line = strip(fxPositionSummary(near(), "wstETH", fmt, 37));
+  assert.match(line, /fxUSD/);
+  assert.ok(!/wstETH/.test(line), "kept collateral over debt in a tight line");
+});
+
+test("the detail view states both thresholds, not just the ratio", () => {
+  const lines = fxPositionDetailLines("wstETH-Long #1981", near(), "wstETH", fmt).map(strip);
+  const all = lines.join("\n");
+  assert.match(all, /collateral/);
+  assert.match(all, /debt/);
+  assert.match(all, /rebalance 88%/);
+  assert.match(all, /liquidation 95%/);
+});
+
+test("a position that could not be read says so in the detail view too", () => {
+  const all = fxPositionDetailLines("wstETH-Long #1981", undefined, "wstETH", fmt)
+    .map(strip)
+    .join("\n");
+  assert.match(all, /could not be read/);
+  assert.ok(!/0\.0000/.test(all), "showed figures for a position it could not read");
 });

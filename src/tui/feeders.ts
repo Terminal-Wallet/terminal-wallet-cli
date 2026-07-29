@@ -24,7 +24,8 @@ import {
   poolCollateralSymbol,
   readFxPositionState,
 } from "../railgun/transaction/fx/position-state";
-import { fxPositionSummary } from "./format/fx-position";
+import { fxPositionSummary, fxPositionDetailLines } from "./format/fx-position";
+import { LEFT_W } from "./layout";
 import { mapLimited } from "../util/concurrency";
 import { KNOWN_POOLS } from "@railgun-community/cookbook";
 import { fmtAmount } from "./format/deck";
@@ -76,6 +77,14 @@ export interface Feeders {
   stopPolling: () => void;
 }
 
+/**
+ * Cells the rail can give a position's detail line.
+ *
+ * The rail is LEFT_W wide; take off its border and the row's own indent. A
+ * line built for a width nobody checked is how this ended up truncated twice.
+ */
+const RAIL_DETAIL_W = LEFT_W - 2 - 5;
+
 export const createFeeders = (render: () => void): Feeders => {
   const priceHistory: Record<string, number[]> = {};
   let gasEstimate: CustomGasEstimate | undefined;
@@ -119,7 +128,15 @@ export const createFeeders = (render: () => void): Feeders => {
    */
   const positionRows = async (
     network: NetworkName,
-  ): Promise<{ label: string; amount: string; kind?: string; detail?: string }[]> => {
+  ): Promise<
+    {
+      label: string;
+      amount: string;
+      kind?: string;
+      detail?: string;
+      detailLines?: string[];
+    }[]
+  > => {
     const collections = fxPositionCollections();
     const held = describeNFTs(getPrivateNFTsForChain(network), collections);
     return mapLimited(held, 4, async (nft) => {
@@ -134,11 +151,14 @@ export const createFeeders = (render: () => void): Feeders => {
         pool.name,
         BigInt(nft.tokenSubID),
       ).catch(() => undefined);
+      const symbol = poolCollateralSymbol(pool.name);
+      const fmt = (a: bigint, d: number) => fmtAmount(formatUnits(a, d), 4);
       return {
         ...base,
-        detail: fxPositionSummary(state, poolCollateralSymbol(pool.name), (a, d) =>
-          fmtAmount(formatUnits(a, d), 4),
-        ),
+        // The rail is 44 cells wide and the row is indented, so it gets what
+        // fits; the full picture is a click away rather than chopped in half.
+        detail: fxPositionSummary(state, symbol, fmt, RAIL_DETAIL_W),
+        detailLines: fxPositionDetailLines(nft.label, state, symbol, fmt),
       };
     });
   };

@@ -26,6 +26,8 @@ export interface NftBalance {
    * was approaching rebalance.
    */
   detail?: string;
+  /** The whole position, for the modal a click opens. */
+  detailLines?: string[];
 }
 
 export interface TokenBalance {

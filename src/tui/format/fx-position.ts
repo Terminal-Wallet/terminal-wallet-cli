@@ -97,11 +97,13 @@ export const fxPositionSummary = (
   state: FxPositionState | undefined,
   collateralSymbol: string,
   format: (amount: bigint, decimals: number) => string,
+  /** Cells available. Segments that do not fit are dropped, lowest value first. */
+  width?: number,
 ): string => {
   // Absent is not zero. A position whose state could not be read must not
   // render as an empty, healthy one — that is an invitation to borrow against
   // collateral that may not be there.
-  if (!state) return "state unavailable — could not read this position";
+  if (!state) return "could not read this position";
   const wad = Number(10n ** 18n);
   const ratio = Number(state.debtRatio) / wad;
   const rebalance = Number(state.rebalanceDebtRatio) / wad;
@@ -120,15 +122,67 @@ export const fxPositionSummary = (
           ? "▲ near rebal"
           : "safe";
 
-  // Risk FIRST, holdings after. Any list can be narrower than a line, and when
-  // something has to be cut it must be the amounts rather than the reason to
-  // look. Ordering is the only clipping defence that survives a width nobody
-  // measured.
-  return (
-    `${asPercent(ratio, 1)} ${word}` +
-    ` · ${format(state.collateralAmount, state.collateralDecimals)} ${collateralSymbol}` +
-    ` · ${format(state.debtAmount, 18)} fxUSD`
+  // Most valuable first, and DROPPED rather than chopped when the space runs
+  // out. A hard slice cuts mid-number — "0.015" for 0.0155 — which is worse
+  // than saying less, because a truncated figure still reads as a figure.
+  const segments = [
+    `${asPercent(ratio, 1)} ${word}`,
+    `${format(state.debtAmount, 18)} fxUSD`,
+    `${format(state.collateralAmount, state.collateralDecimals)} ${collateralSymbol}`,
+  ];
+  if (width === undefined) return segments.join(" · ");
+
+  let line = segments[0];
+  for (const segment of segments.slice(1)) {
+    const next = `${line} · ${segment}`;
+    if (next.length > width) break;
+    line = next;
+  }
+  return line;
+};
+
+/** Everything about a position, for a screen with room to say it. */
+export const fxPositionDetailLines = (
+  label: string,
+  state: FxPositionState | undefined,
+  collateralSymbol: string,
+  format: (amount: bigint, decimals: number) => string,
+): string[] => {
+  if (!state) {
+    return [
+      tag(label, "magenta"),
+      "",
+      tag("This position could not be read.", "yellow"),
+      tag("The pool reports a nonexistent position as a zero-debt one, so no", "gray"),
+      tag("figures are shown rather than figures that would look healthy.", "gray"),
+    ];
+  }
+  const wad = Number(10n ** 18n);
+  const ratio = Number(state.debtRatio) / wad;
+  const colour = zoneColour(
+    state.debtRatio >= state.liquidationDebtRatio
+      ? "liquidation"
+      : state.debtRatio >= state.rebalanceDebtRatio
+        ? "rebalance"
+        : "safe",
   );
+  const meter = markedBar(ratio, 32, [
+    { at: Number(state.rebalanceDebtRatio) / wad, glyph: "│" },
+    { at: Number(state.liquidationDebtRatio) / wad, glyph: "✕" },
+  ]);
+  return [
+    tag(label, "magenta"),
+    "",
+    `${tag("collateral", "gray")}  ${format(state.collateralAmount, state.collateralDecimals)} ${collateralSymbol}`,
+    `${tag("debt", "gray")}        ${format(state.debtAmount, 18)} fxUSD`,
+    "",
+    `${tag("debt ratio", "gray")}  ${tag(asPercent(ratio, 1), colour)}`,
+    `            ${tag(meter, colour)}`,
+    `            ${tag(`│ rebalance ${asPercent(Number(state.rebalanceDebtRatio) / wad, 0)}`, "gray")}` +
+      `   ${tag(`✕ liquidation ${asPercent(Number(state.liquidationDebtRatio) / wad, 0)}`, "gray")}`,
+    "",
+    tag("Manage or Close this position from the command palette.", "gray"),
+  ];
 };
 
 export interface FxRiskDeltaView extends FxRiskView {

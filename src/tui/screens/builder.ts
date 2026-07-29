@@ -1214,8 +1214,18 @@ export const createBuilder = (host: BuilderHost): Builder => {
           choices.map((c) => ({
             label: c.nft.label,
             value: c.nft.tokenSubID,
-            hint: fxPositionSummary(c.state, poolCollateralSymbol(c.pool.name), (a, d) =>
-              fmtAmount(formatUnits(a, d), 4),
+            // Budgeted against the modal it renders in: 82% of the screen,
+            // less borders and padding, less the label column every row shares.
+            hint: fxPositionSummary(
+              c.state,
+              poolCollateralSymbol(c.pool.name),
+              (a, d) => fmtAmount(formatUnits(a, d), 4),
+              Math.max(
+                18,
+                Math.min(110, Math.floor(((ctx.screen.width as number) || 80) * 0.82)) -
+                  6 -
+                  Math.max(...choices.map((x) => x.nft.label.length)),
+              ),
             ),
           })),
         );

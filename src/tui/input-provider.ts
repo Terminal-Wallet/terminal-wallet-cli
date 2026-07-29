@@ -237,9 +237,13 @@ export const createBlessedInputProvider = (
       // Cap height to the viewport and scroll the rest (long token lists).
       const screenH = (screen.height as number) || 24;
       const listH = Math.max(3, Math.min(items.length, screenH - 8));
+      // Wide enough for a label plus a hint that says something. At 62% an
+      // 80-column terminal gave the hint about 26 cells after the label
+      // column, which silently truncated every position's risk line.
       const { box, guardFocus, close } = createModal(blessed, screen, {
         title: items.length > 1 ? `${message}  (${items.length})` : message,
-        widthPct: 62,
+        widthPct: 82,
+        maxWidth: 110,
         height: listH + 4,
         accent: "cyan",
         footer: "↑/↓ move · Enter select · Esc cancel",
