@@ -14,7 +14,10 @@ export const addRemovedBroadcaster = (broadcasterAddress: string) => {
     currentBlockList = baseBlockList;
   }
   currentBlockList?.push(broadcasterAddress);
-  wakuClient.setAddressFilters(undefined, currentBlockList);
+  // Both lists, every time. Passing `undefined` here cleared the allow list as
+  // a side effect of blocking someone, so the two setters disagreed about what
+  // the filters were and whichever ran last won.
+  wakuClient.setAddressFilters(currentAllowList, currentBlockList);
 };
 
 export const addChosenBroadcaster = (broadcasterAddress: string) => {

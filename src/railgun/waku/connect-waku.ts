@@ -23,6 +23,34 @@ const broadcasterOptions: BroadcasterOptions = {
   trustedFeeSigner,
 };
 
+/**
+ * Normalize a config value that is declared `string | string[]`.
+ *
+ * The filter these feed does `allowlist.includes(address)`. On an array that is
+ * a membership test; on a string it is a SUBSTRING test, which is a different
+ * question with a coincidentally similar answer.
+ */
+const asList = (value: string | string[] | undefined): string[] => {
+  if (value === undefined) return [];
+  return Array.isArray(value) ? value : [value];
+};
+
+/**
+ * The broadcaster address filters.
+ *
+ * An empty allow list means "no address restriction" — the SDK's filter is
+ * `!allowlist || allowlist.includes(address)`, so `undefined` admits everyone
+ * and a populated list admits ONLY its members.
+ *
+ * That last part is why this is not handed the trusted fee signer. It used to
+ * be: `initializeLists(remoteConfig.trustedFeeSigner as string[], …)`, which
+ * set the allow list to a single fee-signer address and therefore filtered
+ * every broadcaster except that one out of existence — a favourite could never
+ * become available, because it was never in the list to begin with. The two are
+ * unrelated controls. Fee-signature trust is enforced by the SDK through
+ * `broadcasterOptions.trustedFeeSigner`, which is set separately in
+ * `startWakuClient` and is untouched by this.
+ */
 export const initializeLists = (allowList: string[], blockList: string[]) => {
   baseAllowList = allowList.length > 0 ? allowList : undefined;
   baseBlockList = blockList.length > 0 ? blockList : undefined;
@@ -71,10 +99,9 @@ export const initWakuClient = async () => {
   // @ts-ignore
   wakuBroadcasterTransaction = waku.BroadcasterTransaction; // as WakuBroadcasterTransaction;
   wakuLoaded = true;
-  initializeLists(
-    remoteConfig.trustedFeeSigner as string[],
-    remoteConfig.blacklist,
-  );
+  // No address allow list: every broadcaster is admitted, minus the blocklist.
+  // The trusted fee signer is NOT an allow list — see initializeLists.
+  initializeLists([], asList(remoteConfig.blacklist));
 };
 
 export const switchWakuNetwork = async (chainName: NetworkName) => {
