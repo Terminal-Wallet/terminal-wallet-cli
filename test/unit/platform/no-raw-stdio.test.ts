@@ -21,6 +21,7 @@ const EXEMPT = [
   "diagnostic/",          // no screen; console IS the output
   "platform/console.ts",  // owns raw terminal control
   "platform/logger.ts",   // the sink of last resort
+  "platform/output.ts",   // the one writer a screenless face may use
   "tui/widgets/clipboard.ts", // OSC52 is a control sequence
 ];
 
@@ -60,6 +61,18 @@ test("no console.* outside the diagnostic", () => {
 test("no direct process.stdout/stderr writes", () => {
   const found = offenders(/process\.(stdout|stderr)\.write\s*\(/);
   assert.deepEqual(found, [], `raw stream writes:\n  ${found.join("\n  ")}`);
+});
+
+test("the exemption list does not grow silently", () => {
+  // Each entry is a deliberate decision with a reason written next to it. A
+  // sixth appearing without one is how the guard stops guarding: the whole
+  // value here is that adding a write somewhere new is inconvenient enough to
+  // require saying why.
+  assert.equal(EXEMPT.length, 5, "an exemption was added or removed");
+  assert.ok(
+    EXEMPT.includes("platform/output.ts"),
+    "the screenless writer must stay the only new one",
+  );
 });
 
 test("the scan actually reaches the whole tree", () => {
