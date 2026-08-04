@@ -72,8 +72,7 @@ export const initWakuClient = async () => {
   wakuBroadcasterTransaction = waku.BroadcasterTransaction; // as WakuBroadcasterTransaction;
   wakuLoaded = true;
   initializeLists(
-    remoteConfig.trustedFeeSigner as string[],
-    remoteConfig.blacklist,
+    [], remoteConfig.blacklist,
   );
 };
 
@@ -90,8 +89,7 @@ export const startWakuClient = async (chainName: NetworkName) => {
     throw new Error("No Waku Client?...");
   }
   const chain = getChainForName(chainName);
-  // const peerOverrides = remoteConfig.additionalDirectPeers ?? [];
-  // broadcasterOptions.additionalDirectPeers = peerOverrides;
+  broadcasterOptions.additionalDirectPeers = remoteConfig.additionalDirectPeers;
   broadcasterOptions.pubSubTopic = "/waku/2/rs/5/1"; //remoteConfig.wakuPubSubTopic;
   if (isDefined(remoteConfig.trustedFeeSigner)) {
     broadcasterOptions.trustedFeeSigner = remoteConfig.trustedFeeSigner;
