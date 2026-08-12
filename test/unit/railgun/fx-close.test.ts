@@ -15,37 +15,42 @@ import { computeFxClose } from "@railgun-community/cookbook";
 const SRC = resolve(process.cwd(), "src");
 const close = readFileSync(join(SRC, "railgun/transaction/fx/close.ts"), "utf-8");
 
-/** wstETH-Long #1980, read from mainnet. */
+/**
+ * wstETH-Long #1980, read from mainnet, in NATIVE units.
+ *
+ * Cookbook `-fx.3` takes the position's native collateral and debt directly —
+ * what `getFxPosition` reports — rather than the raw figures plus the pool
+ * totals it needed to derive them from.
+ */
 const POSITION = {
-  rawColls: 1_993_186_870_026_208_618n,
-  rawDebts: 1_880_030_086_474_238_325_175n,
+  collateral: 1_604_358_184_743_053_894n,
+  debt: 1_880_030_086_474_238_325_175n,
 };
 const POOL = {
-  collateralBalance: 4_676_686_893_881_191_905_374n,
-  totalRawColls: 4_676_686_893_881_191_905_374n,
   repayFeeRatio: 0n,
+  withdrawFeeRatio: 0n,
 };
 
-const amounts = (shieldedFxUSD: bigint) =>
+const amounts = (availableDebtToken: bigint) =>
   computeFxClose({
     ...POSITION,
     ...POOL,
-    shieldedFxUSD,
+    availableDebtToken,
     railgunUnshieldFeeBps: 25n,
   });
 
-test("enough fxUSD to cover the debt closes the position outright", () => {
-  const full = amounts(POSITION.rawDebts * 2n);
+test("enough of the debt token to cover the debt closes the position outright", () => {
+  const full = amounts(POSITION.debt * 2n);
   assert.equal(full.partialClose, false, "the position should be burnt");
   assert.ok(full.withdrawColl > 0n, "collateral comes back");
 });
 
 test("less than the debt is a partial close, and the position survives", () => {
-  const partial = amounts(POSITION.rawDebts / 4n);
+  const partial = amounts(POSITION.debt / 4n);
   assert.equal(partial.partialClose, true);
   assert.ok(partial.repayAmount > 0n);
   assert.ok(
-    partial.repayAmount < POSITION.rawDebts,
+    partial.repayAmount < POSITION.debt,
     "a partial close must not claim to repay the whole debt",
   );
 });
@@ -53,12 +58,12 @@ test("less than the debt is a partial close, and the position survives", () => {
 test("the repay is sized against what survives the unshield fee", () => {
   // RAILGUN takes its cut on the way out, so a repay sized on the amount SENT
   // would try to spend money that never arrives.
-  const sent = POSITION.rawDebts / 2n;
+  const sent = POSITION.debt / 2n;
   const a = amounts(sent);
-  assert.ok(a.fxUSDAfterUnshield < sent, "the fee should reduce what lands");
+  assert.ok(a.debtTokenAfterUnshield < sent, "the fee should reduce what lands");
   assert.ok(
-    a.repayAmount <= a.fxUSDAfterUnshield,
-    "cannot repay more fxUSD than actually arrived",
+    a.repayAmount <= a.debtTokenAfterUnshield,
+    "cannot repay more of the debt token than actually arrived",
   );
 });
 
@@ -83,38 +88,37 @@ test("the RAILGUN fee is read, never assumed", () => {
 
 test("a repay of nothing is refused rather than sent", () => {
   assert.match(close, /repayAmount <= 0n/);
-  assert.match(close, /Not enough shielded fxUSD/);
+  assert.match(close, /Not enough of the debt token is shielded/);
 });
 
 /**
  * WBTC-Short shaped: an 8-decimal debt token whose raw figure is 18dp
- * normalised, so `rawDebts` and `debt` differ by 10^10 for the same debt.
+ * normalised, so the raw and native figures differ by 10^10 for the same debt.
  * The long pools have them equal, which is why passing the wrong one was
  * invisible until a second side existed.
  */
 const SHORT = {
-  rawColls: 1_000_000_000_000_000_000_000n, // fxUSD collateral
+  collateral: 1_000_000_000_000_000_000_000n, // fxUSD collateral, native
   debt: 2_000_000n, // 0.02 WBTC owed, native
-  rawDebts: 2_000_000n * 10n ** 10n, // the same debt, raw
+  rawDebt: 2_000_000n * 10n ** 10n, // the same debt, raw
 };
 
-test("raw debt where native is wanted releases almost no collateral", () => {
-  // The control for the call site below. `computeFxClose` names its input
-  // `rawDebts` but measures it against native amounts — the shielded balance
-  // it clamps to, and the `repayAmount` the step spends. Feed it the raw
-  // figure and it reads the debt as 10^10 times larger than the wallet can
-  // cover, so it repays what it has and withdraws a proportional sliver.
-  const shielded = SHORT.debt * 2n; // native WBTC, twice the debt
+test("raw debt where native is wanted still releases almost no collateral", () => {
+  // `-fx.3` renamed the field from `rawDebts` to `debt` and added a guard, but
+  // the guard is `typeof debt !== 'bigint'` — it catches the RENAME, not the
+  // mistake its message describes. A raw figure is still a bigint, so it still
+  // sails through and reads as a debt 10^10 larger than the wallet can cover:
+  // the close repays what it has and withdraws a proportional sliver.
+  const available = SHORT.debt * 2n; // native WBTC, twice the debt
   const common = {
-    rawColls: SHORT.rawColls,
-    collateralBalance: SHORT.rawColls,
-    totalRawColls: SHORT.rawColls,
+    collateral: SHORT.collateral,
     repayFeeRatio: 0n,
+    withdrawFeeRatio: 0n,
     railgunUnshieldFeeBps: 25n,
-    shieldedFxUSD: shielded,
+    availableDebtToken: available,
   };
-  const right = computeFxClose({ ...common, rawDebts: SHORT.debt });
-  const wrong = computeFxClose({ ...common, rawDebts: SHORT.rawDebts });
+  const right = computeFxClose({ ...common, debt: SHORT.debt });
+  const wrong = computeFxClose({ ...common, debt: SHORT.rawDebt });
 
   assert.equal(right.partialClose, false, "native units clear the debt outright");
   assert.equal(wrong.partialClose, true, "raw units read as an uncoverable debt");
@@ -124,20 +128,42 @@ test("raw debt where native is wanted releases almost no collateral", () => {
   );
 });
 
+test("the pre--fx.3 field name is refused rather than ignored", () => {
+  // The half the guard does cover: the old key arrives as `undefined`, which
+  // would otherwise compute against a missing debt.
+  assert.throws(
+    () =>
+      computeFxClose({
+        collateral: SHORT.collateral,
+        repayFeeRatio: 0n,
+        withdrawFeeRatio: 0n,
+        railgunUnshieldFeeBps: 25n,
+        availableDebtToken: SHORT.debt,
+        rawDebts: SHORT.debt,
+      } as unknown as Parameters<typeof computeFxClose>[0]),
+    /NATIVE debtToken/,
+  );
+});
+
 test("the close passes native debt, and the pool's own debt token", () => {
   // Guards the two ways this path was long-only: it read `position.rawDebts`
   // (see the control above) and unshielded fxUSD by name, when a short's debt
   // is the volatile asset and on one pool it is 8-decimal.
-  assert.match(close, /rawDebts: position\.debt/);
-  assert.doesNotMatch(close, /rawDebts: position\.rawDebts/);
+  assert.match(close, /debt: position\.debt/);
+  assert.doesNotMatch(close, /position\.rawDebts/);
   assert.match(close, /tokenAddress: pool\.debtToken/);
   assert.match(close, /decimals: pool\.debtDecimals/);
   assert.doesNotMatch(close, /FX_ADDRESSES\.fxUSD/);
 });
 
+test("the close passes the position's native collateral, not its raw", () => {
+  assert.match(close, /collateral: position\.collateralAmount/);
+  assert.doesNotMatch(close, /position\.rawColls/);
+});
+
 test("the withdraw fee is read, not defaulted to zero", () => {
-  // Optional upstream, defaulting to 0n — right for a long, and over-declares
-  // a short's reshielded collateral by the fee, failing the amount accounting.
+  // Required since -fx.3. It was optional before, defaulting to 0n — right for
+  // a long, and over-declaring a short's reshielded collateral by the fee.
   assert.match(close, /withdrawFeeRatio: poolState\.withdrawFeeRatio/);
 });
 
@@ -146,8 +172,9 @@ test("the adjust path repays in the same units and the same token", () => {
     join(SRC, "railgun/transaction/fx/adjust.ts"),
     "utf-8",
   );
-  assert.match(adjust, /rawDebts: position\.debt/);
-  assert.doesNotMatch(adjust, /rawDebts: position\.rawDebts/);
+  assert.match(adjust, /debt: position\.debt/);
+  assert.doesNotMatch(adjust, /position\.rawDebts/);
+  assert.match(adjust, /availableDebtToken: shieldedDebtToken/);
   assert.match(adjust, /tokenAddress: pool\.debtToken/);
   assert.doesNotMatch(adjust, /FX_ADDRESSES\.fxUSD/);
 });

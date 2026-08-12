@@ -76,17 +76,22 @@ test("the position is unshielded in and shielded back — an adjust never burns 
 });
 
 test("the repay is bounded by what survives the unshield fee", () => {
-  const rawDebts = 1_880_030_086_474_238_325_175n;
-  const sent = rawDebts / 2n;
+  const debt = 1_880_030_086_474_238_325_175n;
+  const sent = debt / 2n;
   const a = computeFxRepay({
-    rawDebts,
-    shieldedFxUSD: sent,
+    // Native debt-token units. The cookbook took the raw figure here until
+    // -fx.3; the wallet always passed the native one, so this is a rename.
+    debt,
+    availableDebtToken: sent,
     desiredRepayAmount: sent,
     repayFeeRatio: 0n,
     railgunUnshieldFeeBps: 25n,
   });
-  assert.ok(a.fxUSDAfterUnshield < sent, "the fee reduces what lands");
-  assert.ok(a.repayAmount <= a.fxUSDAfterUnshield, "cannot repay what never arrived");
+  assert.ok(a.debtTokenAfterUnshield < sent, "the fee reduces what lands");
+  assert.ok(
+    a.repayAmount <= a.debtTokenAfterUnshield,
+    "cannot repay what never arrived",
+  );
   assert.match(adjust, /railgunUnshieldFeeBps: fees\.unshield/);
 });
 

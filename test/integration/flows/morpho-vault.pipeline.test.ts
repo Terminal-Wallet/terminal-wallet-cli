@@ -24,6 +24,7 @@ import { useRelayAdapt, isEphemeral7702 } from "../../../src/flows/spec";
 import { requiresProof, requires7702Broadcaster } from "../../../src/flows/caps";
 import {
   SELECTOR,
+  UNGATED_VAULT,
   collectEvents,
   crossContractSpec,
   encode,
@@ -42,6 +43,7 @@ const EXECUTOR = "0x1234567890AbcdEF1234567890aBcdef12345678";
 const buildDepositInputs = async (): Promise<CrossContractInputs> => {
   primeRailgunFees();
   const { provider } = makeFakeProvider({
+    ...UNGATED_VAULT,
     [`${VAULT}:${SELECTOR.asset}`]: encode(["address"], [TOKENS.USDC.address]),
     [`${VAULT}:${SELECTOR.decimals}`]: encode(["uint8"], [18]),
     [`${TOKENS.USDC.address}:${SELECTOR.decimals}`]: encode(["uint8"], [6]),

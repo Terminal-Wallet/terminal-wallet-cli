@@ -11,17 +11,43 @@
  * so a call that several contracts answer — `decimals()` — can be pinned per
  * address where it matters and shared where it does not.
  */
-import { AbiCoder, Provider, TransactionRequest } from "ethers";
+import { AbiCoder, Provider, TransactionRequest, ZeroAddress } from "ethers";
 
 const coder = AbiCoder.defaultAbiCoder();
 
-/** Selectors the vault path reads. */
+/**
+ * Selectors the vault path reads.
+ *
+ * The four `*Gate` reads arrived with cookbook `-fx.3`, which folded the V2
+ * gate check into the recipe itself. A gated V2 vault refuses this wallet's
+ * fresh ephemeral executor outright, so the recipe now asks before building —
+ * which means a fake that does not answer them cannot build a vault recipe at
+ * all.
+ */
 export const SELECTOR = {
   asset: "0x38d52e0f",
   decimals: "0x313ce567",
   previewDeposit: "0xef8b30f7",
   previewRedeem: "0x4cdad506",
+  receiveSharesGate: "0x7e729ac4",
+  sendSharesGate: "0x93ab2ab7",
+  receiveAssetsGate: "0x54cde13e",
+  sendAssetsGate: "0x8eede801",
 } as const;
+
+/**
+ * Canned answers for the four gate reads: every gate unset.
+ *
+ * The zero address is what an ungated vault reports, and it is the only shape
+ * these tests want — a gated vault is a separate case with its own assertions,
+ * not a default the rest of the suite should be built on.
+ */
+export const UNGATED_VAULT: Record<string, string> = {
+  [SELECTOR.receiveSharesGate]: coder.encode(["address"], [ZeroAddress]),
+  [SELECTOR.sendSharesGate]: coder.encode(["address"], [ZeroAddress]),
+  [SELECTOR.receiveAssetsGate]: coder.encode(["address"], [ZeroAddress]),
+  [SELECTOR.sendAssetsGate]: coder.encode(["address"], [ZeroAddress]),
+};
 
 export const encode = (types: string[], values: unknown[]): string =>
   coder.encode(types, values);

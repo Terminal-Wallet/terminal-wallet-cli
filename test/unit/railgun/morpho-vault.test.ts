@@ -17,6 +17,7 @@ import {
 } from "@railgun-community/cookbook";
 import {
   SELECTOR,
+  UNGATED_VAULT,
   encode,
   makeFakeProvider,
   primeRailgunFees,
@@ -32,6 +33,7 @@ const EXPECTED_SHARES = 900_000_000_000_000_000_000n; // 900 shares at 18dp
 
 const vaultProvider = () =>
   makeFakeProvider({
+    ...UNGATED_VAULT,
     [`${VAULT}:${SELECTOR.asset}`]: encode(["address"], [TOKENS.USDC.address]),
     [`${VAULT}:${SELECTOR.decimals}`]: encode(["uint8"], [18]),
     [`${TOKENS.USDC.address}:${SELECTOR.decimals}`]: encode(["uint8"], [6]),
@@ -70,8 +72,20 @@ test("a vault deposit builds with no network beyond the vault's own reads", asyn
   assert.ok(output.crossContractCalls.length > 0, "produces calldata");
   assert.deepEqual(
     [...new Set(calls.map((c) => c.selector))].sort(),
-    [SELECTOR.decimals, SELECTOR.previewDeposit, SELECTOR.asset].sort(),
-    "reads only asset/decimals/previewDeposit",
+    [
+      SELECTOR.decimals,
+      SELECTOR.previewDeposit,
+      SELECTOR.asset,
+      // Since cookbook -fx.3 the recipe asks whether the vault is gated before
+      // it builds, because a gated V2 vault refuses this wallet's fresh
+      // ephemeral executor outright and the batch would mine having done
+      // nothing.
+      SELECTOR.receiveSharesGate,
+      SELECTOR.sendSharesGate,
+      SELECTOR.receiveAssetsGate,
+      SELECTOR.sendAssetsGate,
+    ].sort(),
+    "reads the vault's own state and its gates, and nothing else",
   );
 });
 

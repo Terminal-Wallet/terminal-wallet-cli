@@ -2,12 +2,12 @@
  * Closing an f(x) position — the way out.
  *
  * Unwinding is the mirror of opening: the position NFT is unshielded into the
- * batch, fxUSD is unshielded to repay the debt, the pool hands back collateral,
- * and everything left is shielded again. A full close burns the NFT; a partial
- * one keeps it, so the two differ in whether it comes back.
+ * batch, the debt token is unshielded to repay the debt, the pool hands back
+ * the collateral, and everything left is shielded again. A full close burns the
+ * NFT; a partial one keeps it, so the two differ in whether it comes back.
  *
- * How MUCH can be repaid is not a free choice. It is bounded by the fxUSD the
- * wallet holds, less RAILGUN's unshield fee, less the pool's repay fee — and
+ * How MUCH can be repaid is not a free choice. It is bounded by the debt token
+ * the wallet holds, less RAILGUN's unshield fee, less the pool's repay fee — and
  * the cookbook computes that, because getting it wrong either leaves dust debt
  * or tries to repay more than was unshielded. `computeFxClose` is that
  * calculation, and it is used rather than reimplemented.
@@ -59,7 +59,7 @@ export interface FxMintCloseBuild extends CrossContractInputs {
   steps: RecipeOutput["stepOutputs"];
   pool: ReturnType<typeof resolvePool>;
   positionId: bigint;
-  /** fxUSD the batch will repay. */
+  /** Debt token the batch will repay. */
   repayAmount: bigint;
   /** Collateral the pool will release. */
   withdrawColl: bigint;
@@ -75,23 +75,24 @@ export interface FxMintCloseBuild extends CrossContractInputs {
 /**
  * Build a close for a position the wallet holds.
  *
- * `shieldedFxUSD` is what the wallet can put toward the debt. Passing less than
- * the full debt is how a partial close is asked for — the recipe works out the
- * rest, including whether the position survives.
+ * `shieldedDebtToken` is what the wallet can put toward the debt. Passing less
+ * than the full debt is how a partial close is asked for — the recipe works out
+ * the rest, including whether the position survives.
  *
  * `receiveAs` swaps the released collateral before it is shielded, so the
  * proceeds come back as something other than wstETH or WBTC. Naming the
  * collateral itself is the same as omitting it.
  *
- * Note the asymmetry: the debt is ALWAYS repaid in fxUSD. The cookbook's close
- * combo swaps on the way OUT only, so a wallet holding no fxUSD cannot close a
- * position here regardless of what else it holds.
+ * Note the asymmetry: the debt is ALWAYS repaid in the pool's own debt token —
+ * fxUSD on a long, the volatile asset on a short. The cookbook's close combo
+ * swaps on the way OUT only, so a wallet holding none of that token cannot
+ * close a position here regardless of what else it holds.
  */
 export const getFxMintCloseInputs = async (
   chainName: NetworkName,
   poolRef: FxMintPoolRef,
   positionId: bigint,
-  shieldedFxUSD: bigint,
+  shieldedDebtToken: bigint,
   encryptionKey: string,
   receiveAs?: { tokenAddress: string; decimals: number },
 ): Promise<FxMintCloseBuild> => {
@@ -112,8 +113,8 @@ export const getFxMintCloseInputs = async (
     getFxPool(poolRef, provider),
   ]);
 
-  // The unshield fee is taken off the fxUSD on the way out, so the repay has to
-  // be sized against what actually arrives, not what was sent. Guessing it
+  // The unshield fee is taken off the debt token on the way out, so the repay
+  // has to be sized against what actually arrives, not what was sent. Guessing it
   // would size the repay against money that never turns up, and the batch
   // reverts after the proof is paid for.
   const fees = getRailgunFeeBasisPoints(chainName);
@@ -123,19 +124,17 @@ export const getFxMintCloseInputs = async (
     );
   }
   const amounts = computeFxClose({
-    rawColls: position.rawColls,
-    // `position.debt`, NOT `position.rawDebts`. The field is named for the raw
-    // figure but every amount it is measured against — the shielded balance
-    // above, the `repayAmount` the step spends — is in native debt-token units,
-    // and the two differ by 10^10 on a pool whose debt token is not 18-decimal.
-    // Passing the raw figure would repay the debt and release almost none of
-    // the collateral. They are equal on the long pools, so this is safe there
-    // and correct everywhere.
-    rawDebts: position.debt,
-    collateralBalance: poolState.collateralBalance,
-    totalRawColls: poolState.totalRawColls,
-    shieldedFxUSD,
+    // Both of these are NATIVE token amounts. The cookbook used to take the
+    // position's raw figures here and derive the native ones itself; it now
+    // takes what `getFxPosition` reports directly, which is the same number on
+    // a long and differs by the manager's scaling factor on a short.
+    collateral: position.collateralAmount,
+    debt: position.debt,
+    availableDebtToken: shieldedDebtToken,
     repayFeeRatio: poolState.repayFeeRatio,
+    // Zero on a long and 0.1% on a short. Required rather than defaulted since
+    // -fx.3, because defaulting it silently over-declared a short's collateral.
+    withdrawFeeRatio: poolState.withdrawFeeRatio,
     railgunUnshieldFeeBps: fees.unshield,
   });
 
@@ -147,7 +146,7 @@ export const getFxMintCloseInputs = async (
 
   if (amounts.repayAmount <= 0n) {
     throw new Error(
-      "Not enough shielded fxUSD to repay any of this position's debt.",
+      "Not enough of the debt token is shielded to repay any of this position's debt.",
     );
   }
 
@@ -165,7 +164,7 @@ export const getFxMintCloseInputs = async (
     {
       tokenAddress: pool.debtToken,
       decimals: pool.debtDecimals,
-      amount: shieldedFxUSD,
+      amount: shieldedDebtToken,
     },
   ];
 
@@ -175,8 +174,6 @@ export const getFxMintCloseInputs = async (
     repayAmount: amounts.repayAmount,
     withdrawColl: amounts.withdrawColl,
     approveAmount: amounts.approveAmount,
-    // Defaults to 0n, which is right for a long and over-declares a short's
-    // reshielded collateral by the withdraw fee. Read it rather than defaulted.
     withdrawFeeRatio: poolState.withdrawFeeRatio,
     partialClose: amounts.partialClose,
   };

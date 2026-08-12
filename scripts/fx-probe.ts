@@ -134,8 +134,10 @@ const build = async (
     const output = await recipe.getRecipeOutput(input);
     ok(label, true, `${output.stepOutputs.length} steps, floor ${output.minGasLimit}`);
     // Every fx recipe strictly contains an unshield and a shield, so its floor
-    // cannot legitimately sit below the recipe that only does those two. The
-    // exported constants all satisfy this; two recipes do not use them.
+    // cannot legitimately sit below the recipe that only does those two.
+    // Asserted on BUILT OUTPUT rather than on the exported constants: -fx.2
+    // satisfied the invariant for the constants while two recipes carried
+    // inline literals that did not, and only this shape caught it.
     ok(
       `${label}: floor >= MIN_GAS_LIMIT_EMPTY`,
       output.minGasLimit >= MIN_GAS_LIMIT_EMPTY,
@@ -249,29 +251,38 @@ const tierA = async (): Promise<void> => {
   ok("a zero scaling factor throws rather than dividing by zero", threw);
 
   section("A. OFFLINE — the raw-vs-native trap");
-  // The reason this wallet passes `position.debt` into a field named
-  // `rawDebts`. Same position, same shielded balance, two units.
+  // Same position, same available balance, two units for the debt.
   const shielded = native * 2n;
   const common = {
-    rawColls: 10n ** 21n,
-    collateralBalance: 10n ** 21n,
-    totalRawColls: 10n ** 21n,
+    collateral: 10n ** 21n,
+    availableDebtToken: shielded,
     repayFeeRatio: 0n,
+    withdrawFeeRatio: 0n,
     railgunUnshieldFeeBps: 25n,
-    shieldedFxUSD: shielded,
   };
-  const right = computeFxClose({ ...common, rawDebts: native });
-  const wrong = computeFxClose({ ...common, rawDebts: raw });
+  const right = computeFxClose({ ...common, debt: native });
+  const wrong = computeFxClose({ ...common, debt: raw });
   ok(
     "native units close the position outright",
     right.partialClose === false,
     `withdrawColl ${fmt(right.withdrawColl, 18)}`,
   );
   ok(
-    "raw units strand the collateral (this is the upstream fix)",
-    wrong.partialClose === true && wrong.withdrawColl * 1_000_000n < right.withdrawColl,
+    "raw units still strand the collateral — the guard does NOT catch this",
+    wrong.partialClose === true &&
+      wrong.withdrawColl * 1_000_000n < right.withdrawColl,
     `withdrawColl ${fmt(wrong.withdrawColl, 18)}`,
   );
+  // The migration guard fires on the OLD field name, which arrives as
+  // undefined. That is a rename check, not a units check.
+  let guarded = false;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    computeFxClose({ ...common, rawDebts: native } as any);
+  } catch {
+    guarded = true;
+  }
+  ok("the old `rawDebts` field name is refused with a migration error", guarded);
 
   section("A. OFFLINE — every bare leg, on every pool");
   for (const entry of KNOWN_POOLS) {

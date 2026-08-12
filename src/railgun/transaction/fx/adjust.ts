@@ -12,7 +12,7 @@
  *   topup             more collateral, same debt      unshields collateral
  *   topup + borrow    more collateral, more debt      unshields collateral
  *   borrow more       same collateral, more debt      unshields nothing
- *   repay             same collateral, less debt      unshields fxUSD
+ *   repay             same collateral, less debt      unshields the debt token
  */
 import {
   NetworkName,
@@ -67,7 +67,7 @@ export interface FxMintAdjustBuild extends CrossContractInputs {
   positionId: bigint;
   /** Collateral added, in the pool's collateral token. Zero for debt-only moves. */
   collateralAdded: bigint;
-  /** fxUSD borrowed (positive) or repaid (negative). */
+  /** Debt token borrowed (positive) or repaid (negative). */
   debtDelta: bigint;
   /** Whether a 0x swap into the collateral was folded in. */
   swapped: boolean;
@@ -109,7 +109,7 @@ const buildOutput = async (args: {
   provider: ReturnType<typeof getProviderForChain>;
   executor: ReturnType<typeof makeEphemeralExecutor>;
   swapFrom?: { tokenAddress: string; decimals: number };
-  shieldedFxUSD: bigint;
+  shieldedDebtToken: bigint;
   recipeInput: RecipeInput;
 }): Promise<RecipeOutput> => {
   const {
@@ -122,7 +122,7 @@ const buildOutput = async (args: {
     chainName,
     executor,
     swapFrom,
-    shieldedFxUSD,
+    shieldedDebtToken,
     recipeInput,
   } = args;
   const sellERC20Info = swapFrom && {
@@ -181,16 +181,19 @@ const buildOutput = async (args: {
   }
   const position = await getFxPosition(positionId, poolRef, args.provider);
   const amounts = computeFxRepay({
-    // Native debt units, not raw — see the same call in `close.ts`. The field
-    // name is the cookbook's; the value it wants is `debt`.
-    rawDebts: position.debt,
-    shieldedFxUSD,
-    desiredRepayAmount: shieldedFxUSD,
+    // Native debt-token units, which is what `getFxPosition` reports and what
+    // the repay step spends. Equal to the raw figure on a long; on a short they
+    // differ by the manager's scaling factor.
+    debt: position.debt,
+    availableDebtToken: shieldedDebtToken,
+    desiredRepayAmount: shieldedDebtToken,
     repayFeeRatio,
     railgunUnshieldFeeBps: fees.unshield,
   });
   if (amounts.repayAmount <= 0n) {
-    throw new Error("Not enough shielded fxUSD to repay any of this debt.");
+    throw new Error(
+      "Not enough of the debt token is shielded to repay any of this debt.",
+    );
   }
   return new FxMintRepayDebtRecipe({
     pool: poolRef,
@@ -205,12 +208,13 @@ const buildOutput = async (args: {
  * Adjust a position the wallet holds.
  *
  * `amount` is denominated in whatever the action spends — collateral for a
- * topup, fxUSD for a repay — and is ignored for a borrow-more, which spends
- * nothing. `debtChange` is the fxUSD to borrow, for the two actions that
- * borrow.
+ * topup, the debt token for a repay — and is ignored for a borrow-more, which
+ * spends nothing. `debtChange` is the debt token to borrow, for the two actions
+ * that borrow.
  *
- * `payWith` swaps into the collateral first, for the topups. Repay is always
- * in fxUSD: the debt is denominated in it and no shipped combo swaps into it.
+ * `payWith` swaps into the collateral first, for the topups. A repay is always
+ * in the pool's own debt token: the debt is denominated in it and no shipped
+ * combo swaps into it.
  */
 export const getFxMintAdjustInputs = async (
   chainName: NetworkName,
@@ -283,7 +287,7 @@ export const getFxMintAdjustInputs = async (
     provider,
     executor,
     swapFrom,
-    shieldedFxUSD: amount,
+    shieldedDebtToken: amount,
     recipeInput,
   });
 

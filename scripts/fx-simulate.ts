@@ -269,12 +269,11 @@ const simulatePool = async (
   // NATIVE debt into the field the cookbook names `rawDebts`.
   const shielded = (position.debt * 12n) / 10n; // 20% headroom over the debt
   const amounts = computeFxClose({
-    rawColls: position.rawColls,
-    rawDebts: position.debt,
-    collateralBalance: poolState.collateralBalance,
-    totalRawColls: poolState.totalRawColls,
-    shieldedFxUSD: shielded,
+    collateral: position.collateralAmount,
+    debt: position.debt,
+    availableDebtToken: shielded,
     repayFeeRatio: poolState.repayFeeRatio,
+    withdrawFeeRatio: poolState.withdrawFeeRatio,
     railgunUnshieldFeeBps: 25n,
   });
   ok(
@@ -335,24 +334,12 @@ const simulatePool = async (
     },
   };
 
-  // The control. `operate()` burns the debt token, so without an allowance to
-  // the PoolManager it MUST revert. A node that reports this as fine is not
-  // honouring the overrides, and its verdict on everything else is worthless.
-  const operateCall = calls.find(
-    (c) => c.to.toLowerCase() === pool.poolManager.toLowerCase(),
-  );
-  ok(`${entry.name}: the recipe targets the ${entry.side} manager`, Boolean(operateCall));
-  if (!operateCall) return;
-
-  const control = await call(provider, owner, operateCall, overrides);
-  ok(
-    `${entry.name}: CONTROL — operate without an allowance reverts`,
-    !control.ok,
-    control.ok ? "it did NOT revert; this simulation proves nothing" : "reverted as required",
-  );
-  if (control.ok) return;
-
-  // Now the allowance the approve leg would have set.
+  // The allowance slot is needed BEFORE the control, because the control has to
+  // force the allowance to zero rather than assume it is already zero. These
+  // are real accounts that have really used the pool, so several of them carry
+  // a residual approval — relying on its absence made the control pass for the
+  // wrong reason on the long pools, where the call was reverting for an
+  // unrelated defect instead.
   const allowanceSlot = await findAllowanceSlot(
     provider,
     pool.debtToken,
@@ -367,10 +354,41 @@ const simulatePool = async (
       : `base ${allowanceSlot.slice(0, 12)}…`,
   );
   if (allowanceSlot === undefined) return;
+  const allowanceKey = nestedSlot(owner, pool.poolManager, allowanceSlot);
 
-  (overrides[pool.debtToken] as { stateDiff: Record<string, string> }).stateDiff[
-    nestedSlot(owner, pool.poolManager, allowanceSlot)
-  ] = toBeHex(amounts.approveAmount, 32);
+  const operateCall = calls.find(
+    (c) => c.to.toLowerCase() === pool.poolManager.toLowerCase(),
+  );
+  ok(`${entry.name}: the recipe targets the ${entry.side} manager`, Boolean(operateCall));
+  if (!operateCall) return;
+
+  // The control: with nothing to pay the debt with, `operate()` MUST revert.
+  // A node that reports this as fine is not honouring the overrides, and its
+  // verdict on everything else is worthless.
+  //
+  // The control zeroes the BALANCE, not the allowance. An earlier version
+  // zeroed the allowance and was invalid on the long pools: fxUSD privileges
+  // the PoolManager to burn, so a long close needs no approval at all and the
+  // call succeeded with the allowance at zero. Shorts owe an ordinary ERC20 and
+  // do need one. Balance is the condition both sides share.
+  const stateDiff = (overrides[pool.debtToken] as {
+    stateDiff: Record<string, string>;
+  }).stateDiff;
+  const balanceKey = mapSlot(owner, balanceSlot);
+  stateDiff[balanceKey] = toBeHex(0n, 32);
+  stateDiff[allowanceKey] = toBeHex(0n, 32);
+  const control = await call(provider, owner, operateCall, overrides);
+  ok(
+    `${entry.name}: CONTROL — operate with no debt token reverts`,
+    !control.ok,
+    control.ok ? "it did NOT revert; this simulation proves nothing" : "reverted as required",
+  );
+  if (control.ok) return;
+
+  stateDiff[balanceKey] = toBeHex(shielded, 32);
+
+  // Now the allowance the approve leg would have set.
+  stateDiff[allowanceKey] = toBeHex(amounts.approveAmount, 32);
 
   let total = 0n;
   for (const [index, tx] of calls.entries()) {
