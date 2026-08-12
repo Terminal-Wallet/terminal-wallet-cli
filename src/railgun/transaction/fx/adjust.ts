@@ -21,7 +21,6 @@ import {
   RailgunNFTAmount,
 } from "@railgun-community/shared-models";
 import {
-  FX_ADDRESSES,
   FxMintBorrowMoreRecipe,
   FxMintPoolRef,
   FxMintRepayDebtRecipe,
@@ -83,7 +82,12 @@ const spendTokenFor = (
 ): { tokenAddress: string; decimals: number } | undefined => {
   if (action === "borrow-more") return undefined; // borrowing costs nothing up front
   if (action === "repay") {
-    return { tokenAddress: FX_ADDRESSES.fxUSD, decimals: 18 };
+    // The pool's debt token, not fxUSD by name: a short pool's debt is the
+    // volatile asset, and on one of them it is 8-decimal.
+    return {
+      tokenAddress: pool.debtToken,
+      decimals: Number(pool.debtDecimals),
+    };
   }
   return (
     payWith ?? {
@@ -177,7 +181,9 @@ const buildOutput = async (args: {
   }
   const position = await getFxPosition(positionId, poolRef, args.provider);
   const amounts = computeFxRepay({
-    rawDebts: position.rawDebts,
+    // Native debt units, not raw — see the same call in `close.ts`. The field
+    // name is the cookbook's; the value it wants is `debt`.
+    rawDebts: position.debt,
     shieldedFxUSD,
     desiredRepayAmount: shieldedFxUSD,
     repayFeeRatio,

@@ -230,10 +230,17 @@ const symbolResolver = async (
   const bySymbol = new Map<string, string>(
     balances.map((b) => [b.tokenAddress.toLowerCase(), b.symbol]),
   );
-  bySymbol.set(FX_ADDRESSES.fxUSD.toLowerCase(), "fxUSD");
   for (const pool of KNOWN_POOLS) {
-    bySymbol.set(pool.collateralToken.toLowerCase(), pool.name.split("-")[0]);
+    // The name is "<exposure asset>-<side>", and that asset is the collateral
+    // on a long but the debt on a short — a short deposits fxUSD to borrow it.
+    // Reading `collateralToken` for every pool would relabel fxUSD as "stETH"
+    // and then "WBTC".
+    const exposureToken =
+      pool.side === "short" ? pool.debtToken : pool.collateralToken;
+    bySymbol.set(exposureToken.toLowerCase(), pool.name.split("-")[0]);
   }
+  // Last, so it wins: fxUSD is one token whatever pool is being looked at.
+  bySymbol.set(FX_ADDRESSES.fxUSD.toLowerCase(), "fxUSD");
   return (address: string) => bySymbol.get(address.toLowerCase());
 };
 
@@ -375,6 +382,14 @@ const loadPoolChoices = async (
   const balances = await getPrivateERC20BalancesForChain(chainName);
   const choices: PoolChoice[] = [];
   for (const pool of KNOWN_POOLS) {
+    // Longs only, for now. The cookbook serves both sides off one descriptor
+    // and the write paths follow it, but the risk panel does not: it reads the
+    // debt as 18-decimal dollars and reports "the collateral price at which you
+    // are liquidated". On a short the debt is the volatile asset and the
+    // collateral is the stable one, so that is the wrong axis, not a wrong
+    // label. Offering shorts before it is generalised would put a confidently
+    // wrong liquidation price in front of someone sizing a position.
+    if (pool.side !== "long") continue;
     const held = balances.find(
       (b) => b.tokenAddress.toLowerCase() === pool.collateralToken.toLowerCase(),
     );

@@ -13,6 +13,7 @@ import assert from "node:assert/strict";
 import { NetworkName, NFTTokenType } from "@railgun-community/shared-models";
 import {
   FxMintOpenRecipe,
+  MIN_GAS_LIMIT_FXMINT_OPEN,
   RecipeInput,
   resolvePool,
 } from "@railgun-community/cookbook";
@@ -104,10 +105,17 @@ test("the fx card is registered at all three gates that must agree", async () =>
 
 test("the wallet's floor is above the recipe's unmeasured one", async () => {
   const { output } = await openOutput();
-  // The recipe declares 1.5M, carried over from a pre-7702 version and never
-  // measured under a relay-adapt batch. The wallet holds fx to the floor it
-  // measured for a private swap, which does strictly less work.
-  assert.equal(output.minGasLimit, 1_500_000n, "the recipe's own declared floor");
+  // The recipe's own floor is still an unmeasured figure — re-anchored in
+  // -fx.2 from 1.5M to 3.1M by inference from MIN_GAS_LIMIT_EMPTY, not by
+  // observation. Read it rather than pinned to a number, so a further upstream
+  // re-anchor does not read as a wallet regression; what must hold is the
+  // relationship, because the wallet's floor is the one sized against a
+  // mainnet batch that ran out of gas at the shield.
+  assert.equal(
+    output.minGasLimit,
+    MIN_GAS_LIMIT_FXMINT_OPEN,
+    "the recipe's own declared floor",
+  );
   assert.ok(
     FXMINT_GAS_FLOOR > output.minGasLimit,
     "the wallet floor must override the recipe's",

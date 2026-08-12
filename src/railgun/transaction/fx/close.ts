@@ -19,7 +19,6 @@ import {
   RailgunNFTAmount,
 } from "@railgun-community/shared-models";
 import {
-  FX_ADDRESSES,
   FxMintCloseRecipe,
   FxMintClose_ZeroXSwap_ComboMeal,
   FxMintPoolRef,
@@ -125,7 +124,14 @@ export const getFxMintCloseInputs = async (
   }
   const amounts = computeFxClose({
     rawColls: position.rawColls,
-    rawDebts: position.rawDebts,
+    // `position.debt`, NOT `position.rawDebts`. The field is named for the raw
+    // figure but every amount it is measured against — the shielded balance
+    // above, the `repayAmount` the step spends — is in native debt-token units,
+    // and the two differ by 10^10 on a pool whose debt token is not 18-decimal.
+    // Passing the raw figure would repay the debt and release almost none of
+    // the collateral. They are equal on the long pools, so this is safe there
+    // and correct everywhere.
+    rawDebts: position.debt,
     collateralBalance: poolState.collateralBalance,
     totalRawColls: poolState.totalRawColls,
     shieldedFxUSD,
@@ -152,10 +158,13 @@ export const getFxMintCloseInputs = async (
     amount: 1n,
   };
 
+  // A debt is repaid in the pool's own debt token, which is fxUSD on the long
+  // pools and the volatile asset on the shorts. Read off the descriptor rather
+  // than named, so the wrong token is not unshielded for a pool this predates.
   const relayAdaptUnshieldERC20Amounts: RecipeERC20Amount[] = [
     {
-      tokenAddress: FX_ADDRESSES.fxUSD,
-      decimals: 18n,
+      tokenAddress: pool.debtToken,
+      decimals: pool.debtDecimals,
       amount: shieldedFxUSD,
     },
   ];
@@ -166,6 +175,9 @@ export const getFxMintCloseInputs = async (
     repayAmount: amounts.repayAmount,
     withdrawColl: amounts.withdrawColl,
     approveAmount: amounts.approveAmount,
+    // Defaults to 0n, which is right for a long and over-declares a short's
+    // reshielded collateral by the withdraw fee. Read it rather than defaulted.
+    withdrawFeeRatio: poolState.withdrawFeeRatio,
     partialClose: amounts.partialClose,
   };
   const swapTo = needsSwapLeg(receiveAs?.tokenAddress, pool.collateralToken)

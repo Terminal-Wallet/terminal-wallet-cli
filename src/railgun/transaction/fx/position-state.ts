@@ -12,7 +12,7 @@
  * matters — where is this position now, and where does this action put it.
  */
 import { NetworkName } from "@railgun-community/shared-models";
-import { getFxPool, getFxPosition } from "@railgun-community/cookbook";
+import { KNOWN_POOLS, getFxPool, getFxPosition } from "@railgun-community/cookbook";
 import { getProviderForChain } from "../../network/network-util";
 import { createLogger } from "../../../platform/logger";
 
@@ -85,11 +85,21 @@ export const readFxPositionState = async (
 /**
  * The collateral a pool takes, as a symbol.
  *
- * `FxPoolEntry` carries the collateral's ADDRESS but not its symbol, and the
- * pool name already states it: every known pool is named "<collateral>-<side>"
- * — wstETH-Long, WBTC-Short. Splitting the name avoids a token lookup for a
- * label, and falls back to the whole name rather than to an empty string, so a
- * pool named differently still renders something true.
+ * `FxPoolEntry` carries the collateral's ADDRESS but not its symbol. The pool
+ * name states the asset the position is EXPOSED to — "wstETH-Long",
+ * "WBTC-Short" — and which side of the pool that asset sits on flips: it is the
+ * collateral on a long, and the debt on a short. A short deposits fxUSD and
+ * borrows the volatile asset, so reading the name as the collateral is right
+ * for one side and backwards for the other.
+ *
+ * Falls back to the whole name rather than to an empty string, so a pool this
+ * predates still renders something true.
  */
-export const poolCollateralSymbol = (poolName: string): string =>
-  poolName.split("-")[0] || poolName;
+export const poolCollateralSymbol = (poolName: string): string => {
+  const pool = KNOWN_POOLS.find((entry) => entry.name === poolName);
+  // Every short pool in the set is collateralised in fxUSD; there is no symbol
+  // on the descriptor to read it from, and a token lookup for a label is not
+  // worth a round trip.
+  if (pool?.side === "short") return "fxUSD";
+  return poolName.split("-")[0] || poolName;
+};
