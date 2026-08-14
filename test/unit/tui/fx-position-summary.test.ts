@@ -2,7 +2,7 @@
  * A position, said in one line, and a move said as a step.
  *
  * Figures below are the real mainnet ones read from the wstETH-Long pool:
- * #1980 sits at a 49.15% debt ratio, #1981 at 80.85%, against a rebalance
+ * #4241 sits at a 49.15% debt ratio, #4242 at 80.85%, against a rebalance
  * threshold of 88% and a liquidation threshold of 95%.
  */
 import { test } from "node:test";
@@ -42,7 +42,7 @@ test("a healthy position states both sides and calls itself safe", () => {
 });
 
 test("a position close to the threshold says so before it crosses", () => {
-  // #1981 at 80.85% against a rebalance at 88%. Reporting it as plain "safe"
+  // #4242 at 80.85% against a rebalance at 88%. Reporting it as plain "safe"
   // is true and useless: the point of the screen is to catch it before it is
   // not.
   const line = strip(fxPositionSummary(state({ debtRatio: 808535649149876513n }), "wstETH", fmt));
@@ -224,7 +224,7 @@ test("debt outranks collateral when only one fits", () => {
 });
 
 test("the detail view states both thresholds, not just the ratio", () => {
-  const lines = fxPositionDetailLines("wstETH-Long #1981", near(), "wstETH", fmt).map(strip);
+  const lines = fxPositionDetailLines("wstETH-Long #4242", near(), "wstETH", fmt).map(strip);
   const all = lines.join("\n");
   assert.match(all, /collateral/);
   assert.match(all, /debt/);
@@ -233,7 +233,7 @@ test("the detail view states both thresholds, not just the ratio", () => {
 });
 
 test("a position that could not be read says so in the detail view too", () => {
-  const all = fxPositionDetailLines("wstETH-Long #1981", undefined, "wstETH", fmt)
+  const all = fxPositionDetailLines("wstETH-Long #4242", undefined, "wstETH", fmt)
     .map(strip)
     .join("\n");
   assert.match(all, /could not be read/);

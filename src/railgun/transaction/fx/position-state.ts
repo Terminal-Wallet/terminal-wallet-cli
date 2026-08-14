@@ -7,7 +7,7 @@
  * rebalanced — lives in the PoolManager and has to be read.
  *
  * Without it every management screen asks you to type a number blind: you pick
- * "#1981" from a list of ids, adjust something, and find out what you did
+ * "#4242" from a list of ids, adjust something, and find out what you did
  * afterwards. With it the same screens can answer the only question that
  * matters — where is this position now, and where does this action put it.
  */

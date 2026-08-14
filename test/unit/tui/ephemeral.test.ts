@@ -137,13 +137,13 @@ test("balances list a stranded position", () => {
       nfts: [
         {
           nftAddress: "0xc6de",
-          tokenSubID: "0x7bd",
-          label: "f(x) position #1981",
+          tokenSubID: "0x1092",
+          label: "f(x) position #4242",
         },
       ],
     }),
   ).map(strip);
-  assert.ok(lines.some((l) => l.includes("f(x) position #1981")));
+  assert.ok(lines.some((l) => l.includes("f(x) position #4242")));
 });
 
 test("an account holding only a position is not reported as empty", () => {
@@ -157,8 +157,8 @@ test("an account holding only a position is not reported as empty", () => {
       nfts: [
         {
           nftAddress: "0xc6de",
-          tokenSubID: "0x7bd",
-          label: "f(x) position #1981",
+          tokenSubID: "0x1092",
+          label: "f(x) position #4242",
         },
       ],
     }),

@@ -56,8 +56,8 @@ const weth = {
 
 const position = {
   nftAddress: "0xc6dee5c8ea6ee2b0f3f4d5e3f0e7b8a9c0d1e2f3",
-  tokenSubID: "0x7bd",
-  label: "f(x) position #1981",
+  tokenSubID: "0x1092",
+  label: "f(x) position #4242",
 };
 
 test("newest index first", () => {
@@ -96,7 +96,7 @@ test("a scanned but empty row reads empty", () => {
 });
 
 test("a row holding only a position says so instead of reading empty", () => {
-  // The f(x) mint that stranded position #1981 left the NFT and nothing else
+  // The f(x) mint that stranded position #4242 left the NFT and nothing else
   // recoverable by symbol. `holdsAssets` counts it, so a summary that ignores
   // it prints a row highlighted as holding funds and labelled "empty" — the
   // list contradicting itself about the one asset worth rescuing.
@@ -104,7 +104,7 @@ test("a row holding only a position says so instead of reading empty", () => {
   const [row] = buildIndexRows(35, entries(34), scans);
   assert.equal(holdsAssets(row), true);
   assert.notEqual(assetSummary(row), "empty");
-  assert.match(assetSummary(row), /f\(x\) position #1981/);
+  assert.match(assetSummary(row), /f\(x\) position #4242/);
 });
 
 test("positions are summarised alongside tokens, not instead of them", () => {
@@ -113,7 +113,7 @@ test("positions are summarised alongside tokens, not instead of them", () => {
   const summary = assetSummary(row);
   assert.match(summary, /ETH/);
   assert.match(summary, /WETH/);
-  assert.match(summary, /#1981/);
+  assert.match(summary, /#4242/);
 });
 
 test("a row holding native ETH is flagged", () => {

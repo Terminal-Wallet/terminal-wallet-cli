@@ -88,7 +88,7 @@ export const fxCollateralLine = (
 /**
  * A position in one line, for the picker.
  *
- * The picker used to list ids. Choosing between "#1980" and "#1981" is not a
+ * The picker used to list ids. Choosing between "#4241" and "#4242" is not a
  * choice anyone can make — the whole reason to open this screen is that one of
  * them needs attention, and the id does not say which. Collateral, debt and the
  * ratio do, and the zone word says it without arithmetic.

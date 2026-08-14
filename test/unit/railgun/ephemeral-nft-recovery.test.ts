@@ -42,7 +42,7 @@ test("an account holding only a position is not reported as empty", () => {
     isCurrent: false,
     usedForUnshield: false,
     scan: scan({
-      nfts: [{ nftAddress: "0xpool", tokenSubID: "0x7bd", label: "wstETH-Long #1981" }],
+      nfts: [{ nftAddress: "0xpool", tokenSubID: "0x1092", label: "wstETH-Long #4242" }],
     }),
   };
   assert.equal(holdsAssets(row), true);

@@ -22,7 +22,7 @@ import { FXMINT_GAS_FLOOR } from "../../../src/railgun/transaction/fx/mint";
 import { primeRailgunFees, privateRecipient } from "../../_support";
 
 const POOL = "wstETH-Long";
-const POSITION_ID = 1981n;
+const POSITION_ID = 4242n;
 const COLLATERAL = 2_000_000_000_000_000_000n; // 2 wstETH
 const TARGET_DEBT = 1_000_000_000_000_000_000_000n; // 1,000 fxUSD
 
@@ -64,9 +64,9 @@ test("the position NFT comes out addressed to the pool, at the predicted id", as
   assert.equal(nft.nftAddress, pool.address);
   assert.equal(nft.nftTokenType, NFTTokenType.ERC721);
   assert.equal(nft.amount, 1n, "a position is a single ERC-721, not a balance");
-  // The id is hex, unpadded — 1981 is 0x7bd. A batch built for the wrong id
+  // The id is hex, unpadded — 4242 is 0x1092. A batch built for the wrong id
   // shields an NFT the executor does not own and reverts.
-  assert.equal(nft.tokenSubID, "0x7bd");
+  assert.equal(nft.tokenSubID, "0x1092");
   assert.equal(BigInt(nft.tokenSubID), POSITION_ID);
 });
 
@@ -74,7 +74,7 @@ test("the rename hands the SDK a shield recipient that keeps this wallet", async
   const { output } = await openOutput();
   const [shielded] = toShieldNFTRecipients(output.nftRecipients);
   assert.equal(shielded.recipientAddress, privateRecipient);
-  assert.equal(shielded.tokenSubID, "0x7bd");
+  assert.equal(shielded.tokenSubID, "0x1092");
   assert.equal(shielded.amount, 1n);
 });
 

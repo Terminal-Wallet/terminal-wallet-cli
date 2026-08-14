@@ -1,8 +1,8 @@
 /**
  * The arithmetic behind the position sliders.
  *
- * The fixture is a real mainnet position — wstETH-Long #1980, read from the
- * chain — because the pool computes its own debt ratio and that gives this
+ * The fixture is a real mainnet wstETH-Long position, read from the chain,
+ * because the pool computes its own debt ratio and that gives this
  * something to be wrong against. A formula that merely looks reasonable would
  * pass a test written from the same misunderstanding.
  */
@@ -20,7 +20,7 @@ const REBALANCE = 880_000_000_000_000_000n;
 const LIQUIDATION = 950_000_000_000_000_000n;
 
 /**
- * Position 1980 as the chain reports it.
+ * The position as the chain reports it.
  *
  * `getPositionDebtRatio` is kept as the WAD bigint the pool actually returned —
  * written as a float it has more significant digits than a double holds, so the

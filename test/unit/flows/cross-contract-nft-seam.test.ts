@@ -30,7 +30,7 @@ const crossContract = readFileSync(
 );
 
 const positionNFT = {
-  nftAddress: "0x6Ecfa38FeE8a5277B91eFdA204c235814F0122E8",
+  nftAddress: "0xF1D0F1D0F1D0F1D0F1D0F1D0F1D0F1D0F1D0F1D0",
   tokenSubID: "0x2a",
   nftTokenType: NFTTokenType.ERC721,
   amount: 1n,

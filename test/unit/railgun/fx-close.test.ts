@@ -16,7 +16,7 @@ const SRC = resolve(process.cwd(), "src");
 const close = readFileSync(join(SRC, "railgun/transaction/fx/close.ts"), "utf-8");
 
 /**
- * wstETH-Long #1980, read from mainnet, in NATIVE units.
+ * A wstETH-Long position, read from mainnet, in NATIVE units.
  *
  * Cookbook `-fx.3` takes the position's native collateral and debt directly —
  * what `getFxPosition` reports — rather than the raw figures plus the pool

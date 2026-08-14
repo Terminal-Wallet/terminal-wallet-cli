@@ -27,7 +27,7 @@ const openOutput = async () => {
   const recipe = new FxMintOpenRecipe({
     pool: "wstETH-Long",
     targetDebt: 1000n * 10n ** 18n,
-    predictedPositionId: 1981n,
+    predictedPositionId: 4242n,
     borrowFeeRatio: 0n,
   });
   return recipe.getRecipeOutput({

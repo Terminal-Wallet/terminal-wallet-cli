@@ -21,27 +21,27 @@ import {
 import { describeNFT, describeNFTs, nftTokenId } from "../../../src/railgun/balance/nft-util";
 import { buildPortfolioRows } from "../../../src/tui/format/balances";
 
-const POOL = "0x6Ecfa38FeE8a5277B91eFdA204c235814F0122E8";
+const POOL = "0xF1D0F1D0F1D0F1D0F1D0F1D0F1D0F1D0F1D0F1D0";
 const KNOWN = [{ address: POOL, name: "wstETH-Long", kind: "fx-position" as const }];
 
 const nft = (over = {}) => ({
   nftAddress: POOL,
   nftTokenType: NFTTokenType.ERC721,
-  tokenSubID: "0x7bd",
+  tokenSubID: "0x1092",
   amount: 1n,
   ...over,
 });
 
 test("a position is named by its pool and its id, in decimal", () => {
   const shown = describeNFT(nft(), KNOWN);
-  // The chain stores the id as hex; every protocol UI shows it as 1981.
-  assert.equal(shown.label, "wstETH-Long #1981");
+  // The chain stores the id as hex; every protocol UI shows it as 4242.
+  assert.equal(shown.label, "wstETH-Long #4242");
   assert.equal(shown.kind, "fx-position");
 });
 
 test("an unknown collection still shows something usable", () => {
   const shown = describeNFT(nft({ nftAddress: "0x1234567890abcdef1234567890abcdef12345678" }), KNOWN);
-  assert.match(shown.label, /^0x1234…5678 #1981$/);
+  assert.match(shown.label, /^0x1234…5678 #4242$/);
   assert.equal(shown.kind, undefined, "unrecognised collections are not positions");
 });
 
@@ -64,11 +64,11 @@ const renderers = {
 
 test("positions get their own rail section, not a row among the tokens", () => {
   const rows = buildPortfolioRows([], [], "—", "—", renderers as never, undefined, [
-    { label: "wstETH-Long #1981", amount: "1", kind: "fx-position" },
+    { label: "wstETH-Long #4242", amount: "1", kind: "fx-position" },
   ]);
   const text = rows.map((r) => r.text);
   assert.ok(text.includes("POSITIONS"), "no POSITIONS heading");
-  assert.ok(text.some((t) => t.includes("wstETH-Long #1981")));
+  assert.ok(text.some((t) => t.includes("wstETH-Long #4242")));
   assert.ok(
     text.indexOf("POSITIONS") < text.indexOf("PUBLIC"),
     "positions belong with the private holdings, above PUBLIC",
@@ -83,15 +83,15 @@ test("no positions means no section at all, rather than an empty one", () => {
 test("a position row is not clickable as a token", () => {
   // Seeding a builder from a position would resolve it as a fungible balance.
   const rows = buildPortfolioRows([], [], "—", "—", renderers as never, undefined, [
-    { label: "wstETH-Long #1981", amount: "1" },
+    { label: "wstETH-Long #4242", amount: "1" },
   ]);
-  const row = rows.find((r) => r.text.includes("#1981"));
+  const row = rows.find((r) => r.text.includes("#4242"));
   assert.equal(row?.token, undefined);
 });
 
 test("describeNFTs maps the whole set", () => {
   const all = describeNFTs([nft(), nft({ tokenSubID: "0x1" })], KNOWN);
-  assert.deepEqual(all.map((n) => n.label), ["wstETH-Long #1981", "wstETH-Long #1"]);
+  assert.deepEqual(all.map((n) => n.label), ["wstETH-Long #4242", "wstETH-Long #1"]);
 });
 
 test("the cache replaces the NFT set, so a spent position disappears", async () => {
@@ -117,7 +117,7 @@ test("the cache replaces the NFT set, so a spent position disappears", async () 
   await updatePrivateBalancesForChain(NetworkName.Ethereum, event([nft()]));
   const left = getPrivateNFTsForChain(NetworkName.Ethereum, WALLET);
   assert.equal(left.length, 1);
-  assert.equal(left[0].tokenSubID, "0x7bd");
+  assert.equal(left[0].tokenSubID, "0x1092");
 });
 
 test("a zero-amount NFT is not held", async () => {
@@ -165,7 +165,7 @@ test("another bucket's event does not wipe the positions", async () => {
   );
   const still = getPrivateNFTsForChain(NetworkName.Ethereum, WALLET);
   assert.equal(still.length, 1, "a position held as Spendable survived an empty ShieldPending event");
-  assert.equal(still[0].tokenSubID, "0x7bd");
+  assert.equal(still[0].tokenSubID, "0x1092");
 });
 
 test("a position pending a shield is still shown, and only once", async () => {
@@ -262,7 +262,7 @@ test("positions from both txid versions are shown together, once each", async ()
   assert.equal(held.length, 2, "the same position in both versions is one position");
   assert.deepEqual(
     held.map((n) => n.tokenSubID).sort(),
-    ["0x2", "0x7bd"],
+    ["0x1092", "0x2"],
   );
 });
 
@@ -294,7 +294,7 @@ test("the whole position, detail included, reaches the renderer", () => {
     },
   } as never, undefined, [
     {
-      label: "wstETH-Long #1981",
+      label: "wstETH-Long #4242",
       amount: "1",
       kind: "fx-position",
       detail: "82.1% ▲ near rebal · 0.0002 wstETH · 0.4911 fxUSD",
@@ -326,7 +326,7 @@ test("a two-line position row becomes two list items", () => {
   const rows = buildPortfolioRows([], [], "—", "—", {
     ...renderers,
     nftRow: (n: { label: string }) => `  ${n.label}\n     detail line`,
-  } as never, undefined, [{ label: "wstETH-Long #1981", amount: "1" }]);
+  } as never, undefined, [{ label: "wstETH-Long #4242", amount: "1" }]);
   assert.ok(
     !rows.some((r) => r.text.includes("\n")),
     "a row still carries an embedded newline",

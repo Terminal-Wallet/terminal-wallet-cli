@@ -3,7 +3,7 @@
  *
  * A collection address and a hex token id identify an NFT but describe nothing.
  * The ones this wallet holds are protocol positions — an f(x) pool IS the
- * collection, and the token id IS the position id — so "wstETH-Long #1981" is
+ * collection, and the token id IS the position id — so "wstETH-Long #4242" is
  * both the true name and the one the holder would use.
  *
  * Pure: the recognised collections are passed in rather than read, so this can
