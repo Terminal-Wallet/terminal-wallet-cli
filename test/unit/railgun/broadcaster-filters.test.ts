@@ -1,17 +1,16 @@
 /**
  * Which broadcasters the wallet is allowed to see.
  *
- * The SDK's filter is `!allowlist || allowlist.includes(address)`, so an empty
- * allow list admits everyone and a populated one admits ONLY its members. That
- * makes the allow list a very sharp instrument, and it was being loaded with
- * the wrong thing: `initializeLists(remoteConfig.trustedFeeSigner as string[])`
- * put a single fee-signer address in it, so every other broadcaster was
- * filtered out of existence. A ranked favourite could never become available,
- * because it was never in the list to be found.
+ * The SDK's filter is `!allowlist || allowlist.includes(address)`. That makes
+ * the allow list a very sharp instrument with two failure modes on either side
+ * of it: `undefined` admits every broadcaster on the network, and an empty
+ * ARRAY admits none, because `[]` is truthy and `[].includes(x)` is false.
  *
- * The two are unrelated controls. Fee-signature trust is enforced by the SDK
- * through `broadcasterOptions.trustedFeeSigner`; the address allow list is an
- * operator-level restriction on WHO may be talked to at all.
+ * The policy is that the allow list holds the trusted fee signers, so only
+ * those broadcasters are reachable. Both sides speak the same address space:
+ * the filter runs over fee-cache keys, which are `feeMessageData.railgunAddress`
+ * — the field `trustedFeeSigner` is matched against. A signer address IS a
+ * broadcaster address.
  *
  * These read the source, because reaching the real filter means starting a
  * libp2p mesh.
@@ -27,8 +26,8 @@ const SRC = resolve(process.cwd(), "src");
  * Source with comments stripped.
  *
  * These assertions are about what the code DOES, and the comments here quote
- * the call being asserted against — so reading the raw file finds the bug
- * described in the prose explaining that it was fixed.
+ * the calls being asserted against — so reading the raw file would match prose
+ * describing a rule rather than the code implementing it.
  */
 const read = (rel: string): string =>
   readFileSync(join(SRC, rel), "utf-8")
@@ -50,35 +49,60 @@ const sdkFilter = (
     .filter((a) => !allowlist || allowlist.includes(a))
     .filter((a) => !blocklist || !blocklist.includes(a));
 
-test("CONTROL: an allow list holding one fee signer hides every other broadcaster", () => {
-  // The consequence, shown rather than described. It does not matter whether
-  // the value arrives as a string or an array — both admit exactly one.
+test("an allow list of trusted signers hides every other broadcaster", () => {
+  // The intended consequence, shown rather than described.
   const seen = [TRUSTED_SIGNER, OTHER_BROADCASTER];
-  assert.deepEqual(sdkFilter(seen, TRUSTED_SIGNER, undefined), [TRUSTED_SIGNER]);
   assert.deepEqual(sdkFilter(seen, [TRUSTED_SIGNER], undefined), [TRUSTED_SIGNER]);
+});
+
+test("CONTROL: an undefined allow list admits the whole network", () => {
+  // The fail-OPEN side. This is what an empty configured list would collapse
+  // to, which is why the resolver below must never return one.
+  const seen = [TRUSTED_SIGNER, OTHER_BROADCASTER];
   assert.deepEqual(sdkFilter(seen, undefined, undefined), seen);
 });
 
-test("CONTROL: the trusted fee signer is not used as an address allow list", () => {
-  // The exact call that caused it. If this returns, a favourite that is not the
-  // fee signer can never appear however long the wait is.
+test("CONTROL: an empty-array allow list admits nobody", () => {
+  // The fail-CLOSED side, and the reason `[]` is never a safe seed value: it
+  // is truthy, so it is a restriction to the empty set rather than the absence
+  // of a restriction.
+  const seen = [TRUSTED_SIGNER, OTHER_BROADCASTER];
+  assert.deepEqual(sdkFilter(seen, [], undefined), []);
+});
+
+test("the allow list is loaded with the trusted fee signers", () => {
   const source = read("railgun/waku/connect-waku.ts");
-  assert.ok(
-    !/initializeLists\(\s*remoteConfig\.trustedFeeSigner/.test(source),
-    "the fee signer is being passed as the broadcaster address allow list",
-  );
   assert.match(
     source,
-    /initializeLists\(\[\]/,
-    "boot should start with no address restriction",
+    /initializeLists\(\s*trustedFeeSigners\(\)/,
+    "boot no longer restricts broadcasters to the trusted fee signers",
+  );
+  assert.ok(
+    !/initializeLists\(\[\]/.test(source),
+    "boot starts with no address restriction, admitting every broadcaster",
+  );
+});
+
+test("the resolver falls back to the baked-in signer rather than to nothing", () => {
+  // An unreachable remote config is the case `fallbackRemoteConfig` exists for.
+  // Returning [] there would widen the app from one permitted broadcaster to
+  // every broadcaster on the network, exactly when least is known about them.
+  const source = read("railgun/waku/connect-waku.ts");
+  assert.match(
+    source,
+    /configured\.length > 0 \? configured : \[DEFAULT_TRUSTED_FEE_SIGNER\]/,
+    "the trusted-signer resolver can return an empty list",
   );
 });
 
 test("fee-signature trust is still enforced, through the option that means it", () => {
-  // The point of the fix is that one control replaced the other, not that a
-  // control was removed.
+  // The allow list narrows WHO is reachable; it does not replace the SDK's own
+  // fee-signature check. Both controls stay on.
   const source = read("railgun/waku/connect-waku.ts");
-  assert.match(source, /broadcasterOptions\.trustedFeeSigner = remoteConfig\.trustedFeeSigner/);
+  assert.match(
+    source,
+    /broadcasterOptions\.trustedFeeSigner = remoteConfig\.trustedFeeSigner/,
+  );
 });
 
 test("a config value declared string-or-array is normalized before it is used", () => {
@@ -106,4 +130,31 @@ test("CONTROL: blocking a broadcaster does not clear the allow list", () => {
       `${call} does not set both lists`,
     );
   }
+});
+
+test("CONTROL: the filter mutators do not seed themselves with an empty array", () => {
+  // Seeded with `[]`, blocking one broadcaster before any allow-list mutation
+  // set the allow list to the empty set and hid every broadcaster at once.
+  const source = read("railgun/waku/broadcaster-util.ts");
+  assert.ok(
+    !/let currentAllowList[^=]*=\s*\[\]/.test(source),
+    "the allow list is seeded with [], which admits nobody",
+  );
+  assert.ok(
+    !/let currentBlockList[^=]*=\s*\[\]/.test(source),
+    "the block list is seeded with []",
+  );
+});
+
+test("CONTROL: pushing to a filter does not mutate the base list in place", () => {
+  // `currentAllowList = baseAllowList` followed by `.push()` edits the module's
+  // base list, so resetting the filters restores the mutated list rather than
+  // the configured one.
+  const source = read("railgun/waku/broadcaster-util.ts");
+  assert.ok(
+    !/currentAllowList = baseAllowList;\s*\n\s*\}/.test(source),
+    "the allow list aliases the base list before being pushed to",
+  );
+  assert.match(source, /startFrom\(baseAllowList\)/);
+  assert.match(source, /startFrom\(baseBlockList\)/);
 });
