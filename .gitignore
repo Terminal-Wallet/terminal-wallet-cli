@@ -24,6 +24,8 @@ custom-tmp
 twallet-crash.log
 # local wallet config — carries the operator's own RPC endpoints and keys
 twallet.config.json
+# operator signing keys — never commit, never bundle
+twallet.secrets.json
 
 # Durable diagnostic log — session-local, never committed.
 terminal-wallet.log
