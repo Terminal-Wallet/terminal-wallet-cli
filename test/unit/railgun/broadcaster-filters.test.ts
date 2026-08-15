@@ -74,7 +74,12 @@ test("the allow list is loaded with the trusted fee signers", () => {
   const source = read("railgun/waku/connect-waku.ts");
   assert.match(
     source,
-    /initializeLists\(\s*trustedFeeSigners\(\)/,
+    /const signers = trustedFeeSigners\(\)/,
+    "boot no longer resolves the trusted fee signers",
+  );
+  assert.match(
+    source,
+    /initializeLists\(signers,/,
     "boot no longer restricts broadcasters to the trusted fee signers",
   );
   assert.ok(

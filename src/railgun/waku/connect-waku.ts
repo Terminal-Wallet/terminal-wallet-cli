@@ -4,11 +4,14 @@ import {
   NetworkName,
 } from "@railgun-community/shared-models";
 import { getChainForName, remoteConfig } from "../network/network-util";
+import { createLogger } from "../../platform/logger";
 import {
   WakuBroadcasterClient,
   WakuBroadcasterTransaction,
   BroadcasterOptions,
 } from "../../models/waku-models";
+
+const log = createLogger("waku");
 
 let wakuBroadcasterTransaction: WakuBroadcasterTransaction;
 let wakuLoaded = false;
@@ -126,7 +129,20 @@ export const initWakuClient = async () => {
   // @ts-ignore
   wakuBroadcasterTransaction = waku.BroadcasterTransaction; // as WakuBroadcasterTransaction;
   wakuLoaded = true;
-  initializeLists(trustedFeeSigners(), asList(remoteConfig.blacklist));
+  const signers = trustedFeeSigners();
+  const blocked = asList(remoteConfig.blacklist);
+  // The signer count decides how many broadcasters exist as far as this app is
+  // concerned, and it arrives from an on-chain artifact that is edited by hand.
+  // A publish that dropped four of five, or shipped a bare string where a list
+  // was meant, is otherwise silent until it surfaces much later as "no
+  // broadcasters available for your tokens".
+  const configured = isDefined(remoteConfig.trustedFeeSigner);
+  log.info(
+    `broadcaster allow list: ${signers.length} trusted fee signer(s)` +
+      `${configured ? "" : " (remote config carried none — using the built-in)"}` +
+      `, ${blocked.length} blocked`,
+  );
+  initializeLists(signers, blocked);
 };
 
 export const switchWakuNetwork = async (chainName: NetworkName) => {
