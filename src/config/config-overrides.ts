@@ -124,6 +124,47 @@ export type VersionVerdict =
   | { ok: false; message: string };
 
 /**
+ * Compare two dotted version strings numerically.
+ *
+ * `<` on the strings themselves is lexicographic, which agrees with semver only
+ * while every segment is a single digit. `"2.0.10" < "2.0.9"` is true, so the
+ * tenth patch of a line reads as older than the ninth: the app would report a
+ * newer version was available when it was running it, and a minVersionNumber of
+ * "2.0.9" would lock every 2.0.10 client out with exit 69. That floor is the
+ * operator's kill switch, and it is published on-chain, so the failure would be
+ * both remote and slow to undo.
+ *
+ * Missing segments count as 0, so "2.1" and "2.1.0" are equal.
+ *
+ * A pre-release suffix is dropped, so "2.0.0-rc.1" compares equal to "2.0.0"
+ * rather than either side of it. Splitting on "." first would read "0-rc" and
+ * "1" as two more segments and rank the candidate ABOVE its own release, which
+ * is the one direction that matters here: it would suppress the upgrade prompt
+ * on the build most likely to need it. Semver ranks a pre-release below its
+ * release; this gates a download prompt rather than a package resolver, and
+ * treating them as the same version is close enough to cost only a nag.
+ *
+ * Returns <0 when a is older, 0 when equal, >0 when a is newer.
+ */
+export const compareVersions = (a: string, b: string): number => {
+  const parts = (v: string): number[] =>
+    String(v ?? "")
+      .split("-")[0]
+      .split(".")
+      .map((segment) => {
+        const parsed = Number.parseInt(segment, 10);
+        return Number.isNaN(parsed) ? 0 : parsed;
+      });
+  const left = parts(a);
+  const right = parts(b);
+  for (let i = 0; i < Math.max(left.length, right.length); i += 1) {
+    const diff = (left[i] ?? 0) - (right[i] ?? 0);
+    if (diff !== 0) return diff;
+  }
+  return 0;
+};
+
+/**
  * Compare the running build against the remote config's version floor.
  *
  * Returns a verdict rather than exiting. This is the operator's kill switch for
@@ -134,7 +175,7 @@ export type VersionVerdict =
 export const versionCheck = (version: string): VersionVerdict => {
   log.debug(`version ${version}`);
 
-  if (version < remoteConfig.minVersionNumber) {
+  if (compareVersions(version, remoteConfig.minVersionNumber) < 0) {
     return {
       ok: false,
       message:
@@ -143,7 +184,7 @@ export const versionCheck = (version: string): VersionVerdict => {
         `https://www.terminal-wallet.com`,
     };
   }
-  if (version < remoteConfig.currentVersionNumber) {
+  if (compareVersions(version, remoteConfig.currentVersionNumber) < 0) {
     return {
       ok: true,
       newer:
