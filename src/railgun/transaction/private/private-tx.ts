@@ -18,7 +18,7 @@ import {
   generateTransferProof,
   populateProvedTransfer,
 } from "@railgun-community/wallet";
-import { parseUnits, formatUnits } from "ethers";
+import { formatUnits } from "ethers";
 import { getTokenInfo } from "../../balance/token-util";
 import { getCurrentRailgunID, shouldShowSender } from "../../wallet/wallet-util";
 import { getCurrentNetwork } from "../../engine/engine";
@@ -33,6 +33,7 @@ import {
   getWrappedTokenInfoForChain,
 } from "../../network/network-util";
 import { getFeeDetailsForChain } from "../../gas/gas-util";
+import { tipFloor } from "../../gas/gas-fee";
 import { unbufferGasLimit } from "../../gas/gas-selection";
 import { emitCoreEvent } from "../../../core/events";
 import { createLogger } from "../../../platform/logger";
@@ -51,8 +52,20 @@ export const getOriginalGasDetailsForPrivateTransaction = async (
     }
     const gasPrice = feeData.gasPrice ?? 0n;
     const maxFeePerGas = feeData.maxFeePerGas ?? feeData.gasPrice ?? 0n;
+    // The tip, when the fee source did not supply one.
+    //
+    // Falling back to `maxFeePerGas` offered the whole CEILING as the tip —
+    // which carries BASE_FEE_HEADROOM_PCT of base-fee headroom, so it bid
+    // several times the going rate — and the `parseUnits("1", "gwei")` behind
+    // it was unreachable, `maxFeePerGas` being non-nullable by this point. When
+    // the chain reported no gas price at all it inverted instead, offering a
+    // zero tip that no block will include.
+    //
+    // A ceiling is not a tip. `gasPrice` is base fee plus a small tip, so it
+    // stands in for the base fee here, and `tipFloor` turns it into a tip that
+    // is neither zero nor the whole ceiling.
     const maxPriorityFeePerGas =
-      feeData.maxPriorityFeePerGas ?? maxFeePerGas ?? parseUnits("1", "gwei");
+      feeData.maxPriorityFeePerGas ?? tipFloor(gasPrice);
     let evmGasType;
     let sendWithPublicWallet = false;
     let feeTokenDetails: Optional<FeeTokenDetails>;

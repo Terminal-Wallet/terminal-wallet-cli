@@ -98,16 +98,45 @@ export const REWARD_PERCENTILES = [25, 50, 75];
 export const MIN_PRIORITY_FEE = parseUnits("0.025", "gwei");
 
 /**
+ * The tip floor as a percentage of the current base fee.
+ *
+ * `MIN_PRIORITY_FEE` is an absolute figure calibrated against a 0.062 gwei base
+ * fee, so it stops meaning anything once the chain is busy: at a 30 gwei base
+ * fee it is a floor of one twelve-hundredth of the base fee, which is to say no
+ * floor at all. The percentiles usually rise with the market on their own, but
+ * they are a measure of what OTHER transactions offered, and in a block where
+ * most of them are already stuck the measured tips are low precisely when a
+ * higher one is needed.
+ *
+ * Expressing the floor relative to the base fee keeps it meaningful at both
+ * ends without reintroducing the overpayment the percentiles were lowered to
+ * fix — at the base fee this was calibrated at, the absolute floor still binds.
+ */
+export const TIP_FLOOR_BASE_FEE_PCT = 25n;
+
+/** The larger of the absolute floor and the base-fee-relative one. */
+export const tipFloor = (baseFeePerGas: bigint): bigint => {
+  const scaled = (baseFeePerGas * TIP_FLOOR_BASE_FEE_PCT) / 100n;
+  return scaled > MIN_PRIORITY_FEE ? scaled : MIN_PRIORITY_FEE;
+};
+
+/**
  * The three tiers, from one reward-percentile column per tier. The median
  * across sampled blocks — not the mean, which a few spike blocks drag far
  * above the fee a normal transaction needs.
+ *
+ * `baseFeePerGas` is required rather than defaulted: the floor is the whole
+ * point of this function in quiet conditions, and a caller that omitted the
+ * base fee would silently get the un-scaled floor back.
  */
 export const tiersFromRewards = (
   rewardsPerBlock: bigint[][],
+  baseFeePerGas: bigint,
 ): { slow: bigint; average: bigint; fast: bigint } => {
+  const floor = tipFloor(baseFeePerGas);
   const atPercentile = (index: number): bigint => {
     const column = median(rewardsPerBlock.map((r) => r[index]));
-    return column > MIN_PRIORITY_FEE ? column : MIN_PRIORITY_FEE;
+    return column > floor ? column : floor;
   };
   return {
     slow: atPercentile(0),
@@ -203,6 +232,7 @@ export const getGasEstimates = async (
   );
   const { slow, average, fast } = tiersFromRewards(
     blocks.map((b) => b.priorityFeePerGas),
+    baseFeePerGas,
   );
 
   // The auto-default is the middle tier: the tip a normal transaction pays.
@@ -277,7 +307,8 @@ export type GasFeeTiers = {
   tiers: GasTier[];
 };
 
-// EIP-1559 tiers derived from feeHistory percentiles (60/80/95). maxFee = priority + base.
+// EIP-1559 tiers from the REWARD_PERCENTILES columns of feeHistory, each floored
+// by tipFloor. maxFee = priority + base x BASE_FEE_HEADROOM_PCT.
 export const getGasFeeTiers = async (
   chainName: NetworkName,
 ): Promise<GasFeeTiers> => {

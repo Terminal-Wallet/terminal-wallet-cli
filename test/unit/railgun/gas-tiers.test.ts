@@ -19,11 +19,20 @@ import { parseUnits } from "ethers";
 import {
   MIN_PRIORITY_FEE,
   REWARD_PERCENTILES,
+  TIP_FLOOR_BASE_FEE_PCT,
   maxFeeFor,
+  tipFloor,
   tiersFromRewards,
 } from "../../../src/railgun/gas/gas-fee";
 
 const gwei = (v: string) => parseUnits(v, "gwei");
+
+/**
+ * The base fee the fixtures below were measured at. Low enough that the
+ * absolute floor still binds, so these assertions describe the same quiet-chain
+ * calibration they always did.
+ */
+const FIXTURE_BASE_FEE = gwei("0.062");
 
 /**
  * One row per block, one column per requested percentile. Shaped like the real
@@ -47,14 +56,14 @@ test("the tiers sit below the wallet-default cohort", () => {
 });
 
 test("tiers come out of the measured distribution", () => {
-  const { slow, average, fast } = tiersFromRewards(rewards());
+  const { slow, average, fast } = tiersFromRewards(rewards(), FIXTURE_BASE_FEE);
   assert.equal(average, gwei("0.05"));
   assert.equal(fast, gwei("0.3434"));
   assert.equal(slow, gwei("0.025"), "p25 is below the floor, so the floor applies");
 });
 
 test("the tiers are ordered and distinguishable", () => {
-  const { slow, average, fast } = tiersFromRewards(rewards());
+  const { slow, average, fast } = tiersFromRewards(rewards(), FIXTURE_BASE_FEE);
   assert.ok(slow < average, "slow is not cheaper than average");
   assert.ok(average < fast, "average is not cheaper than fast");
 });
@@ -70,7 +79,7 @@ test("a market below the floor collapses slow into average", () => {
     gwei("0.001"),
     gwei("0.3"),
   ]);
-  const { slow, average, fast } = tiersFromRewards(quiet);
+  const { slow, average, fast } = tiersFromRewards(quiet, FIXTURE_BASE_FEE);
   assert.equal(slow, average, "expected the floor to bind both");
   assert.ok(slow <= average && average <= fast, "ordering broke");
 });
@@ -79,7 +88,7 @@ test("what the old percentiles produced, for contrast", () => {
   // Same blocks, sampled where the tiers used to sample. "Fast" is the 2 gwei
   // default — a fixed price wearing a percentile's clothes — and the default
   // tip is 0.6, which against a 0.062 base fee is a 10x gas price.
-  const { average, fast } = tiersFromRewards(rewardsAtOldPercentiles());
+  const { average, fast } = tiersFromRewards(rewardsAtOldPercentiles(), FIXTURE_BASE_FEE);
   assert.equal(fast, gwei("2.0"));
   assert.equal(average, gwei("0.6"));
   const baseFee = gwei("0.062");
@@ -93,7 +102,7 @@ test("no tier is ever a zero tip", () => {
   // A transaction offering no tip may never be mined, and a percentile can be
   // 0 when most sampled blocks report no tip at it.
   const quiet = Array.from({ length: 40 }, () => [0n, 0n, 0n]);
-  const { slow, average, fast } = tiersFromRewards(quiet);
+  const { slow, average, fast } = tiersFromRewards(quiet, FIXTURE_BASE_FEE);
   assert.equal(slow, MIN_PRIORITY_FEE);
   assert.equal(average, MIN_PRIORITY_FEE);
   assert.equal(fast, MIN_PRIORITY_FEE);
@@ -115,8 +124,73 @@ test("the median across blocks, not the mean", () => {
     ...Array.from({ length: 39 }, () => [gwei("0.01"), gwei("0.02"), gwei("0.03")]),
     [gwei("500"), gwei("500"), gwei("500")], // one MEV block
   ];
-  const { fast } = tiersFromRewards(blocks);
+  const { fast } = tiersFromRewards(blocks, FIXTURE_BASE_FEE);
   assert.equal(fast, gwei("0.03"), "a single spike block moved the tier");
+});
+
+// --- the floor scales with the base fee -------------------------------------
+
+test("at the calibration base fee the absolute floor still binds", () => {
+  // The anti-regression control. Scaling the floor must not disturb the quiet-
+  // chain calibration the percentiles were lowered to achieve: 25% of a 0.062
+  // gwei base fee is 0.0155, below MIN_PRIORITY_FEE, so nothing moves.
+  assert.equal(tipFloor(FIXTURE_BASE_FEE), MIN_PRIORITY_FEE);
+});
+
+test("on a busy chain the floor scales instead", () => {
+  // A 30 gwei base fee makes the absolute floor one twelve-hundredth of the
+  // base fee, which is no floor at all.
+  const busy = gwei("30");
+  assert.equal(tipFloor(busy), (busy * TIP_FLOOR_BASE_FEE_PCT) / 100n);
+  assert.ok(tipFloor(busy) > MIN_PRIORITY_FEE);
+});
+
+test("CONTROL: the absolute floor alone is meaningless once the chain is busy", () => {
+  // What the floor was before it scaled, shown rather than described: the same
+  // 0.025 gwei whether the base fee is 0.062 or 30 gwei.
+  const busy = gwei("30");
+  const ratio = busy / MIN_PRIORITY_FEE;
+  assert.ok(ratio > 1000n, `a floor ${ratio}x below the base fee is not a floor`);
+});
+
+test("the floor is never below the absolute minimum", () => {
+  // Including a chain reporting no base fee at all, where the scaled figure is
+  // zero and a zero tip is never mined.
+  for (const base of [0n, 1n, gwei("0.001"), gwei("0.062"), gwei("30")]) {
+    assert.ok(tipFloor(base) >= MIN_PRIORITY_FEE, `floor collapsed at base ${base}`);
+  }
+});
+
+test("the floor is monotonic in the base fee", () => {
+  // A higher base fee must never produce a lower floor.
+  let previous = 0n;
+  for (const base of [0n, gwei("0.062"), gwei("1"), gwei("30"), gwei("300")]) {
+    const floor = tipFloor(base);
+    assert.ok(floor >= previous, `floor fell from ${previous} to ${floor}`);
+    previous = floor;
+  }
+});
+
+test("a busy chain lifts every tier to the scaled floor", () => {
+  // The failure this fixes: measured tips are low precisely when most of the
+  // block is already stuck, so the percentiles alone quote an unmineable tip.
+  const busy = gwei("30");
+  const stalled = Array.from({ length: 40 }, () => [gwei("0.01"), gwei("0.02"), gwei("0.03")]);
+  const { slow, average, fast } = tiersFromRewards(stalled, busy);
+  const floor = tipFloor(busy);
+  assert.equal(slow, floor);
+  assert.equal(average, floor);
+  assert.equal(fast, floor, "a measured tip below the floor was quoted as-is");
+});
+
+test("a measured tip above the scaled floor is still preferred", () => {
+  // The floor is a floor, not an override — it must not flatten a real market.
+  const busy = gwei("30");
+  const hot = Array.from({ length: 40 }, () => [gwei("8"), gwei("12"), gwei("20")]);
+  const { slow, average, fast } = tiersFromRewards(hot, busy);
+  assert.equal(slow, gwei("8"));
+  assert.equal(average, gwei("12"));
+  assert.equal(fast, gwei("20"));
 });
 
 // --- the ceiling ------------------------------------------------------------
