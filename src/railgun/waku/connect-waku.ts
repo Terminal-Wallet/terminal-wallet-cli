@@ -46,7 +46,15 @@ const asList = (value: string | string[] | undefined): string[] => {
  */
 export const trustedFeeSigners = (): string[] => {
   const configured = asList(remoteConfig.trustedFeeSigner);
-  return configured.length > 0 ? configured : [DEFAULT_TRUSTED_FEE_SIGNER];
+  const signers =
+    configured.length > 0 ? configured : [DEFAULT_TRUSTED_FEE_SIGNER];
+  // Lowercased because the two filters disagree about case. `AddressFilter`
+  // does an exact `includes`, while the SDK's fee-signer check lowercases both
+  // sides — so a config carrying a mixed-case address would pass fee trust and
+  // still match nothing here, removing every broadcaster with no indication
+  // why. 0zk addresses are bech32 and therefore canonically lowercase, which is
+  // what makes normalizing safe rather than merely hopeful.
+  return signers.map((address) => address.toLowerCase());
 };
 
 /**

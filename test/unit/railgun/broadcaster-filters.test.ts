@@ -95,6 +95,27 @@ test("the resolver falls back to the baked-in signer rather than to nothing", ()
   );
 });
 
+test("CONTROL: the two filters disagree about case, so the list is normalized", () => {
+  // AddressFilter does an exact `includes`; the SDK's fee-signer check
+  // lowercases both sides. A config carrying a mixed-case address would pass
+  // fee trust and match nothing here, removing every broadcaster with no
+  // indication why. Shown rather than described:
+  const advertised = TRUSTED_SIGNER; // canonical, lowercase
+  const mixedCase = TRUSTED_SIGNER.toUpperCase();
+  assert.deepEqual(sdkFilter([advertised], [mixedCase], undefined), []);
+  assert.deepEqual(
+    sdkFilter([advertised], [mixedCase.toLowerCase()], undefined),
+    [advertised],
+  );
+
+  const source = read("railgun/waku/connect-waku.ts");
+  assert.match(
+    source,
+    /\.map\(\(address\) => address\.toLowerCase\(\)\)/,
+    "the trusted-signer list is not normalized before it becomes the allow list",
+  );
+});
+
 test("fee-signature trust is still enforced, through the option that means it", () => {
   // The allow list narrows WHO is reachable; it does not replace the SDK's own
   // fee-signature check. Both controls stay on.
