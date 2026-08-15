@@ -34,7 +34,6 @@ import {
 } from "../../network/network-util";
 import { getFeeDetailsForChain } from "../../gas/gas-util";
 import { tipFloor } from "../../gas/gas-fee";
-import { unbufferGasLimit } from "../../gas/gas-selection";
 import { emitCoreEvent } from "../../../core/events";
 import { createLogger } from "../../../platform/logger";
 
@@ -373,11 +372,20 @@ export const getBroadcasterTranaction = async (
   }
   const type4FeeOverrides = is7702Transaction
     ? {
-        // The measured estimate, not the padded limit. The SDK writes
-        // calculateGasLimit(estimate) — estimate x1.2 — onto the transaction, and
-        // quoting a broadcaster on padded gas overprices the fee it charges. The
-        // client requires the field, so it is un-padded rather than omitted.
-        gasLimit: unbufferGasLimit(BigInt(tx.transaction.gasLimit)),
+        // The padded limit the SDK wrote, not the measured estimate behind it.
+        //
+        // This field is the limit the broadcaster SUBMITS with, not a
+        // pricing-only input: the client copies it straight onto the TX7702
+        // request. Sending the un-padded estimate therefore handed the
+        // broadcaster a limit ~17% under what the SDK sized the transaction
+        // for, and it is a relay-adapt cross-contract batch — the case whose
+        // gas varies most — so the estimate alone is what the 1.2x exists to
+        // cover.
+        //
+        // It does cost more: the broadcaster's fee scales with this figure. A
+        // fifth more fee is the price of the transaction executing at all,
+        // against a rejection the user has already paid for a proof to reach.
+        gasLimit: BigInt(tx.transaction.gasLimit),
         maxFeePerGas: tx.transaction.maxFeePerGas,
         maxPriorityFeePerGas: tx.transaction.maxPriorityFeePerGas,
       }

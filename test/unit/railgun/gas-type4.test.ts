@@ -13,7 +13,6 @@ import { EVMGasType, TransactionGasDetails } from "@railgun-community/shared-mod
 import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import {
-  unbufferGasLimit,
   applyOverrideToDetails,
   presetsFromEstimate,
   customOverride,
@@ -109,49 +108,44 @@ test("a custom type-4 entry collects the 1559 pair", () => {
 });
 
 /**
- * The gas figure quoted to a broadcaster.
+ * The gas limit sent to a broadcaster on a 7702 transaction.
  *
- * shared-models' calculateGasLimit multiplies the estimate by 1.2 and the SDK
- * writes that onto the transaction, so the padded limit is the only place the
- * figure survives — the proved transaction does not carry the estimate. A
- * broadcaster quoted on padded gas overprices its fee.
+ * `type4FeeOverrides.gasLimit` is not a pricing-only input: the waku client
+ * copies it straight onto the TX7702 request, so it is the limit the
+ * broadcaster SUBMITS with. shared-models' calculateGasLimit multiplies the
+ * estimate by 1.2 and the SDK writes that onto the transaction; dividing it
+ * back out handed the broadcaster a limit below what the transaction was sized
+ * for, on relay-adapt cross-contract batches, whose gas varies most.
+ *
+ * The fee does scale with this figure. Paying a fifth more is the trade against
+ * a rejection the user has already paid for a proof to reach.
  */
-
-/** What shared-models does: (estimate * 12000n) / 10000n. */
-const pad = (estimate: bigint) => (estimate * 12000n) / 10000n;
-
-test("un-buffering recovers the measured estimate", () => {
-  for (const estimate of [2_100_790n, 1_000_000n, 2_520_949n, 7n]) {
-    const recovered = unbufferGasLimit(pad(estimate));
-    const drift = estimate > recovered ? estimate - recovered : recovered - estimate;
-    assert.ok(drift <= 1n, `${estimate}: recovered ${recovered}`);
-  }
-});
-
-test("it is strictly below the padded limit", () => {
-  const padded = pad(2_100_790n);
-  assert.ok(unbufferGasLimit(padded) < padded);
-});
-
-test("it is about five sixths of the padded limit", () => {
-  // 1 / 1.2. A regression to a different divisor changes what a broadcaster
-  // charges on, so the ratio is asserted rather than the divisor.
-  const padded = 1_200_000n;
-  assert.equal(unbufferGasLimit(padded), 1_000_000n);
-});
-
-test("zero stays zero", () => {
-  assert.equal(unbufferGasLimit(0n), 0n);
-});
-
-test("the broadcaster override sends the un-buffered figure", () => {
-  const source = readFileSync(
+const PRIVATE_TX = () =>
+  readFileSync(
     join(resolve(process.cwd(), "src"), "railgun/transaction/private/private-tx.ts"),
     "utf-8",
   );
-  assert.match(source, /gasLimit: unbufferGasLimit\(/);
+
+test("the broadcaster is sent the padded limit the SDK wrote", () => {
+  assert.match(PRIVATE_TX(), /gasLimit: BigInt\(tx\.transaction\.gasLimit\)/);
+});
+
+test("CONTROL: the limit is not divided back down before sending", () => {
+  // The regression this replaces. Un-padding here is not a discount, it is a
+  // limit the transaction can exceed.
+  const source = PRIVATE_TX();
   assert.ok(
-    !/gasLimit: tx\.transaction\.gasLimit/.test(source),
-    "back to quoting the broadcaster on padded gas",
+    !/gasLimit: unbufferGasLimit\(/.test(source),
+    "back to sending the broadcaster an un-padded gas limit",
   );
+});
+
+test("CONTROL: an un-padded limit is short of what was estimated", () => {
+  // Shown rather than described: 1/1.2 of a padded limit is ~83% of it, so a
+  // batch that needed its full estimate is submitted ~17% short.
+  const estimate = 2_100_790n;
+  const padded = (estimate * 12000n) / 10000n;
+  const unpadded = (padded * 10000n) / 12000n;
+  assert.ok(unpadded < padded);
+  assert.ok((unpadded * 100n) / padded <= 84n, "the shortfall is not material");
 });
