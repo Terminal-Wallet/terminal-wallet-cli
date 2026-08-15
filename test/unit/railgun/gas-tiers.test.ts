@@ -203,20 +203,51 @@ test("the max fee leaves room for the base fee to rise", () => {
   const tip = gwei("0.02");
   const ceiling = maxFeeFor(tip, base);
   assert.ok(ceiling > tip + base, "no headroom at all");
-  assert.equal(ceiling, tip + base * 2n);
+  assert.equal(ceiling, tip + base * 3n);
 });
 
-test("headroom survives several full blocks", () => {
-  // Base fee rises at most 12.5% per block. The ceiling should still cover it
-  // after a realistic proof-generation delay.
-  const base = gwei("0.088");
-  const ceiling = maxFeeFor(gwei("0.02"), base);
+/** Base fee after n consecutive FULL blocks, which is the 12.5%/block cap. */
+const afterFullBlocks = (base: bigint, blocks: number): bigint => {
   let risen = base;
-  for (let block = 0; block < 5; block += 1) risen = (risen * 1125n) / 1000n;
+  for (let block = 0; block < blocks; block += 1) risen = (risen * 1125n) / 1000n;
+  return risen;
+};
+
+test("headroom outlasts a slow 7702 proof", () => {
+  // The regression this replaces. A cross-contract relay-adapt proof regularly
+  // runs past 89 seconds, which is all the old 2x bought once the broadcaster's
+  // 1.2x gas-limit padding is taken into account — so the ceiling went
+  // underwater while proving and the send was refused after the user had paid
+  // to generate the proof.
+  //
+  // 10 blocks is ~120s at 12s blocks.
+  const base = gwei("0.088");
+  const tip = gwei("0.02");
+  const covered = (maxFeeFor(tip, base) * 12n) / 10n; // the broadcaster's padding
+  const risen = afterFullBlocks(base, 10);
   assert.ok(
-    ceiling > risen,
-    `ceiling ${ceiling} does not cover a base fee of ${risen} five full blocks later`,
+    covered > risen,
+    `ceiling ${covered} does not cover a base fee of ${risen} ten full blocks later`,
   );
+});
+
+test("CONTROL: 2x headroom would not have survived that", () => {
+  // Shown rather than described: the same ten blocks against the old constant.
+  const base = gwei("0.088");
+  const tip = gwei("0.02");
+  const oldCeiling = ((tip + base * 2n) * 12n) / 10n;
+  assert.ok(
+    oldCeiling < afterFullBlocks(base, 10),
+    "the old headroom already covered ten full blocks, so it was not the cause",
+  );
+});
+
+test("headroom is bounded — it is not a blank cheque", () => {
+  // The fee scales linearly with this, so a runaway multiplier is a permanent
+  // premium paid on every relayed send.
+  const base = gwei("1");
+  const ceiling = maxFeeFor(0n, base);
+  assert.ok(ceiling <= base * 4n, "headroom grew past 4x; the fee scales with it");
 });
 
 test("the ceiling is not a price", () => {

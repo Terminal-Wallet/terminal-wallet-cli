@@ -33,7 +33,7 @@ import {
   getWrappedTokenInfoForChain,
 } from "../../network/network-util";
 import { getFeeDetailsForChain } from "../../gas/gas-util";
-import { tipFloor } from "../../gas/gas-fee";
+import { tipFloor, getGasEstimates } from "../../gas/gas-fee";
 import { emitCoreEvent } from "../../../core/events";
 import { createLogger } from "../../../platform/logger";
 
@@ -390,6 +390,35 @@ export const getBroadcasterTranaction = async (
         maxPriorityFeePerGas: tx.transaction.maxPriorityFeePerGas,
       }
     : undefined;
+  // The submitted fee fields, against the base fee AS OF NOW rather than as of
+  // the estimate. Everything above is decided before proving; this is the first
+  // point at which the delay proving cost is observable, and a ceiling that no
+  // longer clears the base fee is refused by the broadcaster with an error that
+  // does not say which of the two figures was wrong.
+  if (is7702Transaction) {
+    try {
+      const { baseFeePerGas } = await getGasEstimates(networkName);
+      const ceiling = BigInt(tx.transaction.maxFeePerGas ?? 0n);
+      const tip = BigInt(tx.transaction.maxPriorityFeePerGas ?? 0n);
+      const line =
+        `7702 submit: gasLimit=${BigInt(tx.transaction.gasLimit)} ` +
+        `maxFee=${formatUnits(ceiling, "gwei")}gwei ` +
+        `tip=${formatUnits(tip, "gwei")}gwei ` +
+        `baseFee(now)=${formatUnits(baseFeePerGas, "gwei")}gwei`;
+      if (ceiling < baseFeePerGas + tip) {
+        log.warn(
+          `${line} — CEILING IS UNDER base+tip; the broadcaster will refuse ` +
+            `this. The base fee rose while the proof was generated.`,
+        );
+      } else {
+        log.info(line);
+      }
+    } catch (err) {
+      // Diagnostics must never be why a send fails.
+      log.debug(`7702 submit: could not read the current base fee (${String(err)})`);
+    }
+  }
+
   const overallBatchMinGasPrice = is7702Transaction
     ? 0n
     : tx.transaction.gasPrice;
