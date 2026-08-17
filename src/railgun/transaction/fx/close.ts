@@ -178,7 +178,7 @@ export const getFxMintCloseInputs = async (
   // nothing and the inflation dominates it. Cap the withdrawal so the residual
   // stays inside the pool's range. A full close is sent as the pool's own
   // sentinel and leaves no residual, so it is left alone.
-  let withdrawColl = amounts.withdrawColl;
+  let { withdrawColl } = amounts;
   if (amounts.partialClose) {
     const [minRatio, maxRatio] = await new Contract(
       pool.address,
@@ -205,7 +205,7 @@ export const getFxMintCloseInputs = async (
           `as collateral in the position.`,
       );
     }
-    withdrawColl = guard.withdrawColl;
+    ({ withdrawColl } = guard);
   }
 
   const fxOpts = {
