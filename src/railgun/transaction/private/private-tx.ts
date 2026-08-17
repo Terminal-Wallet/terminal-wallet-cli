@@ -34,6 +34,7 @@ import {
 } from "../../network/network-util";
 import { getFeeDetailsForChain } from "../../gas/gas-util";
 import { tipFloor, getGasEstimates } from "../../gas/gas-fee";
+import { unbufferGasLimit } from "../../gas/gas-selection";
 import { emitCoreEvent } from "../../../core/events";
 import { createLogger } from "../../../platform/logger";
 
@@ -372,20 +373,22 @@ export const getBroadcasterTranaction = async (
   }
   const type4FeeOverrides = is7702Transaction
     ? {
-        // The padded limit the SDK wrote, not the measured estimate behind it.
+        // The measured estimate, not the padded limit the SDK wrote.
         //
-        // This field is the limit the broadcaster SUBMITS with, not a
-        // pricing-only input: the client copies it straight onto the TX7702
-        // request. Sending the un-padded estimate therefore handed the
-        // broadcaster a limit ~17% under what the SDK sized the transaction
-        // for, and it is a relay-adapt cross-contract batch — the case whose
-        // gas varies most — so the estimate alone is what the 1.2x exists to
-        // cover.
+        // The broadcaster applies calculateGasLimit's 1.2x itself before
+        // submitting, so this is the figure it pads rather than the figure it
+        // submits. Forwarding the already-padded limit compounds to 1.44x,
+        // while the fee committed inside the proof —
+        // `feePerUnitGas x calculateGasLimit(gasEstimate) x maxFeePerGas` —
+        // only ever covers 1.2x. That asks a broadcaster to submit with more
+        // gas than it was paid for, which it is entitled to refuse.
         //
-        // It does cost more: the broadcaster's fee scales with this figure. A
-        // fifth more fee is the price of the transaction executing at all,
-        // against a rejection the user has already paid for a proof to reach.
-        gasLimit: BigInt(tx.transaction.gasLimit),
+        // Measured on two mainnet sends: against the un-padded estimate, gas
+        // used came to 95.3% and 98.5% of it. Against the padded one it would
+        // read as 79.4% and 82.1%, which would make the SDK's estimator
+        // systematically 20% loose for no reason. The tighter figure is the
+        // real one, and it is what the broadcaster is padding.
+        gasLimit: unbufferGasLimit(BigInt(tx.transaction.gasLimit)),
         maxFeePerGas: tx.transaction.maxFeePerGas,
         maxPriorityFeePerGas: tx.transaction.maxPriorityFeePerGas,
       }

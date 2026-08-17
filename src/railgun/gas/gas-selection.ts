@@ -146,3 +146,25 @@ export const applyOverrideToTx = <
   return copy as T;
 };
 
+/** The 20% headroom shared-models adds in calculateGasLimit. */
+const GAS_LIMIT_BUFFER_BPS = 12_000n;
+const BPS = 10_000n;
+
+/**
+ * The gas estimate behind a populated gas limit.
+ *
+ * `calculateGasLimit` multiplies the estimate by 1.2 and the SDK writes that
+ * onto the transaction, so the populated limit is the only place the figure
+ * survives — the proved transaction does not carry the estimate itself.
+ *
+ * A broadcaster is quoted the estimate, not the limit, because it applies that
+ * same 1.2x itself before submitting. Forwarding the already-padded figure
+ * compounds to 1.44x, and the broadcaster fee — committed inside the proof as
+ * `feePerUnitGas x calculateGasLimit(gasEstimate) x maxFeePerGas` — only ever
+ * covers 1.2x. So the padded figure asks a broadcaster to submit with more gas
+ * than it was paid for, which it is entitled to refuse.
+ *
+ * Integer division, so the result can be one wei of gas below the original.
+ */
+export const unbufferGasLimit = (populated: bigint): bigint =>
+  (populated * BPS) / GAS_LIMIT_BUFFER_BPS;

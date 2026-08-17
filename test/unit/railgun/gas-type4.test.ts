@@ -13,6 +13,7 @@ import { EVMGasType, TransactionGasDetails } from "@railgun-community/shared-mod
 import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import {
+  unbufferGasLimit,
   applyOverrideToDetails,
   presetsFromEstimate,
   customOverride,
@@ -108,44 +109,75 @@ test("a custom type-4 entry collects the 1559 pair", () => {
 });
 
 /**
- * The gas limit sent to a broadcaster on a 7702 transaction.
+ * The gas figure quoted to a broadcaster on a 7702 transaction.
  *
- * `type4FeeOverrides.gasLimit` is not a pricing-only input: the waku client
- * copies it straight onto the TX7702 request, so it is the limit the
- * broadcaster SUBMITS with. shared-models' calculateGasLimit multiplies the
- * estimate by 1.2 and the SDK writes that onto the transaction; dividing it
- * back out handed the broadcaster a limit below what the transaction was sized
- * for, on relay-adapt cross-contract batches, whose gas varies most.
- *
- * The fee does scale with this figure. Paying a fifth more is the trade against
- * a rejection the user has already paid for a proof to reach.
+ * The broadcaster applies calculateGasLimit's 1.2x itself before submitting,
+ * so `type4FeeOverrides.gasLimit` is the figure it PADS, not the figure it
+ * submits. shared-models writes the already-padded limit onto the transaction,
+ * so forwarding that compounds to 1.44x — while the fee committed inside the
+ * proof, `feePerUnitGas x calculateGasLimit(gasEstimate) x maxFeePerGas`, only
+ * ever covers 1.2x. The padded figure therefore asks a broadcaster to submit
+ * with more gas than it was paid for.
  */
+
+/** What shared-models does: (estimate * 12000n) / 10000n. */
+const pad = (estimate: bigint) => (estimate * 12000n) / 10000n;
+
 const PRIVATE_TX = () =>
   readFileSync(
     join(resolve(process.cwd(), "src"), "railgun/transaction/private/private-tx.ts"),
     "utf-8",
   );
 
-test("the broadcaster is sent the padded limit the SDK wrote", () => {
-  assert.match(PRIVATE_TX(), /gasLimit: BigInt\(tx\.transaction\.gasLimit\)/);
+test("un-buffering recovers the measured estimate", () => {
+  for (const estimate of [2_100_790n, 1_000_000n, 2_520_949n, 7n]) {
+    const recovered = unbufferGasLimit(pad(estimate));
+    const drift = estimate > recovered ? estimate - recovered : recovered - estimate;
+    assert.ok(drift <= 1n, `${estimate}: recovered ${recovered}`);
+  }
 });
 
-test("CONTROL: the limit is not divided back down before sending", () => {
-  // The regression this replaces. Un-padding here is not a discount, it is a
-  // limit the transaction can exceed.
-  const source = PRIVATE_TX();
+test("it is about five sixths of the padded limit", () => {
+  // 1 / 1.2. A regression to a different divisor changes what the broadcaster
+  // pads, so the ratio is asserted rather than the divisor.
+  assert.equal(unbufferGasLimit(1_200_000n), 1_000_000n);
+});
+
+test("zero stays zero", () => {
+  assert.equal(unbufferGasLimit(0n), 0n);
+});
+
+test("the broadcaster override sends the un-buffered figure", () => {
+  assert.match(PRIVATE_TX(), /gasLimit: unbufferGasLimit\(/);
+});
+
+test("CONTROL: the padded limit is not forwarded as-is", () => {
   assert.ok(
-    !/gasLimit: unbufferGasLimit\(/.test(source),
-    "back to sending the broadcaster an un-padded gas limit",
+    !/gasLimit: BigInt\(tx\.transaction\.gasLimit\)/.test(PRIVATE_TX()),
+    "back to quoting the broadcaster on already-padded gas",
   );
 });
 
-test("CONTROL: an un-padded limit is short of what was estimated", () => {
-  // Shown rather than described: 1/1.2 of a padded limit is ~83% of it, so a
-  // batch that needed its full estimate is submitted ~17% short.
+test("CONTROL: forwarding the padded limit compounds past what the fee covers", () => {
+  // The broadcaster pads whatever it is given. Handed the padded limit it
+  // submits at 1.44x, while the committed fee only ever covers 1.2x.
   const estimate = 2_100_790n;
-  const padded = (estimate * 12000n) / 10000n;
-  const unpadded = (padded * 10000n) / 12000n;
-  assert.ok(unpadded < padded);
-  assert.ok((unpadded * 100n) / padded <= 84n, "the shortfall is not material");
+  const covered = pad(estimate); // what the fee was computed on
+  const ifForwarded = pad(pad(estimate)); // what the broadcaster would submit
+  assert.ok(ifForwarded > covered, "forwarding the padded limit is free");
+  // In basis points, so integer division does not round the answer away:
+  // 1.2 x 1.2 = 1.44, and the floors cost a few hundredths of a bp.
+  const bps = (ifForwarded * 10_000n) / estimate;
+  assert.ok(bps >= 14_390n && bps <= 14_400n, `expected ~1.44x, got ${bps} bps`);
+});
+
+test("quoting the estimate lands the submission exactly on the covered figure", () => {
+  // Sending the estimate, the broadcaster's own 1.2x reproduces precisely the
+  // gas limit the proof-committed fee was priced for.
+  const estimate = 2_100_790n;
+  const quoted = unbufferGasLimit(pad(estimate));
+  const submitted = pad(quoted);
+  const covered = pad(estimate);
+  const drift = submitted > covered ? submitted - covered : covered - submitted;
+  assert.ok(drift <= 2n, `submitted ${submitted} vs covered ${covered}`);
 });
