@@ -18,7 +18,9 @@ import {
   RailgunERC20Recipient,
   RailgunNFTAmount,
 } from "@railgun-community/shared-models";
+import { Contract } from "ethers";
 import {
+  FX_POOL_RATIO_ABI,
   FxMintCloseRecipe,
   FxMintClose_ZeroXSwap_ComboMeal,
   FxMintPoolRef,
@@ -46,6 +48,7 @@ import {
   isFxSupportedNetwork,
 } from "./mint";
 import { needsSwapLeg } from "../morpho/vault";
+import { capWithdrawForDebtRatio } from "./close-guard";
 import { createLogger } from "../../../platform/logger";
 
 const log = createLogger("fxmint-close");
@@ -168,11 +171,48 @@ export const getFxMintCloseInputs = async (
     },
   ];
 
+  // A partial close leaves a residual position, and the pool checks ITS debt
+  // ratio. The proportional withdrawal above is sized in native collateral and
+  // arrives at the pool converted to raw, slightly inflated — negligible until
+  // the residual is small, at which point the ratio is computed over almost
+  // nothing and the inflation dominates it. Cap the withdrawal so the residual
+  // stays inside the pool's range. A full close is sent as the pool's own
+  // sentinel and leaves no residual, so it is left alone.
+  let withdrawColl = amounts.withdrawColl;
+  if (amounts.partialClose) {
+    const [minRatio, maxRatio] = await new Contract(
+      pool.address,
+      FX_POOL_RATIO_ABI,
+      provider,
+    ).getDebtRatioRange();
+    void minRatio;
+    const guard = capWithdrawForDebtRatio({
+      rawColls: position.rawColls,
+      rawDebts: position.rawDebts,
+      debt: position.debt,
+      collateralAmount: position.collateralAmount,
+      debtRatio: position.debtRatio,
+      maxRatio,
+      repayAmount: amounts.repayAmount,
+      withdrawColl: amounts.withdrawColl,
+    });
+    if (guard.clamped) {
+      log.warn(
+        `close ${positionId}: proportional withdraw ${amounts.withdrawColl} would ` +
+          `leave a debt ratio of ${guard.projectedRatio} against a maximum of ` +
+          `${maxRatio}; withdrawing ${guard.withdrawColl} instead to land near ` +
+          `${guard.targetRatio}. The repay is unchanged — the difference stays ` +
+          `as collateral in the position.`,
+      );
+    }
+    withdrawColl = guard.withdrawColl;
+  }
+
   const fxOpts = {
     pool: poolRef,
     positionId,
     repayAmount: amounts.repayAmount,
-    withdrawColl: amounts.withdrawColl,
+    withdrawColl,
     approveAmount: amounts.approveAmount,
     withdrawFeeRatio: poolState.withdrawFeeRatio,
     partialClose: amounts.partialClose,

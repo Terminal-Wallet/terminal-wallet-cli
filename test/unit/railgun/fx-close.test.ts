@@ -145,20 +145,47 @@ test("the pre--fx.3 field name is refused rather than ignored", () => {
   );
 });
 
+/**
+ * The arguments to `computeFxClose` alone.
+ *
+ * The rule these guard is about what the SIZING is given, not about the file
+ * mentioning raw units anywhere. The debt-ratio guard legitimately reads
+ * `position.rawColls` / `rawDebts`, because the pool's own ratio check is in
+ * raw units — so asserting over the whole file would forbid a correct use.
+ */
+const computeFxCloseArgs = (): string => {
+  const at = close.indexOf("computeFxClose({");
+  assert.ok(at >= 0, "computeFxClose call not found");
+  const end = close.indexOf("});", at);
+  assert.ok(end > at, "computeFxClose call is not closed");
+  return close.slice(at, end);
+};
+
 test("the close passes native debt, and the pool's own debt token", () => {
   // Guards the two ways this path was long-only: it read `position.rawDebts`
   // (see the control above) and unshielded fxUSD by name, when a short's debt
   // is the volatile asset and on one pool it is 8-decimal.
-  assert.match(close, /debt: position\.debt/);
-  assert.doesNotMatch(close, /position\.rawDebts/);
+  const args = computeFxCloseArgs();
+  assert.match(args, /debt: position\.debt/);
+  assert.doesNotMatch(args, /position\.rawDebts/);
   assert.match(close, /tokenAddress: pool\.debtToken/);
   assert.match(close, /decimals: pool\.debtDecimals/);
   assert.doesNotMatch(close, /FX_ADDRESSES\.fxUSD/);
 });
 
 test("the close passes the position's native collateral, not its raw", () => {
-  assert.match(close, /collateral: position\.collateralAmount/);
-  assert.doesNotMatch(close, /position\.rawColls/);
+  const args = computeFxCloseArgs();
+  assert.match(args, /collateral: position\.collateralAmount/);
+  assert.doesNotMatch(args, /position\.rawColls/);
+});
+
+test("a partial close is capped against the pool's debt-ratio range", () => {
+  // The residual position has a ratio the pool checks, and a near-total close
+  // makes it tiny enough that conversion rounding dominates it.
+  assert.match(close, /capWithdrawForDebtRatio\(/);
+  assert.match(close, /getDebtRatioRange\(\)/);
+  // The repay is what the unshielded tokens are for; only the withdrawal moves.
+  assert.match(close, /repayAmount: amounts\.repayAmount/);
 });
 
 test("the withdraw fee is read, not defaulted to zero", () => {
