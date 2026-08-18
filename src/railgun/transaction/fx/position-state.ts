@@ -37,6 +37,48 @@ export interface FxPositionState {
 }
 
 /**
+ * How much of a position is left.
+ *
+ * - `live`   — a position with a meaningful amount in it
+ * - `dust`   — still OPEN, with debt still accruing, but too small to render
+ * - `empty`  — no collateral: burnt, or an id that never existed
+ *
+ * `dust` exists because a partial close that repays almost everything leaves a
+ * residue, and a residue is not a closed position. The debt keeps accruing and
+ * the position can still be liquidated, so it must not read as finished — but
+ * it also must not read as an ordinary holding, because every figure on the row
+ * rounds to zero and the row looks broken.
+ *
+ * Scale-free on purpose. A currency threshold would need a price and a guess at
+ * what "small" means for a protocol whose positions range over several orders
+ * of magnitude. The honest definition is the one the screen already implies:
+ * if the amount cannot be shown at the precision the wallet renders, the wallet
+ * cannot tell the user anything useful about its size.
+ */
+export type FxPositionScale = "live" | "dust" | "empty";
+
+/** Decimal places the position rows render collateral at. */
+export const FX_POSITION_DP = 4n;
+
+export const fxPositionScale = (
+  state: Pick<FxPositionState, "collateralAmount" | "collateralDecimals">,
+): FxPositionScale => {
+  const { collateralAmount, collateralDecimals } = state;
+  if (collateralAmount <= 0n) return "empty";
+  // Does it survive rounding to FX_POSITION_DP places?
+  const shown =
+    (collateralAmount * 10n ** FX_POSITION_DP) /
+    10n ** BigInt(collateralDecimals);
+  return shown === 0n ? "dust" : "live";
+};
+
+/** A dust position is still open, and saying otherwise is the dangerous read. */
+export const fxScaleNote = (scale: FxPositionScale): string =>
+  scale === "dust"
+    ? "residual position — too small to show, still open and still accruing debt"
+    : "";
+
+/**
  * Read one position.
  *
  * Returns undefined rather than throwing: a management screen that cannot read

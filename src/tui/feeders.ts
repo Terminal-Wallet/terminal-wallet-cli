@@ -27,6 +27,8 @@ import { fxPositionCollections } from "../railgun/transaction/fx/position";
 import {
   poolCollateralSymbol,
   readFxPositionState,
+  fxPositionScale,
+  fxScaleNote,
 } from "../railgun/transaction/fx/position-state";
 import { fxPositionSummary, fxPositionDetailLines } from "./format/fx-position";
 import { LEFT_W } from "./layout";
@@ -172,13 +174,23 @@ export const createFeeders = (render: () => void): Feeders => {
       ).catch(() => undefined);
       const symbol = poolCollateralSymbol(pool.name);
       const fmt = (a: bigint, d: number) => fmtAmount(formatUnits(a, d), 4);
+      // A residue left by a near-total close is still an open position with
+      // debt accruing on it, but every figure on the row rounds to zero. Say
+      // which it is, so it reads as neither finished nor broken.
+      const scale = state ? fxPositionScale(state) : undefined;
+      const marks = [
+        ...(scale === "dust" ? ["residual"] : []),
+        ...(poi ? [poi.text] : []),
+      ];
       return {
         ...base,
+        label: marks.length ? `${nft.label}  (${marks.join(" · ")})` : nft.label,
         // The rail is 44 cells wide and the row is indented, so it gets what
         // fits; the full picture is a click away rather than chopped in half.
         detail: fxPositionSummary(state, symbol, fmt, RAIL_DETAIL_W),
         detailLines: [
           ...fxPositionDetailLines(nft.label, state, symbol, fmt),
+          ...(scale ? [fxScaleNote(scale)] : []).filter(Boolean),
           ...(poi ? [poi.note] : []),
         ],
       };
