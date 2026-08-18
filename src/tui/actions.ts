@@ -51,6 +51,12 @@ export const buildActions = (baseSymbol: string): MenuAction[] => [
   { id: "fx-mint-open", label: "Mint fxUSD", hint: "on collateral", group: "f(x)" },
   { id: "fx-mint-manage", label: "Manage", hint: "top up / repay", group: "f(x)" },
   { id: "fx-mint-close", label: "Close", hint: "repay, unwind", group: "f(x)" },
+  {
+    id: "fx-mint-dust-close",
+    label: "Close fully",
+    hint: "sell to cover",
+    group: "f(x)",
+  },
 
   { id: "activity", label: "Activity / History", group: "Utilities" },
   { id: "wallet-tools", label: "Wallet Tools", group: "Utilities" },

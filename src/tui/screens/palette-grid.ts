@@ -46,6 +46,7 @@ const OPENABLE = new Set([
   "fx-mint-open",
   "fx-mint-manage",
   "fx-mint-close",
+  "fx-mint-dust-close",
 ]);
 
 const CATEGORY_OF: Partial<Record<MenuGroup, PaletteCategory>> = {

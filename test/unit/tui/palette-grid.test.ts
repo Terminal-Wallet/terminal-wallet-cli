@@ -77,6 +77,9 @@ test("a public token gates every action that spends the private balance", () => 
   const gated = cards.filter((c) => c.disabled).map((c) => c.id);
   assert.deepEqual(gated.sort(), [
     "fx-mint-close",
+    // Spends the private balance twice over: the debt token AND the token sold
+    // to cover the shortfall.
+    "fx-mint-dust-close",
     "fx-mint-manage",
     "fx-mint-open",
     "morpho-vault-deposit",

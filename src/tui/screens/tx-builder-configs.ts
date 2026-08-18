@@ -87,8 +87,9 @@ import {
   getFxMintOpenInputs,
   isFxSupportedNetwork,
 } from "../../railgun/transaction/fx/mint";
-import { FX_ADDRESSES, KNOWN_POOLS } from "@railgun-community/cookbook";
+import { FX_ADDRESSES, KNOWN_POOLS, resolvePool } from "@railgun-community/cookbook";
 import { getFxMintCloseInputs } from "../../railgun/transaction/fx/close";
+import { getFxDustCloseInputs } from "../../railgun/transaction/fx/dust-close";
 import {
   FxAdjustAction,
   getFxMintAdjustInputs,
@@ -522,6 +523,80 @@ const previewFxCloseLegs = async (
     },
   );
   return defiLegs({ stepOutputs: build.steps } as never, await symbolResolver(chainName));
+};
+
+/**
+ * The whole shielded balance of the debt token goes toward the debt here.
+ *
+ * A dust close exists to finish a position off, so holding some of the debt
+ * token back would only make the swap larger than it needs to be.
+ */
+const shieldedDebtTokenFor = async (
+  chainName: NetworkName,
+  debtToken: string,
+): Promise<bigint> => {
+  const balances = await getPrivateERC20BalancesForChain(chainName);
+  const held = balances.find(
+    (b) => b.tokenAddress.toLowerCase() === debtToken.toLowerCase(),
+  );
+  return held?.amount ?? 0n;
+};
+
+const dustCloseArgs = async (
+  chainName: NetworkName,
+  s: BuilderState,
+  encryptionKey: string,
+) => {
+  if (!s.position || !s.token) return undefined;
+  const pool = resolvePool(s.position.pool.name);
+  return [
+    chainName,
+    s.position.pool.name,
+    s.position.positionId,
+    await shieldedDebtTokenFor(chainName, pool.debtToken),
+    { tokenAddress: s.token.tokenAddress, decimals: s.token.decimals },
+    s.token.amount,
+    encryptionKey,
+  ] as const;
+};
+
+const previewFxDustCloseLegs = async (
+  chainName: NetworkName,
+  s: BuilderState,
+): Promise<DefiLeg[]> => {
+  const encryptionKey = getCachedEncryptionKey();
+  if (!encryptionKey) return [];
+  const args = await dustCloseArgs(chainName, s, encryptionKey);
+  if (!args) return [];
+  const build = await getFxDustCloseInputs(...args);
+  return defiLegs({ stepOutputs: build.steps } as never, await symbolResolver(chainName));
+};
+
+const submitFxDustClose = async (
+  chainName: NetworkName,
+  s: BuilderState,
+): Promise<SubmitResult> => {
+  if (!s.position || !s.token) return { ok: false, error: "incomplete" };
+  const encryptionKey = await requireEncryptionKey();
+  if (!encryptionKey) return { ok: false, error: "cancelled" };
+  const args = await dustCloseArgs(chainName, s, encryptionKey);
+  if (!args) return { ok: false, error: "incomplete" };
+  const inputs = await getFxDustCloseInputs(...args);
+  return toResult(
+    await runCrossContractTransaction(
+      {
+        // The same kind of transaction as an ordinary close — relay-adapt,
+        // proved, 7702 — so it reuses the type rather than inventing one the
+        // capability matrix would have to learn about.
+        type: RailgunTransaction.FxMintClose,
+        chainName,
+        inputs,
+        encryptionKey,
+        fee: s.fee ?? resolveDefaultFee(),
+      },
+      applyGasDetailsConfirm(s.gas, legsView(s)),
+    ),
+  );
 };
 
 /** The four adjust actions, as builder cards. Same shape, different deltas. */
@@ -1312,6 +1387,23 @@ export const txBuilderConfigs: Record<
     gasUnitsHint: FXMINT_GAS_FLOOR,
     relayAdapt: true,
     submit: (s: BuilderState) => submitFxMintClose(chainName, s),
+  }),
+
+  "fx-mint-dust-close": (chainName) => ({
+    title: "Close an f(x) position outright — Privately",
+    chainName,
+    verb: "Close fully",
+    // No amount field: the whole shielded balance of the debt token goes in,
+    // and the shortfall is raised by selling the chosen token. The amount to
+    // sell is computed, since deriving it means combining two fee ratios with
+    // a swap rate — which is the thing this card exists to remove.
+    fields: ["position", "token", "fee", "gas"],
+    loadPositions: () => loadPositionChoices(chainName),
+    previewLegs: (s) => previewFxDustCloseLegs(chainName, s),
+    ...gasInfo(chainName),
+    gasUnitsHint: FXMINT_GAS_FLOOR,
+    relayAdapt: true,
+    submit: (s: BuilderState) => submitFxDustClose(chainName, s),
   }),
 
   "morpho-vault-redeem": (chainName) => ({
