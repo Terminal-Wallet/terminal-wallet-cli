@@ -10,7 +10,10 @@
 import { FxRisk, FxRiskZone } from "../../railgun/transaction/fx/risk";
 import { FxPositionState } from "../../railgun/transaction/fx/position-state";
 import { tag } from "./tags";
-import { debtTokenForFullClose } from "../../railgun/transaction/fx/full-close";
+import {
+  debtTokenForFullClose,
+  repayFromAvailable,
+} from "../../railgun/transaction/fx/full-close";
 import { asLeverage, asPercent, asUsdPrice, markedBar } from "./slider";
 
 /** Safe is green, rebalancing is a warning, liquidation is not. */
@@ -262,7 +265,13 @@ export const fxCloseLines = ({
   });
   const full = repayAmount >= requiredForFull;
   const shortfall = full ? 0n : requiredForFull - repayAmount;
-  const applied = full ? state.debtAmount : repayAmount;
+  // What actually reaches the pool, not what leaves the wallet. Quoting the
+  // gross overstated the repay and printed "leaves 0 fxUSD owed" next to a
+  // position that was still open.
+  const applied = full
+    ? state.debtAmount
+    : repayFromAvailable(repayAmount, state.repayFeeRatio, railgunUnshieldFeeBps);
+  const owed = state.debtAmount - applied;
   // Collateral is released in proportion to the debt cleared. Exact for a full
   // close; for a partial one the protocol's own accounting is the authority
   // and this is the shape of the answer, not the answer.
@@ -280,9 +289,17 @@ export const fxCloseLines = ({
       : // Not gray. A partial close leaves a live position accruing interest
         // that can still be liquidated, and it is the outcome the user did not
         // ask for — quieter than the safe one is the wrong way round.
+        //
+        // Below display precision the remainder and the shortfall both print as
+        // "0" and "<0.000001", which read as "nothing owed, nothing needed" on
+        // a line insisting the position survives. In that case name the cause
+        // and the fix instead of quoting figures too small to mean anything.
         tag(
-          `PARTIAL — leaves ${format(state.debtAmount - applied, 18)} fxUSD owed, ` +
-            `still accruing. ${format(shortfall, 18)} more fxUSD closes it outright.`,
+          owed === 0n || format(owed, 18) === format(0n, 18)
+            ? `PARTIAL — the fees leave a dust debt behind, so the position ` +
+                `survives. Set Amount to ${format(requiredForFull, 18)} to close it outright.`
+            : `PARTIAL — leaves ${format(owed, 18)} fxUSD owed, still accruing. ` +
+                `Set Amount to ${format(requiredForFull, 18)} to close it outright.`,
           "red",
         ),
     `${tag("repay", "gray")}  ${format(applied, 18)} fxUSD`,

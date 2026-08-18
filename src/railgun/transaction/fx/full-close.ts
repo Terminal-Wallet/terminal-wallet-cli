@@ -74,6 +74,25 @@ export const fullCloseRequirement = (
   return { required, shortfall, closesFully: shortfall === 0n };
 };
 
+/**
+ * How much debt a given shielded amount actually clears.
+ *
+ * The forward direction of `debtTokenForFullClose`, and the figure a preview
+ * must quote: the gross amount is not what reaches the pool, so reporting it as
+ * the repay overstates what the batch does and can show a debt of zero
+ * remaining while the position is still open.
+ */
+export const repayFromAvailable = (
+  availableDebtToken: bigint,
+  repayFeeRatio: bigint,
+  railgunUnshieldFeeBps: bigint,
+): bigint => {
+  if (availableDebtToken <= 0n) return 0n;
+  const afterUnshield =
+    (availableDebtToken * (BPS_DENOM - railgunUnshieldFeeBps)) / BPS_DENOM;
+  return (afterUnshield * FEE_DENOM) / (FEE_DENOM + repayFeeRatio);
+};
+
 /** Debt token that must be INSIDE the batch to clear the debt, fees included. */
 export const inBatchDebtTokenForFullClose = (
   debt: bigint,

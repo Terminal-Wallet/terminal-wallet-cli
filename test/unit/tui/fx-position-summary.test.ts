@@ -177,7 +177,7 @@ test("CONTROL: the whole debt is NOT enough once the fees are counted", () => {
   );
   assert.ok(lines.some((l) => /PARTIAL/.test(l)));
   assert.ok(
-    lines.some((l) => /closes it outright/.test(l)),
+    lines.some((l) => /Set Amount to .+ to close it outright/.test(l)),
     "does not say what would actually close it",
   );
 });

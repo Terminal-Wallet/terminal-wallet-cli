@@ -87,6 +87,7 @@ import {
 import { clampFraction, asPercent } from "../format/slider";
 import { FxManagePlan, planFxManage, fxManageVerb } from "../../railgun/transaction/fx/manage";
 import { fxRiskLines, fxRiskDeltaLines, fxPositionSummary, fxCloseLines } from "../format/fx-position";
+import { debtTokenForFullClose } from "../../railgun/transaction/fx/full-close";
 import { poolCollateralSymbol } from "../../railgun/transaction/fx/position-state";
 import { DefiLeg, defiLegLines } from "../format/defi-legs";
 import { getFxPool } from "@railgun-community/cookbook";
@@ -1241,7 +1242,19 @@ export const createBuilder = (host: BuilderHost): Builder => {
           // shown anywhere the user could have copied it from, which made the
           // commonest action the one requiring a lookup.
           if (cfg.amountIsPositionDebt && choice.state) {
-            state.amount = formatUnits(choice.state.debtAmount, 18);
+            // The amount needed to close OUTRIGHT, not the bare debt. Both fees
+            // come off before the repay lands, so prefilling the debt itself
+            // guaranteed a partial close on the commonest action — which is how
+            // a position ends up as dust nobody meant to leave.
+            state.amount = formatUnits(
+              debtTokenForFullClose({
+                debt: choice.state.debtAmount,
+                repayFeeRatio: choice.state.repayFeeRatio,
+                railgunUnshieldFeeBps:
+                  getRailgunFeeBasisPoints(cfg.chainName)?.unshield ?? 25n,
+              }),
+              18,
+            );
           }
           // Its pool decides the collateral and the risk thresholds, exactly as
           // picking a pool does when opening.
