@@ -112,3 +112,55 @@ test("legs are only checked when the flow has them", () => {
     { ok: true },
   );
 });
+
+// --- optional fields ---------------------------------------------------------
+
+/**
+ * The send gate deliberately re-decides rather than trusting the summary's
+ * verdict — which is right, and means it has to be told the same things the
+ * summary was. It was not: the f(x) close marks its buy token optional, the
+ * form reported "ready", and Build & Send then refused it as incomplete.
+ */
+test("an optional field does not block the send", () => {
+  const result = preflight({
+    fields: [...FIELDS, "buyToken"],
+    optionalFields: ["buyToken"],
+    state: complete,
+    overspend: [],
+  });
+  assert.deepEqual(result, { ok: true });
+});
+
+test("CONTROL: without the optional list the same build is refused", () => {
+  // The bug, shown rather than described. Omitting the list is what the send
+  // path did while the summary passed it.
+  const result = preflight({
+    fields: [...FIELDS, "buyToken"],
+    state: complete,
+    overspend: [],
+  });
+  assert.equal(result.ok, false);
+  assert.match(result.ok === false ? result.message : "", /buy token/);
+});
+
+test("optional does not excuse a field that is genuinely required", () => {
+  // Marking one row optional must not soften the others.
+  const result = preflight({
+    fields: [...FIELDS, "buyToken"],
+    optionalFields: ["buyToken"],
+    state: { ...complete, amount: undefined },
+    overspend: [],
+  });
+  assert.equal(result.ok, false);
+  assert.match(result.ok === false ? result.message : "", /amount/);
+});
+
+test("naming a field optional that is not in the form changes nothing", () => {
+  const result = preflight({
+    fields: [...FIELDS],
+    optionalFields: ["memo", "buyToken"],
+    state: complete,
+    overspend: [],
+  });
+  assert.deepEqual(result, { ok: true });
+});

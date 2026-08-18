@@ -1504,6 +1504,7 @@ export const createBuilder = (host: BuilderHost): Builder => {
     // summary last rendered.
     const gate = preflight({
       fields: cfg.fields,
+      optionalFields: cfg.optionalFields,
       state,
       legs: cfg.multiLeg ? state.legs : undefined,
       caps: cfg.multiLeg ? caps() : undefined,

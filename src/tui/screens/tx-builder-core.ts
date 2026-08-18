@@ -313,6 +313,15 @@ export type Preflight =
 
 export interface PreflightInput {
   fields: FieldKey[];
+  /**
+   * Fields that are editable but not required.
+   *
+   * This gate runs on the SEND path and does not trust the summary's verdict,
+   * which is right — but it therefore has to be told the same thing the summary
+   * was. Omitted, it demanded a buy token the close does not need, so a build
+   * the form reported as ready was refused on Build & Send.
+   */
+  optionalFields?: FieldKey[];
   state: BuilderState;
   /** Multi-token flows only; validated against `caps`. */
   legs?: LegsState;
@@ -352,6 +361,7 @@ export const preflight = ({
   caps,
   overspend,
   blocker,
+  optionalFields,
 }: PreflightInput): Preflight => {
   if (legs && caps) {
     const result = validateLegs(legs, caps);
@@ -365,7 +375,7 @@ export const preflight = ({
     }
   }
 
-  const fieldResult = validate(fields, state);
+  const fieldResult = validate(fields, state, optionalFields);
   if (!fieldResult.ok) {
     return {
       ok: false,
