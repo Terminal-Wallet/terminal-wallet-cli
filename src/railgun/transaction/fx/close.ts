@@ -49,6 +49,7 @@ import {
 } from "./mint";
 import { needsSwapLeg } from "../morpho/vault";
 import { capWithdrawForDebtRatio } from "./close-guard";
+import { fullCloseRequirement, FullCloseRequirement } from "./full-close";
 import { createLogger } from "../../../platform/logger";
 
 const log = createLogger("fxmint-close");
@@ -73,6 +74,15 @@ export interface FxMintCloseBuild extends CrossContractInputs {
   partialClose: boolean;
   /** Whether the released collateral was swapped on the way back. */
   swapped: boolean;
+  /**
+   * What a FULL close would need, and how far short this is.
+   *
+   * A close silently degrades to partial when the debt token does not cover the
+   * whole debt, and the gap is often a fraction of a percent. Returned so the
+   * caller can say so before the user commits, rather than leaving them to
+   * derive it from two fee ratios.
+   */
+  fullClose: FullCloseRequirement;
 }
 
 /**
@@ -141,11 +151,27 @@ export const getFxMintCloseInputs = async (
     railgunUnshieldFeeBps: fees.unshield,
   });
 
+  const fullClose = fullCloseRequirement({
+    debt: position.debt,
+    repayFeeRatio: poolState.repayFeeRatio,
+    railgunUnshieldFeeBps: fees.unshield,
+    availableDebtToken: shieldedDebtToken,
+  });
+
   log.debug(
     `close ${positionId} on ${pool.address} as ephemeral [${ephemeralIndex}] ` +
       `${ephemeralAddress}: repay ${amounts.repayAmount}, withdraw ` +
       `${amounts.withdrawColl}, partial=${amounts.partialClose}`,
   );
+  if (!fullClose.closesFully) {
+    // The number the user would otherwise have to derive themselves.
+    log.warn(
+      `close ${positionId} will be PARTIAL: closing outright needs ` +
+        `${fullClose.required} of the debt token and ${shieldedDebtToken} is ` +
+        `available — short by ${fullClose.shortfall}. A partial close leaves the ` +
+        `position open and still accruing debt.`,
+    );
+  }
 
   if (amounts.repayAmount <= 0n) {
     throw new Error(
@@ -255,6 +281,7 @@ export const getFxMintCloseInputs = async (
     withdrawColl: amounts.withdrawColl,
     partialClose: amounts.partialClose,
     swapped: Boolean(swapTo),
+    fullClose,
     relayAdaptUnshieldERC20Amounts,
     relayAdaptUnshieldNFTAmounts: [positionNFT],
     // A full close burns the position, so the recipe declares no NFT output and
