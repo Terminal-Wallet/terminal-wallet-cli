@@ -1399,6 +1399,22 @@ export const txBuilderConfigs: Record<
     // a swap rate — which is the thing this card exists to remove.
     fields: ["position", "token", "fee", "gas"],
     loadPositions: () => loadPositionChoices(chainName),
+    // Private balances with something in them, minus the pool debt tokens —
+    // those repay directly and need no swap at all.
+    //
+    // The pool's own COLLATERAL is not filtered here, deliberately. Which token
+    // that is depends on the position, and this runs before one is chosen; a
+    // blanket filter would hide WBTC while closing a wstETH pool. The build
+    // rejects that pairing with a message naming the pool instead.
+    loadTokens: async () => {
+      const balances = await getPrivateERC20BalancesForChain(chainName);
+      const debtTokens = new Set(
+        KNOWN_POOLS.map((p) => p.debtToken.toLowerCase()),
+      );
+      return balances.filter(
+        (b) => b.amount > 0n && !debtTokens.has(b.tokenAddress.toLowerCase()),
+      );
+    },
     previewLegs: (s) => previewFxDustCloseLegs(chainName, s),
     ...gasInfo(chainName),
     gasUnitsHint: FXMINT_GAS_FLOOR,

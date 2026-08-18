@@ -103,6 +103,15 @@ export const getFxDustCloseInputs = async (
       "Paying with the debt token itself needs no swap — use the ordinary close.",
     );
   }
+  if (payWith.tokenAddress.toLowerCase() === pool.collateralToken.toLowerCase()) {
+    // The combo rejects this pairing too, but only after a quote. Naming the
+    // pool here is the difference between "pick something else" and a stack
+    // trace out of the cookbook.
+    throw new Error(
+      `This pool pays out ${pool.collateralToken} on close, so it cannot also ` +
+        `be sold to fund the repay. Choose a different token.`,
+    );
+  }
   if (payWithAvailable <= 0n) {
     throw new Error(`No shielded balance of the chosen token to sell.`);
   }
