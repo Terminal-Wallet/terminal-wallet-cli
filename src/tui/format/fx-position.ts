@@ -177,6 +177,9 @@ export const fxPositionDetailLines = (
       tag("Its debt is repaid and its collateral withdrawn, but the position", "gray"),
       tag("itself still exists — a close by explicit amount empties without", "gray"),
       tag("burning. Nothing is at risk here and nothing is owed.", "gray"),
+      "",
+      tag("Keeping it costs nothing. Manage can top it up and borrow against", "gray"),
+      tag("it again, which reuses this position instead of minting another.", "gray"),
     ];
   }
   const wad = Number(10n ** 18n);
