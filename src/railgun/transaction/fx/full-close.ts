@@ -2,10 +2,10 @@
  * What it actually takes to close an f(x) position outright.
  *
  * A close is full only when the repay covers the whole debt. Below that the
- * recipe silently becomes a PARTIAL close: the position survives, the NFT is
- * left with a residue that keeps accruing interest. The difference between
- * the two is often a fraction of a percent of the debt, and nothing on screen
- * says so — the user is left to work the number out from fee ratios.
+ * recipe silently becomes a PARTIAL close, leaving a residue that keeps
+ * accruing interest. The difference between the two is often a fraction of a
+ * percent of the debt, and nothing on screen said so — the user was left to
+ * work the number out from two fee ratios.
  *
  * This inverts `computeFxRepay`'s sizing. Forward, that is:
  *

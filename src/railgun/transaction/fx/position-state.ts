@@ -94,9 +94,11 @@ export const fxScaleNote = (scale: FxPositionScale): string =>
  * `positionSummary`, which distinguishes them.
  *
  * `getPositionDebtRatio` returns 0 for a position that does not exist rather
- * than reverting, so a burnt or wrong id reads as a perfectly healthy position
- * with no debt. The guard is that the collateral must be non-zero too: a live
- * position always has some, and a burnt one has none.
+ * than reverting, so a wrong id reads as a perfectly healthy position with no
+ * debt. Zero collateral was once taken as proof of that — but f(x) empties a
+ * position on close rather than destroying it, so a real, held, closed-out
+ * position looks identical. `ownerOf` is what actually separates them, and it
+ * is only consulted on that zero/zero path.
  */
 export const readFxPositionState = async (
   chainName: NetworkName,

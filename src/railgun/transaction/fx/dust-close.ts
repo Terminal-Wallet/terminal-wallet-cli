@@ -2,10 +2,10 @@
  * Closing a position outright when the debt token alone will not cover it.
  *
  * The ordinary close is bounded by the debt token the wallet holds shielded.
- * Short of the full debt it silently becomes a PARTIAL close: the position
- * survives with a residue that keeps accruing interest.
- * Repeatedly that leaves dust positions nobody can finish off, because the
- * amount still owed is smaller than the effort of working out what to shield.
+ * Short of the full debt it silently becomes a PARTIAL close, leaving a residue
+ * that keeps accruing interest. Repeatedly that leaves dust positions nobody
+ * finishes off, because the amount still owed is smaller than the effort of
+ * working out what to shield.
  *
  * This raises the difference by selling a token the user chooses. The cookbook
  * ships the combo for it — `ZeroXSwap_FxMintClose_ComboMeal` is swap-THEN-close

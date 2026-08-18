@@ -100,9 +100,11 @@ export interface FxMintCloseBuild extends CrossContractInputs {
  * collateral itself is the same as omitting it.
  *
  * Note the asymmetry: the debt is ALWAYS repaid in the pool's own debt token —
- * fxUSD on a long, the volatile asset on a short. The cookbook's close combo
- * swaps on the way OUT only, so a wallet holding none of that token cannot
- * close a position here regardless of what else it holds.
+ * fxUSD on a long, the volatile asset on a short. THIS path's combo swaps on
+ * the way OUT only, so a wallet holding none of that token cannot close a
+ * position here regardless of what else it holds. `dust-close.ts` is the way
+ * round that: the cookbook also ships a swap-THEN-close combo, which buys the
+ * debt token first.
  */
 export const getFxMintCloseInputs = async (
   chainName: NetworkName,
