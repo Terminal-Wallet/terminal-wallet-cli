@@ -10,6 +10,7 @@
 import { FxRisk, FxRiskZone } from "../../railgun/transaction/fx/risk";
 import { FxPositionState } from "../../railgun/transaction/fx/position-state";
 import { tag } from "./tags";
+import { debtTokenForFullClose } from "../../railgun/transaction/fx/full-close";
 import { asLeverage, asPercent, asUsdPrice, markedBar } from "./slider";
 
 /** Safe is green, rebalancing is a warning, liquidation is not. */
@@ -224,6 +225,12 @@ export interface FxCloseView {
   collateralSymbol: string;
   /** What the released collateral comes back as, when a swap is folded in. */
   receiveSymbol?: string;
+  /**
+   * RAILGUN's unshield fee, basis points. Required: defaulting it to zero would
+   * quietly restore the "equal to the debt closes it" error this exists to
+   * prevent, on the one screen the user checks before sending.
+   */
+  railgunUnshieldFeeBps: bigint;
   format: (amount: bigint, decimals: number) => string;
 }
 
@@ -240,9 +247,21 @@ export const fxCloseLines = ({
   repayAmount,
   collateralSymbol,
   receiveSymbol,
+  railgunUnshieldFeeBps,
   format,
 }: FxCloseView): string[] => {
-  const full = repayAmount >= state.debtAmount;
+  // Both fees come off before the repay lands — RAILGUN's leaving the shield,
+  // then the pool's on the repay itself — so an amount equal to the debt does
+  // NOT clear it. Comparing against the raw debt previewed "closes fully" and
+  // then built a partial, which is how a position ends up as dust nobody meant
+  // to leave behind. The threshold is the same one the build sizes against.
+  const requiredForFull = debtTokenForFullClose({
+    debt: state.debtAmount,
+    repayFeeRatio: state.repayFeeRatio,
+    railgunUnshieldFeeBps,
+  });
+  const full = repayAmount >= requiredForFull;
+  const shortfall = full ? 0n : requiredForFull - repayAmount;
   const applied = full ? state.debtAmount : repayAmount;
   // Collateral is released in proportion to the debt cleared. Exact for a full
   // close; for a partial one the protocol's own accounting is the authority
@@ -258,9 +277,13 @@ export const fxCloseLines = ({
   const lines = [
     full
       ? tag("closes the position fully — #id is burnt", "yellow")
-      : tag(
-          `partial — leaves ${format(state.debtAmount - applied, 18)} fxUSD owed`,
-          "gray",
+      : // Not gray. A partial close leaves a live position accruing interest
+        // that can still be liquidated, and it is the outcome the user did not
+        // ask for — quieter than the safe one is the wrong way round.
+        tag(
+          `PARTIAL — leaves ${format(state.debtAmount - applied, 18)} fxUSD owed, ` +
+            `still accruing. ${format(shortfall, 18)} more fxUSD closes it outright.`,
+          "red",
         ),
     `${tag("repay", "gray")}  ${format(applied, 18)} fxUSD`,
     `${tag("back", "gray")}   ${format(released, state.collateralDecimals)} ${back}` +

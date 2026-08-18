@@ -138,11 +138,23 @@ test("a slider that has not moved yet shows no step", () => {
 
 // --- closing --------------------------------------------------------------
 
-const close = (repay: bigint, over: Partial<FxPositionState> = {}) =>
+/**
+ * Fee-free by default, so the existing cases still read as written. The
+ * fee-aware threshold gets its own tests below — it is the thing that decides
+ * full vs partial, and it was wrong.
+ */
+const close = (
+  repay: bigint,
+  over: Partial<FxPositionState> = {},
+  railgunUnshieldFeeBps = 0n,
+) =>
   fxCloseLines({
-    state: state(over),
+    // Fee-free unless a case asks otherwise: these assert the WORDING, and the
+    // fixture's 0.2% repay fee would otherwise make every one of them partial.
+    state: state({ repayFeeRatio: 0n, ...over }),
     repayAmount: repay,
     collateralSymbol: "wstETH",
+    railgunUnshieldFeeBps,
     format: fmt,
   }).map(strip);
 
@@ -152,11 +164,56 @@ test("repaying the whole debt says the position is closed and burnt", () => {
   assert.ok(lines.some((l) => /1\.6067 wstETH/.test(l)), "does not say what comes back");
 });
 
+test("CONTROL: the whole debt is NOT enough once the fees are counted", () => {
+  // The bug that left dust behind. Both fees come off before the repay lands,
+  // so an amount equal to the debt funds a PARTIAL close — and the card used to
+  // preview it as a full one, which is the screen the user checks before
+  // committing.
+  const debt = 1880030086474238325175n;
+  const lines = close(debt, { repayFeeRatio: 1_000_000n }, 25n);
+  assert.ok(
+    !lines.some((l) => /closes the position fully/.test(l)),
+    "the whole debt still previews as a full close once fees exist",
+  );
+  assert.ok(lines.some((l) => /PARTIAL/.test(l)));
+  assert.ok(
+    lines.some((l) => /closes it outright/.test(l)),
+    "does not say what would actually close it",
+  );
+});
+
+test("grossed up through both fees, it does close fully", () => {
+  const debt = 1880030086474238325175n;
+  // debt x (1 + repayFee) / (1 - unshieldFee), rounded up — the same figure the
+  // build sizes against.
+  const throughRepay = (debt * 1_001_000_000n + 999_999_999n) / 1_000_000_000n;
+  const required = (throughRepay * 10_000n + 9_974n) / 9_975n;
+  const lines = close(required, { repayFeeRatio: 1_000_000n }, 25n);
+  assert.ok(lines.some((l) => /closes the position fully/.test(l)));
+});
+
+test("a partial close is not the quietest thing on the screen", () => {
+  // It leaves a live position accruing interest that can be liquidated. It was
+  // gray, below a yellow "closes fully" — the safe outcome shouting and the
+  // surprising one whispering.
+  const raw = fxCloseLines({
+    state: state({ repayFeeRatio: 0n }),
+    repayAmount: 940015043237119162587n,
+    collateralSymbol: "wstETH",
+    railgunUnshieldFeeBps: 0n,
+    format: fmt,
+  });
+  assert.ok(
+    raw.some((l) => l.includes("red") && /PARTIAL/.test(l)),
+    "the partial warning is not coloured as a warning",
+  );
+});
+
 test("a partial close says how much is still owed", () => {
   // The distinction the card never made: 940 fxUSD against a 1880 debt leaves
   // a live position, which is a categorically different outcome to closing.
   const lines = close(940015043237119162587n);
-  assert.ok(lines.some((l) => /partial/.test(l)));
+  assert.ok(lines.some((l) => /PARTIAL/.test(l)));
   assert.ok(lines.some((l) => /940\.0150 fxUSD owed/.test(l)));
   assert.ok(!lines.some((l) => /closes the position fully/.test(l)));
 });
@@ -180,6 +237,7 @@ test("a swap out is named, so the collateral is not reported as arriving unchang
     repayAmount: 1880030086474238325175n,
     collateralSymbol: "wstETH",
     receiveSymbol: "USDC",
+    railgunUnshieldFeeBps: 0n,
     format: fmt,
   }).map(strip);
   assert.ok(lines.some((l) => /wstETH → USDC/.test(l)));

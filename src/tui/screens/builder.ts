@@ -610,6 +610,11 @@ export const createBuilder = (host: BuilderHost): Builder => {
           repayAmount: state.amount ? parseUnits(state.amount, 18) : 0n,
           collateralSymbol: poolCollateralSymbol(state.position?.pool.name ?? ""),
           receiveSymbol: state.buyToken?.symbol,
+          // Unknown fees read as zero here, which would previews a full close
+          // for an amount that only funds a partial. Fall back to RAILGUN's
+          // standing 25bps rather than to nothing.
+          railgunUnshieldFeeBps:
+            getRailgunFeeBasisPoints(cfg.chainName)?.unshield ?? 25n,
           format: (a, d) => fmtAmount(formatUnits(a, d), 6),
         }),
       );
