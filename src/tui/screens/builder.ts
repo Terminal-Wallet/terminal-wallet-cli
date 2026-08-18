@@ -443,7 +443,7 @@ export const createBuilder = (host: BuilderHost): Builder => {
       return;
     }
     try {
-      extraLines = validate(cfg.fields, state).ok ? await cfg.previewLines(state) : [];
+      extraLines = validate(cfg.fields, state, cfg.optionalFields).ok ? await cfg.previewLines(state) : [];
     } catch {
       extraLines = [];
     }
@@ -451,7 +451,7 @@ export const createBuilder = (host: BuilderHost): Builder => {
 
   const computeLegsPreview = async () => {
     if (!cfg?.previewLegs) return;
-    if (!validate(cfg.fields, state).ok) {
+    if (!validate(cfg.fields, state, cfg.optionalFields).ok) {
       legsPreview = undefined;
       return;
     }
@@ -701,13 +701,13 @@ export const createBuilder = (host: BuilderHost): Builder => {
     let note = "";
     if (cfg.multiLeg && state.legs) {
       const legValidation = validateLegs(state.legs, caps());
-      const fieldValidation = validate(cfg.fields, state);
+      const fieldValidation = validate(cfg.fields, state, cfg.optionalFields);
       ok = legValidation.ok && fieldValidation.ok;
       note =
         legValidation.violations[0] ??
         (legValidation.ok ? "" : `complete ${legValidation.missing.length} leg(s)`);
     } else {
-      const fieldValidation = validate(cfg.fields, state);
+      const fieldValidation = validate(cfg.fields, state, cfg.optionalFields);
       ({ ok } = fieldValidation);
       note = ok ? "" : `need: ${fieldValidation.missing.join(", ")}`;
     }

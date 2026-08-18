@@ -37,6 +37,12 @@ export interface TxBuilderConfig {
   chainName: NetworkName;
   verb: string; // "Send" | "Shield" | "Unshield" …
   fields: FieldKey[]; // editable rows, in display order
+  /**
+   * Rows that are editable but not required. Offering a choice is not the same
+   * as demanding one — the f(x) close takes a buy token to convert the released
+   * collateral, and leaving it unset simply means no conversion.
+   */
+  optionalFields?: FieldKey[];
   // Sync or async: some balance accessors read a cache and return directly.
   // The caller awaits either way.
   loadTokens?: () =>
@@ -199,7 +205,7 @@ export const runTxBuilder = async (
 
     const refresh = () => {
       list.setItems(rows.map(rowLabel));
-      const v = validate(cfg.fields, state);
+      const v = validate(cfg.fields, state, cfg.optionalFields);
       const line = summarize({ verb: cfg.verb, fixedAddress: cfg.fixedAddress }, state);
       summary.setContent(
         v.ok
@@ -421,7 +427,7 @@ export const runTxBuilder = async (
     };
 
     const trySend = async () => {
-      const v = validate(cfg.fields, state);
+      const v = validate(cfg.fields, state, cfg.optionalFields);
       if (!v.ok) {
         provider.notify(`Incomplete — need: ${v.missing.join(", ")}.`);
         return;

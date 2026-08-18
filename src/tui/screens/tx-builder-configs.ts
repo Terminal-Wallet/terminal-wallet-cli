@@ -1371,6 +1371,10 @@ export const txBuilderConfigs: Record<
     // collateral itself means no swap. The debt is always repaid in fxUSD —
     // the cookbook's close combo swaps on the way out only.
     fields: ["position", "amount", "buyToken", "fee", "gas"],
+    // The buy token CONVERTS the released collateral; leaving it unset means
+    // the collateral comes back as itself, which is what most closes want.
+    // Requiring it blocked a close that was otherwise ready to send.
+    optionalFields: ["buyToken"],
     amountIsPositionDebt: true,
     loadPositions: () => loadPositionChoices(chainName),
     loadBuyTokens: () => loadBuyTokens(chainName),

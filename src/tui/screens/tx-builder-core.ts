@@ -208,7 +208,10 @@ export const fieldDisplay = (key: FieldKey, s: BuilderState): string => {
         ? `${s.token.symbol}  (have ${formatUnits(s.token.amount, s.token.decimals)})`
         : "‹select token›";
     case "buyToken":
-      return s.buyToken ? s.buyToken.symbol : "‹select token›";
+      // Says what happens if it is left alone, because on the close it is a
+      // conversion the user may not want and "‹select token›" reads as an
+      // instruction rather than an option.
+      return s.buyToken ? s.buyToken.symbol : "‹none — no swap›";
     case "vault":
       return s.vault ? s.vault.vault.name : "‹select vault›";
     case "pool":
@@ -258,14 +261,25 @@ export interface ValidationResult {
   missing: string[];
 }
 
-/** Which required fields are still unset/invalid. */
+/**
+ * Which required fields are still unset/invalid.
+ *
+ * `optional` names fields that are editable but not required. A field can be
+ * offered without being demanded — the f(x) close takes a buy token that
+ * converts the released collateral, and leaving it unset means the collateral
+ * comes back as itself. Treating that as missing blocks a close that is
+ * otherwise ready, on a choice the user does not have to make.
+ */
 export const validate = (
   fields: FieldKey[],
   s: BuilderState,
+  optional: readonly FieldKey[] = [],
 ): ValidationResult => {
+  const required = (key: FieldKey) =>
+    fields.includes(key) && !optional.includes(key);
   const missing: string[] = [];
-  if (fields.includes("token") && !s.token) missing.push("token");
-  if (fields.includes("buyToken") && !s.buyToken) missing.push("buy token");
+  if (required("token") && !s.token) missing.push("token");
+  if (required("buyToken") && !s.buyToken) missing.push("buy token");
   if (fields.includes("vault") && !s.vault) missing.push("vault");
   if (fields.includes("pool") && !s.pool) missing.push("pool");
   if (fields.includes("position") && !s.position) missing.push("position");
