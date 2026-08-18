@@ -206,7 +206,7 @@ export const fxPositionDetailLines = (
     `            ${tag(`│ rebalance ${asPercent(Number(state.rebalanceDebtRatio) / wad, 0)}`, "gray")}` +
       `   ${tag(`✕ liquidation ${asPercent(Number(state.liquidationDebtRatio) / wad, 0)}`, "gray")}`,
     "",
-    tag("Manage or Close this position from the command palette.", "gray"),
+    tag("Manage, Close, or Close fully from the command palette.", "gray"),
   ];
 };
 

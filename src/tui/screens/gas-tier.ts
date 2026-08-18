@@ -13,7 +13,12 @@
 import { NetworkName, isDefined } from "@railgun-community/shared-models";
 import { FeeData, formatUnits, parseUnits } from "ethers";
 import { getInputProvider } from "../../core/input";
-import { getGasFeeTiers, setGasFeeSelection, GasTierKey } from "../../railgun/gas/gas-fee";
+import {
+  getGasFeeTiers,
+  setGasFeeSelection,
+  tipFloor,
+  GasTierKey,
+} from "../../railgun/gas/gas-fee";
 import { tag } from "../format/tags";
 
 const gwei = (value: bigint): string => formatUnits(value, "gwei");
@@ -112,8 +117,13 @@ export const runGasTierPrompt = async (
   });
   choices.push({ label: tag("Keep current", "gray"), value: "keep" });
 
+  // The floor is named because it OVERRIDES the percentiles: when the measured
+  // tips fall under it every tier is quoted at the floor, and three identical
+  // prices labelled 25% / 50% / 75% otherwise look like a bug.
+  const floor = tipFloor(tiers.baseFeePerGas);
   const choice = await provider.select(
-    `Gas Fee — ${chainName}  (base fee ${gwei(tiers.baseFeePerGas)} gwei)`,
+    `Gas Fee — ${chainName}  (base fee ${gwei(tiers.baseFeePerGas)} gwei · ` +
+      `min tip ${gwei(floor)} gwei)`,
     choices,
   );
   if (!isDefined(choice) || choice === "keep") {

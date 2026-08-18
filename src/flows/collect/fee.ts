@@ -338,7 +338,13 @@ export const collectFeeMode = async (
     } catch { /* skip token */ }
   }
   if (!withBrokers.length) {
-    provider.notify("No broadcasters available for your tokens — use self-sign.");
+    // The app talks only to the remote config's trusted fee signers, so an
+    // empty result is far more often "none of that small set serves this token
+    // right now" than a network with nothing on it. Saying so stops the user
+    // hunting for a fault that is not theirs.
+    provider.notify(
+      "No trusted broadcaster serves your tokens right now — use self-sign.",
+    );
     return undefined;
   }
 
@@ -436,7 +442,12 @@ export const collectFeeMode = async (
     const blocked = new Set(getBroadcasterBlocklist());
     const ranked = rankBroadcasters(computed, { favorites, blocked });
     if (!ranked.length) {
-      provider.notify(`No broadcasters for ${token.symbol} (all blocked?).`);
+      // "all blocked?" was the only explanation when the blocklist was the only
+      // filter. It is now the less likely one: the allow list restricts every
+      // lookup to the trusted signers before the blocklist is consulted.
+      provider.notify(
+        `No trusted broadcaster for ${token.symbol} — none available, or you have blocked them.`,
+      );
       return undefined;
     }
     // The cheapest ROW, not the first one — the top of this list is now the
