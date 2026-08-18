@@ -297,3 +297,44 @@ test("a position that could not be read says so in the detail view too", () => {
   assert.match(all, /could not be read/);
   assert.ok(!/0\.0000/.test(all), "showed figures for a position it could not read");
 });
+
+// --- emptied but not burnt ---------------------------------------------------
+
+/**
+ * A close by explicit amount repays and withdraws to zero WITHOUT burning —
+ * only the pool's own full-close sentinel burns. So a wallet really can hold a
+ * position with nothing in it, and the pool reports it identically to one that
+ * never existed. Position 1981 ended exactly there on 2026-08-18.
+ */
+const EMPTY = state({
+  collateralAmount: 0n,
+  debtAmount: 0n,
+  debtRatio: 0n,
+});
+
+test("an emptied position says so, rather than reading as unreadable", () => {
+  const line = strip(fxPositionSummary(EMPTY, "wstETH", fmt));
+  assert.match(line, /emptied/);
+  assert.doesNotMatch(line, /could not read/);
+});
+
+test("CONTROL: an emptied position must not render as a healthy one", () => {
+  // Zero debt at zero collateral is 0.0% — the most reassuring row on the
+  // screen, for something with nothing in it.
+  const line = strip(fxPositionSummary(EMPTY, "wstETH", fmt));
+  assert.doesNotMatch(line, /safe/);
+  assert.doesNotMatch(line, /0\.0%/);
+});
+
+test("the detail panel explains that nothing is owed and nothing is at risk", () => {
+  const lines = fxPositionDetailLines("wstETH-Long #1981", EMPTY, "wstETH", fmt).map(strip);
+  assert.ok(lines.some((l) => /empty/i.test(l)));
+  assert.ok(lines.some((l) => /without\s*$|burning/i.test(l)), "does not explain why it still exists");
+  assert.ok(!lines.some((l) => /could not be read/.test(l)));
+});
+
+test("a position that truly cannot be read still says so", () => {
+  // The distinction the whole change rests on: undefined is unreadable, zeroes
+  // are empty, and they are not the same answer.
+  assert.match(strip(fxPositionSummary(undefined, "wstETH", fmt)), /could not read/);
+});

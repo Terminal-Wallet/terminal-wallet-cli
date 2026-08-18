@@ -12,7 +12,13 @@
  * matters — where is this position now, and where does this action put it.
  */
 import { NetworkName } from "@railgun-community/shared-models";
-import { KNOWN_POOLS, getFxPool, getFxPosition } from "@railgun-community/cookbook";
+import { Contract } from "ethers";
+import {
+  KNOWN_POOLS,
+  getFxPool,
+  getFxPosition,
+  resolvePool,
+} from "@railgun-community/cookbook";
 import { getProviderForChain } from "../../network/network-util";
 import { createLogger } from "../../../platform/logger";
 
@@ -104,9 +110,34 @@ export const readFxPositionState = async (
       getFxPool(poolName as never, provider),
     ]);
     if (position.collateralAmount === 0n && position.debt === 0n) {
-      // Nothing behind it. The pool reports a nonexistent position as a
-      // zero-debt one, so this is the shape a closed or wrong id takes.
-      return undefined;
+      // Zero on both legs has two meanings and the pool reports them
+      // identically: a position that does not exist, and one that has been
+      // emptied but whose NFT is still held. A close that repays and withdraws
+      // by explicit amount reaches zero WITHOUT burning — only the pool's own
+      // full-close sentinel burns — so the second is a real state a wallet sits
+      // in, and calling it unreadable told the user their position had
+      // vanished when it was still theirs and still listed.
+      //
+      // ownerOf separates them: it reverts for a burnt or never-minted id.
+      const exists = await new Contract(
+        resolvePool(poolName as never).address,
+        ["function ownerOf(uint256) view returns (address)"],
+        provider,
+      )
+        .ownerOf(positionId)
+        .then(() => true)
+        .catch(() => false);
+      if (!exists) return undefined;
+      return {
+        collateralAmount: 0n,
+        collateralDecimals: Number(position.collateralDecimals),
+        debtAmount: 0n,
+        debtRatio: 0n,
+        rebalanceDebtRatio: pool.rebalanceDebtRatio,
+        liquidationDebtRatio: pool.liquidationDebtRatio,
+        borrowFeeRatio: pool.borrowFeeRatio,
+        repayFeeRatio: pool.repayFeeRatio,
+      };
     }
     return {
       collateralAmount: position.collateralAmount,

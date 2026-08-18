@@ -108,6 +108,13 @@ export const fxPositionSummary = (
   // render as an empty, healthy one — that is an invitation to borrow against
   // collateral that may not be there.
   if (!state) return "could not read this position";
+  // Emptied but not burnt: repaid and withdrawn to zero by explicit amount,
+  // which the pool does not burn. Zero debt at zero collateral would otherwise
+  // render as a perfectly healthy position at 0.0% — the most reassuring row on
+  // the screen, for something with nothing in it.
+  if (state.collateralAmount === 0n && state.debtAmount === 0n) {
+    return "emptied — nothing left in it";
+  }
   const wad = Number(10n ** 18n);
   const ratio = Number(state.debtRatio) / wad;
   const rebalance = Number(state.rebalanceDebtRatio) / wad;
@@ -160,6 +167,16 @@ export const fxPositionDetailLines = (
       tag("This position could not be read.", "yellow"),
       tag("The pool reports a nonexistent position as a zero-debt one, so no", "gray"),
       tag("figures are shown rather than figures that would look healthy.", "gray"),
+    ];
+  }
+  if (state.collateralAmount === 0n && state.debtAmount === 0n) {
+    return [
+      tag(label, "magenta"),
+      "",
+      tag("This position is empty.", "yellow"),
+      tag("Its debt is repaid and its collateral withdrawn, but the position", "gray"),
+      tag("itself still exists — a close by explicit amount empties without", "gray"),
+      tag("burning. Nothing is at risk here and nothing is owed.", "gray"),
     ];
   }
   const wad = Number(10n ** 18n);
