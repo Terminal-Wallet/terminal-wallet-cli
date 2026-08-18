@@ -93,7 +93,10 @@ import {
   FxAdjustAction,
   getFxMintAdjustInputs,
 } from "../../railgun/transaction/fx/adjust";
-import { getPrivateNFTsForChain } from "../../railgun/balance/balance-cache";
+import {
+  getPrivateNFTsForChain,
+  getPrivateNFTBucketsForChain,
+} from "../../railgun/balance/balance-cache";
 import { describeNFTs } from "../../railgun/balance/nft-util";
 import { fxPositionCollections } from "../../railgun/transaction/fx/position";
 import { readFxPositionState } from "../../railgun/transaction/fx/position-state";
@@ -427,7 +430,11 @@ const loadPositionChoices = async (
 ): Promise<PositionChoice[]> => {
   if (!isFxSupportedNetwork(chainName)) return [];
   const collections = fxPositionCollections();
-  const held = describeNFTs(getPrivateNFTsForChain(chainName), collections).flatMap(
+  const held = describeNFTs(
+    getPrivateNFTsForChain(chainName),
+    collections,
+    getPrivateNFTBucketsForChain(chainName),
+  ).flatMap(
     (nft) => {
       if (nft.kind !== "fx-position") return [];
       const pool = KNOWN_POOLS.find(

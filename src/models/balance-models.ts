@@ -2,6 +2,7 @@ import {
   RailgunERC20Amount,
   RailgunWalletBalanceBucket,
 } from "@railgun-community/shared-models";
+import { NFTAvailability } from "../railgun/balance/nft-availability";
 
 export type RailgunBalance = {
   tokenAddress: string;
@@ -31,6 +32,11 @@ export type RailgunDisplayNFT = {
   label: string;
   /** Set when the collection is recognised, so a picker can filter on it. */
   kind?: "fx-position";
+  /**
+   * Whether this NFT can be spent right now, or is still maturing through POI.
+   * Undefined when the caller did not supply bucket information.
+   */
+  availability?: NFTAvailability;
 };
 
 export type RailgunBalanceCache = {

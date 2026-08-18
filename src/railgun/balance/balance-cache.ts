@@ -175,6 +175,41 @@ export const getPrivateNFTsForChain = (
   return Object.values(merged);
 };
 
+/**
+ * Which bucket each held NFT sits in, keyed the same way as the cache.
+ *
+ * `getPrivateNFTsForChain` unions the buckets so a maturing position is still
+ * listed — correct, and it necessarily discards WHICH bucket each came from.
+ * That is the difference between "you hold this" and "you can spend this", and
+ * without it a spend fails inside the engine with a message about an empty
+ * balance. Returned separately rather than folded into the union so that
+ * function keeps its single meaning.
+ *
+ * A note can appear under both txid versions; every bucket it is seen in is
+ * collected, and the caller resolves them with `bestAvailability`.
+ */
+export const getPrivateNFTBucketsForChain = (
+  chainName: NetworkName,
+  railgunWalletID: string = getCurrentRailgunID(),
+): MapType<string[]> => {
+  const chain = getChainForName(chainName);
+  const byVersion = privateNFTCache[chain.type]?.[chain.id];
+  const buckets: MapType<string[]> = {};
+  if (!byVersion) return buckets;
+  for (const version of Object.keys(byVersion)) {
+    const byBucket = byVersion[version];
+    if (!byBucket) continue;
+    for (const bucket of Object.keys(byBucket)) {
+      const owned = byBucket[bucket]?.[railgunWalletID];
+      if (!owned) continue;
+      for (const key of Object.keys(owned)) {
+        (buckets[key] ??= []).push(bucket);
+      }
+    }
+  }
+  return buckets;
+};
+
 export const resetBalanceCachesForChain = (chainName: NetworkName) => {
   // No need to do this anymore with new upgrades?
   // Balances stored by chain.type > chain.id > BalanceBucket > walletID > tokenaddress

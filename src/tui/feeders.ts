@@ -17,7 +17,11 @@
 import { NetworkName, delay } from "@railgun-community/shared-models";
 import { formatUnits } from "ethers";
 import { emitCoreEvent } from "../core/events";
-import { getPrivateNFTsForChain } from "../railgun/balance/balance-cache";
+import {
+  getPrivateNFTsForChain,
+  getPrivateNFTBucketsForChain,
+} from "../railgun/balance/balance-cache";
+import { availabilityLabel } from "../railgun/balance/nft-availability";
 import { describeNFTs } from "../railgun/balance/nft-util";
 import { fxPositionCollections } from "../railgun/transaction/fx/position";
 import {
@@ -138,9 +142,24 @@ export const createFeeders = (render: () => void): Feeders => {
     }[]
   > => {
     const collections = fxPositionCollections();
-    const held = describeNFTs(getPrivateNFTsForChain(network), collections);
+    const held = describeNFTs(
+      getPrivateNFTsForChain(network),
+      collections,
+      getPrivateNFTBucketsForChain(network),
+    );
     return mapLimited(held, 4, async (nft) => {
-      const base = { label: nft.label, amount: nft.amount.toString(), kind: nft.kind };
+      // A position that is held but still maturing through POI cannot be spent,
+      // and the engine's refusal for one reads as an empty wallet. Say so on the
+      // row rather than at the end of a build.
+      const poi =
+        nft.availability && nft.availability !== "spendable"
+          ? availabilityLabel(nft.availability)
+          : undefined;
+      const base = {
+        label: poi ? `${nft.label}  (${poi.text})` : nft.label,
+        amount: nft.amount.toString(),
+        kind: nft.kind,
+      };
       if (nft.kind !== "fx-position") return base;
       const pool = KNOWN_POOLS.find(
         (p) => p.address.toLowerCase() === nft.nftAddress.toLowerCase(),
@@ -158,7 +177,10 @@ export const createFeeders = (render: () => void): Feeders => {
         // The rail is 44 cells wide and the row is indented, so it gets what
         // fits; the full picture is a click away rather than chopped in half.
         detail: fxPositionSummary(state, symbol, fmt, RAIL_DETAIL_W),
-        detailLines: fxPositionDetailLines(nft.label, state, symbol, fmt),
+        detailLines: [
+          ...fxPositionDetailLines(nft.label, state, symbol, fmt),
+          ...(poi ? [poi.note] : []),
+        ],
       };
     });
   };

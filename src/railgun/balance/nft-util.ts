@@ -11,6 +11,7 @@
  */
 import { RailgunNFTAmount } from "@railgun-community/shared-models";
 import { RailgunDisplayNFT } from "../../models/balance-models";
+import { bestAvailability } from "./nft-availability";
 
 /** A collection the wallet can name, and what a token in it means. */
 export interface KnownCollection {
@@ -34,9 +35,17 @@ export const nftTokenId = (tokenSubID: string): string => {
   }
 };
 
+/**
+ * The cache key an NFT is stored under. Mirrors `nftKey` in balance-cache,
+ * duplicated rather than imported so this module stays free of the cache.
+ */
+export const describeNFTKey = (nft: RailgunNFTAmount): string =>
+  `${nft.nftAddress.toLowerCase()}:${nftTokenId(nft.tokenSubID)}`;
+
 export const describeNFT = (
   nft: RailgunNFTAmount,
   known: readonly KnownCollection[],
+  buckets?: Readonly<Record<string, readonly string[]>>,
 ): RailgunDisplayNFT => {
   const match = known.find(
     (c) => c.address.toLowerCase() === nft.nftAddress.toLowerCase(),
@@ -48,10 +57,16 @@ export const describeNFT = (
     amount: nft.amount,
     label: match ? `${match.name} #${id}` : `${shortAddress(nft.nftAddress)} #${id}`,
     kind: match?.kind,
+    // Left undefined when no bucket map is supplied, so a caller that does not
+    // know cannot be mistaken for one reporting "spendable".
+    ...(buckets
+      ? { availability: bestAvailability(buckets[describeNFTKey(nft)] ?? []) }
+      : {}),
   };
 };
 
 export const describeNFTs = (
   nfts: readonly RailgunNFTAmount[],
   known: readonly KnownCollection[],
-): RailgunDisplayNFT[] => nfts.map((nft) => describeNFT(nft, known));
+  buckets?: Readonly<Record<string, readonly string[]>>,
+): RailgunDisplayNFT[] => nfts.map((nft) => describeNFT(nft, known, buckets));
