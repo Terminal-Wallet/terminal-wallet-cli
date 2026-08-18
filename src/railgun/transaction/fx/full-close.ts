@@ -73,3 +73,43 @@ export const fullCloseRequirement = (
     input.availableDebtToken >= required ? 0n : required - input.availableDebtToken;
   return { required, shortfall, closesFully: shortfall === 0n };
 };
+
+/** Debt token that must be INSIDE the batch to clear the debt, fees included. */
+export const inBatchDebtTokenForFullClose = (
+  debt: bigint,
+  repayFeeRatio: bigint,
+): bigint => (debt <= 0n ? 0n : divUp(debt * (FEE_DENOM + repayFeeRatio), FEE_DENOM));
+
+/** What survives RAILGUN's unshield fee. */
+export const netOfUnshieldFee = (
+  gross: bigint,
+  railgunUnshieldFeeBps: bigint,
+): bigint => (gross * (BPS_DENOM - railgunUnshieldFeeBps)) / BPS_DENOM;
+
+/**
+ * How much of a token to sell to raise `needed` of another, learned from a
+ * quote rather than a price feed.
+ *
+ * `probeGuaranteed` must be the quote's GUARANTEED (minimum) output, not its
+ * expected fill: sizing against the expected one builds a batch that mines
+ * having done nothing whenever the fill comes in a basis point light.
+ *
+ * The buffer covers the difference between the probe's rate and the rate at a
+ * larger size, since a bigger sell moves through more of the book.
+ */
+export const sellAmountForDebtToken = (input: {
+  needed: bigint;
+  probeSell: bigint;
+  probeGuaranteed: bigint;
+  bufferBps: bigint;
+}): bigint => {
+  const { needed, probeSell, probeGuaranteed, bufferBps } = input;
+  if (needed <= 0n) return 0n;
+  if (probeSell <= 0n || probeGuaranteed <= 0n) {
+    throw new Error(
+      "sellAmountForDebtToken: the probe quote returned nothing to derive a rate from",
+    );
+  }
+  const atProbeRate = divUp(needed * probeSell, probeGuaranteed);
+  return divUp(atProbeRate * (BPS_DENOM + bufferBps), BPS_DENOM);
+};
