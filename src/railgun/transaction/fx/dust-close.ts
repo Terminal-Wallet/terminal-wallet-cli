@@ -3,7 +3,7 @@
  *
  * The ordinary close is bounded by the debt token the wallet holds shielded.
  * Short of the full debt it silently becomes a PARTIAL close: the position
- * survives, the NFT is not burnt, and the residue keeps accruing interest.
+ * survives with a residue that keeps accruing interest.
  * Repeatedly that leaves dust positions nobody can finish off, because the
  * amount still owed is smaller than the effort of working out what to shield.
  *
@@ -295,7 +295,8 @@ export const getFxDustCloseInputs = async (
     partialClose: false,
     relayAdaptUnshieldERC20Amounts,
     relayAdaptUnshieldNFTAmounts: [positionNFT],
-    // A full close burns the position, so nothing comes back on the NFT side.
+    // A full close declares no NFT output; the NFT still returns as an unspent
+    // leftover, because f(x) empties a position rather than destroying it.
     relayAdaptShieldNFTRecipients: toShieldNFTRecipients(recipeOutput.nftRecipients),
     relayAdaptShieldERC20Addresses,
     steps: recipeOutput.stepOutputs,

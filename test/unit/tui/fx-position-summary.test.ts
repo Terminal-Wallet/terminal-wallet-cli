@@ -158,9 +158,17 @@ const close = (
     format: fmt,
   }).map(strip);
 
-test("repaying the whole debt says the position is closed and burnt", () => {
+test("repaying the whole debt clears it, and says the position is kept", () => {
+  // NOT "burnt". Measured on mainnet (tx 0x73d732bc...): f(x)'s own full-close
+  // sentinel zeroed the position and ownerOf still returned the RAILGUN proxy.
+  // The pool empties a position; it never destroys the NFT.
   const lines = close(1880030086474238325175n);
-  assert.ok(lines.some((l) => /closes the position fully/.test(l)));
+  assert.ok(lines.some((l) => /clears the debt/.test(l)));
+  assert.ok(
+    !lines.some((l) => /burnt|burned|destroy/i.test(l)),
+    "still claims the position is destroyed",
+  );
+  assert.ok(lines.some((l) => /kept, empty/.test(l)));
   assert.ok(lines.some((l) => /1\.6067 wstETH/.test(l)), "does not say what comes back");
 });
 
@@ -189,7 +197,7 @@ test("grossed up through both fees, it does close fully", () => {
   const throughRepay = (debt * 1_001_000_000n + 999_999_999n) / 1_000_000_000n;
   const required = (throughRepay * 10_000n + 9_974n) / 9_975n;
   const lines = close(required, { repayFeeRatio: 1_000_000n }, 25n);
-  assert.ok(lines.some((l) => /closes the position fully/.test(l)));
+  assert.ok(lines.some((l) => /clears the debt/.test(l)));
 });
 
 test("a partial close is not the quietest thing on the screen", () => {
@@ -228,7 +236,7 @@ test("repaying more than is owed says the excess is not used", () => {
   // A number larger than the debt reads as if it will all be spent.
   const lines = close(3000000000000000000000n);
   assert.ok(lines.some((l) => /is not used/.test(l)));
-  assert.ok(lines.some((l) => /closes the position fully/.test(l)));
+  assert.ok(lines.some((l) => /clears the debt/.test(l)));
 });
 
 test("a swap out is named, so the collateral is not reported as arriving unchanged", () => {
@@ -298,13 +306,13 @@ test("a position that could not be read says so in the detail view too", () => {
   assert.ok(!/0\.0000/.test(all), "showed figures for a position it could not read");
 });
 
-// --- emptied but not burnt ---------------------------------------------------
+// --- emptied, which is how every close ends ---------------------------------------------------
 
 /**
- * A close by explicit amount repays and withdraws to zero WITHOUT burning —
- * only the pool's own full-close sentinel burns. So a wallet really can hold a
- * position with nothing in it, and the pool reports it identically to one that
- * never existed. Position 1981 ended exactly there on 2026-08-18.
+ * f(x) never burns a position NFT. Both close paths — explicit amounts and the
+ * pool's own full-close sentinel — zero the legs and leave the NFT held, which
+ * tx 0x73d732bc... proved on mainnet. So every closed position ends up here,
+ * and the pool reports it identically to one that never existed.
  */
 const EMPTY = state({
   collateralAmount: 0n,
@@ -329,7 +337,10 @@ test("CONTROL: an emptied position must not render as a healthy one", () => {
 test("the detail panel explains that nothing is owed and nothing is at risk", () => {
   const lines = fxPositionDetailLines("wstETH-Long #1981", EMPTY, "wstETH", fmt).map(strip);
   assert.ok(lines.some((l) => /empty/i.test(l)));
-  assert.ok(lines.some((l) => /without\s*$|burning/i.test(l)), "does not explain why it still exists");
+  assert.ok(
+    lines.some((l) => /always survives a close/.test(l)),
+    "does not explain why it still exists",
+  );
   assert.ok(!lines.some((l) => /could not be read/.test(l)));
 });
 

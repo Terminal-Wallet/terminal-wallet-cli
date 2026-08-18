@@ -47,7 +47,7 @@ export interface FxPositionState {
  *
  * - `live`   — a position with a meaningful amount in it
  * - `dust`   — still OPEN, with debt still accruing, but too small to render
- * - `empty`  — no collateral: burnt, or an id that never existed
+ * - `empty`  — nothing in it: closed out, or an id that never existed
  *
  * `dust` exists because a partial close that repays almost everything leaves a
  * residue, and a residue is not a closed position. The debt keeps accruing and

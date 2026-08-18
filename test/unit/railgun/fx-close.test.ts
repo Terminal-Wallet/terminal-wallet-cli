@@ -41,7 +41,7 @@ const amounts = (availableDebtToken: bigint) =>
 
 test("enough of the debt token to cover the debt closes the position outright", () => {
   const full = amounts(POSITION.debt * 2n);
-  assert.equal(full.partialClose, false, "the position should be burnt");
+  assert.equal(full.partialClose, false, "should take the full-close path");
   assert.ok(full.withdrawColl > 0n, "collateral comes back");
 });
 
@@ -74,9 +74,16 @@ test("the position NFT is unshielded into the batch, not just shielded back", ()
   assert.match(close, /nfts: \[\{ \.\.\.positionNFT, recipient: railgunAddress \}\]/);
 });
 
-test("a full close shields no NFT back, and that is not a gap", () => {
+test("the NFT is shielded back on whatever the recipe declares", () => {
+  // A full close was believed to burn the position, so declaring no NFT output
+  // was called correct-not-a-gap. It does not burn: the mainnet full close left
+  // ownerOf returning the RAILGUN proxy, and the NFT came back as a leftover
+  // RelayAdapt returned rather than as a declared shield.
   assert.match(close, /toShieldNFTRecipients\(/);
-  assert.match(close, /burns it/);
+  assert.ok(
+    !/burns it/.test(close),
+    "still claims a full close destroys the position",
+  );
 });
 
 test("the RAILGUN fee is read, never assumed", () => {

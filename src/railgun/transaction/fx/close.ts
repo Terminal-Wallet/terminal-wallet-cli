@@ -3,8 +3,9 @@
  *
  * Unwinding is the mirror of opening: the position NFT is unshielded into the
  * batch, the debt token is unshielded to repay the debt, the pool hands back
- * the collateral, and everything left is shielded again. A full close burns the
- * NFT; a partial one keeps it, so the two differ in whether it comes back.
+ * the collateral, and everything left is shielded again. The position NFT comes
+ * back either way — f(x) empties a position on close, it never destroys it, so
+ * a full close and a partial one differ only in how much debt is left.
  *
  * How MUCH can be repaid is not a free choice. It is bounded by the debt token
  * the wallet holds, less RAILGUN's unshield fee, less the pool's repay fee — and
@@ -68,8 +69,10 @@ export interface FxMintCloseBuild extends CrossContractInputs {
   /** Collateral the pool will release. */
   withdrawColl: bigint;
   /**
-   * Whether the position survives. A partial close keeps the NFT and shields it
-   * back; a full close burns it, so nothing comes back on the NFT side.
+   * Whether any debt is left. NOT whether the NFT survives — it always does:
+   * f(x) empties a position rather than destroying it, proved on mainnet by
+   * tx 0x73d732bc..., which sent the pool's own full-close sentinel and left
+   * ownerOf still returning the RAILGUN proxy.
    */
   partialClose: boolean;
   /** Whether the released collateral was swapped on the way back. */
@@ -284,8 +287,9 @@ export const getFxMintCloseInputs = async (
     fullClose,
     relayAdaptUnshieldERC20Amounts,
     relayAdaptUnshieldNFTAmounts: [positionNFT],
-    // A full close burns the position, so the recipe declares no NFT output and
-    // this is empty — which is correct, not a gap.
+    // Whatever the recipe declares. A full close declares no NFT output, and
+    // the NFT still comes back — RelayAdapt returns it as an unspent leftover
+    // rather than a declared shield, since nothing in the batch consumes it.
     relayAdaptShieldNFTRecipients: toShieldNFTRecipients(
       recipeOutput.nftRecipients,
     ),

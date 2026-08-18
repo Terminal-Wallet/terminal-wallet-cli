@@ -108,8 +108,8 @@ export const fxPositionSummary = (
   // render as an empty, healthy one — that is an invitation to borrow against
   // collateral that may not be there.
   if (!state) return "could not read this position";
-  // Emptied but not burnt: repaid and withdrawn to zero by explicit amount,
-  // which the pool does not burn. Zero debt at zero collateral would otherwise
+  // Emptied. The pool never burns a position NFT — closing zeroes both legs
+  // and the NFT stays held. Zero debt at zero collateral would otherwise
   // render as a perfectly healthy position at 0.0% — the most reassuring row on
   // the screen, for something with nothing in it.
   if (state.collateralAmount === 0n && state.debtAmount === 0n) {
@@ -174,9 +174,9 @@ export const fxPositionDetailLines = (
       tag(label, "magenta"),
       "",
       tag("This position is empty.", "yellow"),
-      tag("Its debt is repaid and its collateral withdrawn, but the position", "gray"),
-      tag("itself still exists — a close by explicit amount empties without", "gray"),
-      tag("burning. Nothing is at risk here and nothing is owed.", "gray"),
+      tag("Its debt is repaid and its collateral withdrawn. The position itself", "gray"),
+      tag("always survives a close — f(x) empties it rather than destroying it,", "gray"),
+      tag("so this is the normal end state. Nothing is owed or at risk.", "gray"),
       "",
       tag("Keeping it costs nothing. Manage can top it up and borrow against", "gray"),
       tag("it again, which reuses this position instead of minting another.", "gray"),
@@ -305,7 +305,12 @@ export const fxCloseLines = ({
 
   const lines = [
     full
-      ? tag("closes the position fully — #id is burnt", "yellow")
+      ? // NOT "burnt". Measured on mainnet: tx 0x73d732bc… sent f(x)'s own
+        // full-close sentinel on both legs, succeeded, and left the position at
+        // 0/0 with ownerOf still returning the RAILGUN proxy. The pool empties
+        // a position; it never destroys the NFT. Saying otherwise told users
+        // their position would disappear and then left it on the screen.
+        tag("clears the debt and takes the collateral back — the position is kept, empty", "yellow")
       : // Not gray. A partial close leaves a live position accruing interest
         // that can still be liquidated, and it is the outcome the user did not
         // ask for — quieter than the safe one is the wrong way round.

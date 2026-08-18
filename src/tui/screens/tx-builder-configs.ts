@@ -1366,7 +1366,8 @@ export const txBuilderConfigs: Record<
     chainName,
     verb: "Close",
     // The amount is fxUSD put toward the debt: enough covers it and the
-    // position is burnt, less makes it a partial close.
+    // position is emptied, less makes it a partial close. The NFT survives
+    // either way — f(x) does not burn positions.
     // The buy token is what the released collateral comes back AS; naming the
     // collateral itself means no swap. The debt is always repaid in fxUSD —
     // the cookbook's close combo swaps on the way out only.
