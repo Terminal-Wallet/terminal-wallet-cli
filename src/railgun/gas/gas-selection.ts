@@ -103,7 +103,27 @@ export const customOverride = (
  *
  * Type4 is therefore preserved from `details`, and a legacy-shaped override is
  * mapped onto the 1559 fields it needs.
+ *
+ * A legacy override carries only a gasPrice, so the tip has to come from
+ * somewhere. It used to be 0, which is a transaction no block will include: the
+ * ceiling was the user's chosen price and the miner's share of it was nothing.
+ * The tip already on `details` is kept instead — it was derived from the
+ * network and is the figure the estimate was built around — clamped to the
+ * chosen ceiling, since a tip above the max fee is rejected outright.
  */
+
+/**
+ * The tip to keep when a legacy override lands on a 1559 transaction.
+ *
+ * Carries the existing tip across, bounded by the new ceiling. Zero would be
+ * unmineable; a tip larger than the max fee is invalid.
+ */
+const clampTip = (details: TransactionGasDetails, ceiling: bigint): bigint => {
+  const existing =
+    "maxPriorityFeePerGas" in details ? details.maxPriorityFeePerGas : 0n;
+  return existing > ceiling ? ceiling : existing;
+};
+
 export const applyOverrideToDetails = (
   details: TransactionGasDetails,
   o: GasOverride,
@@ -116,7 +136,11 @@ export const applyOverrideToDetails = (
     return (
       o.evmGasType === EVMGasType.Type2
         ? { ...base, maxFeePerGas: o.maxFeePerGas, maxPriorityFeePerGas: o.maxPriorityFeePerGas }
-        : { ...base, maxFeePerGas: priceField(o), maxPriorityFeePerGas: 0n }
+        : {
+            ...base,
+            maxFeePerGas: priceField(o),
+            maxPriorityFeePerGas: clampTip(details, priceField(o)),
+          }
     ) as TransactionGasDetails;
   }
   return { ...base, gasPrice: priceField(o) } as TransactionGasDetails;

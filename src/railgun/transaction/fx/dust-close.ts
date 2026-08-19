@@ -138,6 +138,15 @@ export const getFxDustCloseInputs = async (
     position.debt,
     poolState.repayFeeRatio,
   );
+  // Nothing owed is not the same as "you can already afford it", and saying the
+  // latter sends the user to a close that will also refuse. f(x) empties a
+  // position rather than destroying it, so a closed one sits here at 0/0 and is
+  // a perfectly ordinary thing to select by mistake.
+  if (position.debt <= 0n) {
+    throw new Error(
+      "This position is already empty — nothing is owed, so there is nothing to close.",
+    );
+  }
   const existingInBatch = netOfUnshieldFee(shieldedDebtToken, fees.unshield);
   const shortfall =
     neededInBatch > existingInBatch ? neededInBatch - existingInBatch : 0n;

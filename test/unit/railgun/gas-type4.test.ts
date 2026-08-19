@@ -55,7 +55,31 @@ test("a legacy override keeps type-4 and maps its price onto maxFeePerGas", () =
   };
   assert.equal(out.evmGasType, EVMGasType.Type4);
   assert.equal(out.maxFeePerGas, 40_000_000_000n);
-  assert.equal(out.maxPriorityFeePerGas, 0n);
+});
+
+test("CONTROL: a legacy override does not zero the tip", () => {
+  // It used to. A type-4 transaction with a 0 tip is one no block will include:
+  // the ceiling is the user's chosen price and the miner's share of it is
+  // nothing. The tip already on the details — derived from the network, and
+  // what the estimate was built around — is carried across instead.
+  const out = applyOverrideToDetails(type4(), legacyOverride) as TransactionGasDetails & {
+    maxPriorityFeePerGas: bigint;
+  };
+  assert.notEqual(out.maxPriorityFeePerGas, 0n, "back to an unmineable zero tip");
+  assert.equal(out.maxPriorityFeePerGas, 1_000_000_000n, "the existing tip was not kept");
+});
+
+test("the carried tip never exceeds the chosen ceiling", () => {
+  // A tip above the max fee is rejected outright, so a cheap override must
+  // clamp rather than carry a tip larger than the price it sets.
+  const cheap = { evmGasType: EVMGasType.Type0 as const, gasPrice: 500_000_000n };
+  const out = applyOverrideToDetails(type4(), cheap) as TransactionGasDetails & {
+    maxFeePerGas: bigint;
+    maxPriorityFeePerGas: bigint;
+  };
+  assert.equal(out.maxFeePerGas, 500_000_000n);
+  assert.equal(out.maxPriorityFeePerGas, 500_000_000n, "tip should clamp to the ceiling");
+  assert.ok(out.maxPriorityFeePerGas <= out.maxFeePerGas);
 });
 
 test("the gas estimate is carried over, not the override's", () => {

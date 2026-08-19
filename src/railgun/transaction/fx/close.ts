@@ -141,6 +141,15 @@ export const getFxMintCloseInputs = async (
       `RAILGUN fees are not known for ${chainName} yet — wait for the engine to load.`,
     );
   }
+  // Before computeFxClose, which refuses a zero debt with wording about a
+  // proportional withdraw being undefined — true, and not what the user needs
+  // to read. A closed position stays in the wallet as an empty one, so
+  // selecting it here is an easy mistake rather than an exotic one.
+  if (position.debt <= 0n) {
+    throw new Error(
+      "This position is already empty — nothing is owed, so there is nothing to close.",
+    );
+  }
   const amounts = computeFxClose({
     // Both of these are NATIVE token amounts. The cookbook used to take the
     // position's raw figures here and derive the native ones itself; it now

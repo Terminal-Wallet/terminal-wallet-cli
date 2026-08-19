@@ -178,8 +178,16 @@ export const fxPositionDetailLines = (
       tag("always survives a close — f(x) empties it rather than destroying it,", "gray"),
       tag("so this is the normal end state. Nothing is owed or at risk.", "gray"),
       "",
-      tag("Keeping it costs nothing. Manage can top it up and borrow against", "gray"),
-      tag("it again, which reuses this position instead of minting another.", "gray"),
+      tag("Keeping it costs nothing, and Manage can top it up and borrow", "gray"),
+      tag("against it again rather than minting a new one.", "gray"),
+      "",
+      // The trade is real and only the user can weigh it, so both halves are
+      // stated rather than one recommended. The id is the linkable part: the
+      // NFT is shielded and the executor rotates every send, but the tokenId
+      // does not, so everything done through one position is provably the same
+      // position.
+      tag("Reuse is cheaper; a fresh position is more private. This id is", "gray"),
+      tag("public, so repeated use links those actions to each other.", "gray"),
     ];
   }
   const wad = Number(10n ** 18n);
