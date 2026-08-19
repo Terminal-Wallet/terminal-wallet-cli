@@ -25,11 +25,38 @@ export interface InputChoice {
   hint?: string;
 }
 
+/** One endpoint as the editor sees it. `probe` is filled in asynchronously. */
+export interface RpcRowInput {
+  url: string;
+  enabled: boolean;
+  isDefault: boolean;
+  probe?: { ok: true; blockNumber: bigint; latencyMs: number } | { ok: false; reason: string };
+}
+
+/** What the editor decided about one endpoint. */
+export interface RpcEndpointEdit {
+  url: string;
+  action: "enable" | "disable" | "remove";
+}
+
 export interface WalletInputProvider {
   /** Prompt for a RAW password string. Core does the hashing — UI only collects text. */
   promptPassword(message: string): Promise<string | undefined>;
   /** Collect new/imported wallet details (mnemonic, name, derivation index). */
   promptNewWallet(): Promise<TMPWalletInfo | undefined>;
+  /**
+   * Edit this chain's RPC endpoints on one screen, with each one's live head
+   * block. Resolves the edits to apply, or undefined if cancelled — an empty
+   * array means "reviewed, changed nothing", which is not the same answer.
+   *
+   * `onProbe` is handed the rows to check and a repaint callback; the caller
+   * owns the probing so this seam stays free of network concerns.
+   */
+  promptRpcEndpoints(
+    title: string,
+    rows: RpcRowInput[],
+    onProbe: (rows: RpcRowInput[], paint: () => void) => void,
+  ): Promise<RpcEndpointEdit[] | undefined>;
   /** Yes/no confirmation. */
   confirm(message: string): Promise<boolean>;
   /** Non-blocking notice (e.g. "Generating wallet…"). */
@@ -46,10 +73,15 @@ export interface WalletInputProvider {
     choices: InputChoice[],
     opts?: { initial?: string[] },
   ): Promise<string[] | undefined>;
-  /** Free-text input; `password` masks it (undefined = cancel). `hint` shows a dimmed format hint. */
+  /**
+   * Free-text input; `password` masks it (undefined = cancel). `hint` shows a
+   * dimmed format hint. `countWords` adds a live word count — for a masked seed
+   * phrase, the only signal that a paste arrived whole. Opt-in, because under a
+   * password prompt the same counter would be noise at best.
+   */
   input(
     message: string,
-    opts?: { password?: boolean; hint?: string },
+    opts?: { password?: boolean; hint?: string; countWords?: boolean },
   ): Promise<string | undefined>;
 }
 

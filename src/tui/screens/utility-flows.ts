@@ -5,7 +5,9 @@
  * core functions. Returns a boolean/info the caller can use to refresh the UI.
  */
 import { NetworkName } from "@railgun-community/shared-models";
-import { getInputProvider } from "../../core/input";
+import { getInputProvider, RpcRowInput } from "../../core/input";
+import { probeRpcEndpoint } from "../../railgun/network/rpc-probe";
+import configDefaults from "../../config/config-defaults";
 import {
   switchRailgunNetwork,
   switchRailgunWallet,
@@ -100,42 +102,49 @@ export const runEditRpcFlow = async (
 ): Promise<boolean> => {
   const provider = getInputProvider();
   const options = getProviderOptions(chainName);
-  const pick = await provider.select(`RPC providers · ${chainName}`, [
-    ...options.map((o) => ({
-      label: o.provider,
-      value: `url:${o.provider}`,
-      hint: o.enabled ? "enabled" : "disabled",
-    })),
-    { label: "+ Add custom RPC URL", value: "add", hint: "https://…" },
-  ]);
-  if (!pick) return false;
+  const defaults = new Set(
+    configDefaults.networkConfig[chainName].providers.map(
+      (p: { provider: string }) => p.provider,
+    ),
+  );
 
-  if (pick === "add") {
-    const url = await provider.input("Custom RPC URL", { hint: "https://… endpoint" });
-    if (!url) {
-      provider.notify("Cancelled.");
-      return false;
+  const rows: RpcRowInput[] = options.map((o) => ({
+    url: o.provider,
+    enabled: o.enabled,
+    isDefault: defaults.has(o.provider),
+  }));
+
+  // Probing is the flow's job, not the modal's — the seam stays free of the
+  // network, and the modal repaints as each answer lands rather than blocking
+  // on the slowest endpoint.
+  const probe = (targets: RpcRowInput[], paint: () => void) => {
+    for (const row of targets) {
+      void probeRpcEndpoint(row.url).then((result) => {
+        row.probe = result;
+        paint();
+      });
     }
-    setCustomProviderStatus(chainName, url.trim(), true);
-    await loadProviderList(chainName);
-    provider.notify("Added custom RPC.");
-    return true;
+  };
+
+  const edits = await provider.promptRpcEndpoints(
+    `RPC endpoints · ${chainName}`,
+    rows,
+    probe,
+  );
+  if (!edits) return false;
+  if (!edits.length) {
+    provider.notify("No changes.");
+    return false;
   }
 
-  const url = pick.slice(4);
-  const current = options.find((o) => o.provider === url);
-  const action = await provider.select(url, [
-    { label: current?.enabled ? "Disable" : "Enable", value: "toggle" },
-    { label: "Remove", value: "remove", hint: "custom only" },
-  ]);
-  if (!action) return false;
-  if (action === "toggle") {
-    setCustomProviderStatus(chainName, url, !current?.enabled);
-  } else {
-    removeCustomProvider(chainName, url);
+  for (const edit of edits) {
+    if (edit.action === "remove") removeCustomProvider(chainName, edit.url);
+    else setCustomProviderStatus(chainName, edit.url, edit.action === "enable");
   }
   await loadProviderList(chainName);
-  provider.notify(action === "toggle" ? "Provider updated." : "Provider removed.");
+  provider.notify(
+    `Updated ${edits.length} endpoint${edits.length === 1 ? "" : "s"}.`,
+  );
   return true;
 };
 

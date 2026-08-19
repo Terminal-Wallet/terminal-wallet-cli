@@ -87,6 +87,12 @@ export const headlessInputProvider: WalletInputProvider = {
     return unsupported("create a wallet");
   },
 
+  async promptRpcEndpoints(): Promise<undefined> {
+    // Editing endpoints is a live, multi-row screen with per-row probe results.
+    // A diagnostic reports; it does not reconfigure.
+    return unsupported("edit RPC endpoints");
+  },
+
   async confirm(message: string): Promise<boolean> {
     if (!isInteractive()) {
       return false;

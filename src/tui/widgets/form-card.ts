@@ -98,7 +98,11 @@ export const runFormCard = (
           break;
         }
         case "password": {
-          const v = await provider.input(f.label, { password: true, hint: f.hint });
+          const v = await provider.input(f.label, {
+            password: true,
+            hint: f.hint,
+            countWords: f.countWords,
+          });
           if (v !== undefined) values[f.key] = v;
           break;
         }

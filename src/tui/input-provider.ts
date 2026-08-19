@@ -20,11 +20,23 @@ import { buildWalletInfo } from "../flows/new-wallet";
 import { FormSpec } from "./form-core";
 import { runFormCard } from "./widgets/form-card";
 import { createModal, shifted } from "./widgets/modal";
+import {
+  RpcRow,
+  leadBlock,
+  rpcStatusLabel,
+  rpcSummaryLine,
+  shortenUrl,
+} from "./format/rpc-status";
+import { RpcEndpointEdit } from "../core/input";
 
 export const createBlessedInputProvider = (
   blessed: any,
   screen: any,
 ): WalletInputProvider => {
+  /** Status-line notice from inside a modal, where the provider object is not yet built. */
+  const notifyStatus = (text: string) =>
+    emitCoreEvent({ type: "status:message", text, durationMs: 10_000 });
+
   // Centered single-line text/password modal. Resolves the raw value or
   // undefined (Esc/empty). grabKeys keeps the global menu shortcuts from firing
   // while the modal is focused.
@@ -32,13 +44,17 @@ export const createBlessedInputProvider = (
     message: string,
     censor: boolean,
     hint?: string,
+    countWords = false,
   ): Promise<string | undefined> =>
     new Promise((resolve) => {
       let finish: (val?: string) => void = () => undefined;
       const { box, guardFocus, close } = createModal(blessed, screen, {
         title: message,
         widthPct: 60,
-        height: hint ? 8 : 7,
+        // The counter needs its own line, and only the fields that ask for one
+        // get it — a word count under the wallet password would be nonsense at
+        // best and a hint at worst.
+        height: (hint ? 8 : 7) + (countWords ? 1 : 0),
         accent: "cyan",
         footer: "Enter submit · Esc cancel",
         onDismiss: () => finish(undefined),
@@ -68,6 +84,42 @@ export const createBlessedInputProvider = (
         mouse: true,
         style: { bg: "black", focus: { bg: "black" } },
       });
+      // A censored field gives no feedback at all, and a seed usually arrives
+      // from a clipboard in one burst — the failure to catch is a paste that
+      // dropped its tail, which looks exactly like a whole one. Count the words
+      // as they land, so the check happens before Enter rather than after the
+      // balance comes back wrong.
+      const counter = countWords
+        ? blessed.text({
+            parent: box,
+            top: hint ? 3 : 2,
+            left: 1,
+            right: 1,
+            tags: true,
+            content: "{gray-fg}0 words{/}",
+          })
+        : undefined;
+      if (counter) {
+        const tick = () => {
+          const n = input.getValue().trim().split(/\s+/).filter(Boolean).length;
+          // 12 and 24 are the only counts a BIP39 phrase comes in; anything
+          // else is a truncated paste or a stray token, so say so rather than
+          // leaving the number to be interpreted.
+          const ok = n === 12 || n === 24;
+          counter.setContent(
+            n === 0
+              ? "{gray-fg}0 words{/}"
+              : ok
+                ? `{green-fg}${n} words{/}`
+                : `{yellow-fg}${n} words — expected 12 or 24{/}`,
+          );
+          screen.render();
+        };
+        // blessed applies the keystroke to the value AFTER the listeners run,
+        // so read it on the next tick or the counter trails by one character.
+        input.on("keypress", () => setImmediate(tick));
+      }
+
       let settled = false;
       finish = (val?: string) => {
         if (settled) return;
@@ -286,6 +338,145 @@ export const createBlessedInputProvider = (
       screen.render();
     });
 
+  /**
+   * Live RPC endpoint editor: one screen, focused on open.
+   *
+   * Replaces a chain of selects (pick a URL, then pick Enable/Disable/Remove,
+   * then back out and repeat) where the only status was the user's own
+   * enabled flag. That flag is a preference; it never said whether the endpoint
+   * answers, and a dead one looked exactly like a working one.
+   *
+   * Every enabled endpoint is probed for its head block as the modal opens, so
+   * the list reports what is actually reachable and how far behind the leader
+   * each one is. Toggling is Space, in place — no round trip.
+   */
+  const promptRpcEndpoints = (
+    title: string,
+    initial: RpcRow[],
+    onProbe: (rows: RpcRow[], paint: () => void) => void,
+  ): Promise<RpcEndpointEdit[] | undefined> =>
+    new Promise((resolve) => {
+      let done: (v?: RpcEndpointEdit[]) => void = () => undefined;
+      const rows: RpcRow[] = initial.map((r) => ({ ...r }));
+      const removed = new Set<string>();
+      const startEnabled = new Map(rows.map((r) => [r.url, r.enabled]));
+
+      const visible = () => rows.filter((r) => !removed.has(r.url));
+      const urlW = Math.min(
+        46,
+        visible().reduce((m, r) => Math.max(m, shortenUrl(r.url).length), 0),
+      );
+
+      const rowFor = (r: RpcRow) => {
+        const box = r.enabled ? "{green-fg}[x]{/}" : "[ ]";
+        const status = rpcStatusLabel(r, leadBlock(visible()));
+        // Disabled endpoints are not probed, so do not imply they were.
+        const cell = !r.enabled
+          ? "{gray-fg}disabled{/}"
+          : !r.probe
+            ? `{gray-fg}${status}{/}`
+            : r.probe.ok
+              ? `{green-fg}${status}{/}`
+              : `{red-fg}${status}{/}`;
+        const tail = r.isDefault ? "" : " {gray-fg}(custom){/}";
+        return `${box} ${shortenUrl(r.url).padEnd(urlW + 2)}${cell}${tail}`;
+      };
+
+      const screenH = (screen.height as number) || 24;
+      const listH = Math.max(3, Math.min(Math.max(rows.length, 1), screenH - 10));
+      const { box, guardFocus, close } = createModal(blessed, screen, {
+        title,
+        widthPct: 78,
+        height: listH + 6,
+        accent: "cyan",
+        footer:
+          "↑/↓ move · Space enable/disable · a add · r remove custom · p re-check · Enter save · Esc cancel",
+        onDismiss: () => done(undefined),
+      });
+      const list = blessed.list({
+        parent: box, top: 0, left: 0, right: 0, height: listH,
+        tags: true, keys: true, mouse: true, scrollable: true,
+        style: { selected: { bg: "#1f4f82", fg: "white" }, item: { fg: "white" } },
+      });
+      const summary = blessed.text({
+        parent: box, bottom: 1, left: 1, right: 1, tags: true, content: "",
+      });
+
+      const paint = () => {
+        const items = visible();
+        list.setItems(items.length ? items.map(rowFor) : ["{gray-fg}none configured{/}"]);
+        summary.setContent(`{gray-fg}${rpcSummaryLine(items)}{/}`);
+        screen.render();
+      };
+
+      const selected = (): RpcRow | undefined => visible()[list.selected as number];
+
+      list.key(["space"], () => {
+        const r = selected();
+        if (!r) return;
+        r.enabled = !r.enabled;
+        // Newly enabled means newly worth asking; newly disabled means the old
+        // answer is about to be misleading.
+        r.probe = undefined;
+        paint();
+        if (r.enabled) onProbe([r], paint);
+      });
+      list.key(["p"], () => {
+        for (const r of visible()) if (r.enabled) r.probe = undefined;
+        paint();
+        onProbe(visible().filter((r) => r.enabled), paint);
+      });
+      list.key(["r"], () => {
+        const r = selected();
+        // Defaults come from the shipped config; removing one would be undone
+        // on the next load, so it is disabled instead.
+        if (!r || r.isDefault) {
+          notifyStatus("Only custom endpoints can be removed — disable this one instead.");
+          return;
+        }
+        removed.add(r.url);
+        paint();
+      });
+      list.key(["a"], () => {
+        void (async () => {
+          const url = await promptText("Custom RPC URL", false, "https://… endpoint");
+          if (url?.trim()) {
+            const trimmed = url.trim();
+            if (!visible().some((r) => r.url === trimmed)) {
+              const added: RpcRow = { url: trimmed, enabled: true, isDefault: false };
+              rows.push(added);
+              paint();
+              onProbe([added], paint);
+            }
+          }
+          guardFocus(list);
+          list.focus();
+          paint();
+        })();
+      });
+      done = (v?: RpcEndpointEdit[]) => { close(); resolve(v); };
+      list.key(["escape"], () => done(undefined));
+      list.key(["enter"], () => {
+        const edits: RpcEndpointEdit[] = [];
+        for (const url of removed) edits.push({ url, action: "remove" });
+        for (const r of visible()) {
+          if (startEnabled.get(r.url) !== r.enabled || !startEnabled.has(r.url)) {
+            edits.push({ url: r.url, action: r.enabled ? "enable" : "disable" });
+          }
+        }
+        done(edits);
+      });
+      box.on("click", () => { list.focus(); screen.render(); });
+
+      paint();
+      guardFocus(list);
+      // Focused on open: the previous editor needed a click before any key did
+      // anything.
+      list.focus();
+      screen.render();
+      onProbe(visible().filter((r) => r.enabled), paint);
+    });
+
   // Same list as promptSelect, with a checkbox column. Space toggles, Enter
   // confirms the set. Cancel and "confirmed nothing" are different answers, so
   // Esc resolves undefined while Enter on an empty set resolves [].
@@ -374,6 +565,7 @@ export const createBlessedInputProvider = (
         { key: "name", label: "Wallet name", type: "text", required: true },
         {
           key: "mnemonic", label: "Seed phrase", type: "password", secret: true,
+          countWords: true,
           // The row shows the word count once entered — the only way to tell a
           // whole paste from a truncated one behind a mask.
           hint: "12 / 24 words — import only. Check the word count on the row.",
@@ -423,10 +615,11 @@ export const createBlessedInputProvider = (
     notify: (message) =>
       emitCoreEvent({ type: "status:message", text: message, durationMs: 10_000 }),
     promptNewWallet,
+    promptRpcEndpoints,
     select: (message, choices) => promptSelect(message, choices),
     multiSelect: (message, choices, opts) =>
       promptMultiSelect(message, choices, opts?.initial ?? []),
     input: (message, opts) =>
-      promptText(message, opts?.password ?? false, opts?.hint),
+      promptText(message, opts?.password ?? false, opts?.hint, opts?.countWords),
   };
 };

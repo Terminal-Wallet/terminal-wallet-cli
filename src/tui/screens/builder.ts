@@ -363,6 +363,25 @@ export const createBuilder = (host: BuilderHost): Builder => {
   const fxBlocker = (): string | undefined => {
     const held = state.position?.state;
     if (!held) return undefined;
+    // On a close the amount is not a preference — it is the debt grossed up
+    // through both fees, so there is nothing to "reduce". Being short of the
+    // debt token means raising the difference, which is the whole reason Close
+    // fully exists. The generic overspend advice says the opposite, and taking
+    // it produces the dust position the prefill was written to prevent.
+    if (cfg?.amountIsPositionDebt) {
+      const [short] = currentOverspend();
+      if (short) {
+        const amount = fmtAmount(
+          formatUnits(short.overBy, short.token.decimals),
+          6,
+        );
+        return (
+          `Not enough ${short.token.symbol} to close this position — short by ` +
+          `${amount}. Reducing the amount leaves a dust debt still accruing; ` +
+          `use "Close fully" to sell another token for the difference.`
+        );
+      }
+    }
     const plan = managePlan();
     if (plan && !plan.ok) {
       // "nothing to change" is the untouched state, not an error to shout
@@ -700,7 +719,16 @@ export const createBuilder = (host: BuilderHost): Builder => {
       `overspends ${o.token.symbol} by ${fmtAmount(formatUnits(o.overBy, o.token.decimals), 6)}`;
     // At the top, so it is visible without scrolling the panel.
     if (over.length) {
-      lines.unshift(...over.map((o) => tag(`▲ ${overText(o)}`, "red")), "");
+      // A close that cannot be afforded is a dead end unless the screen names
+      // the way out: submit refuses, and the only remedy the user can reach
+      // from here is the other card. Said beside the overspend rather than
+      // held back until Build & Send.
+      const remedy = cfg.amountIsPositionDebt ? fxBlocker() : undefined;
+      lines.unshift(
+        ...over.map((o) => tag(`▲ ${overText(o)}`, "red")),
+        ...(remedy ? [tag(remedy, "yellow")] : []),
+        "",
+      );
     }
 
     let ok: boolean;

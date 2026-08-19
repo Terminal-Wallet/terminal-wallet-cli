@@ -34,6 +34,8 @@ export interface FormFieldSpec {
   options?: () => Promise<{ label: string; value: string; hint?: string }[]>;
   addressKind?: "0x" | "0zk"; // address only — drives validation + hint
   secret?: boolean; // never echo the value in display/summary (keys, mnemonics)
+  /** Live word count while typing — a masked seed has no other paste feedback. */
+  countWords?: boolean;
   /** Per-field validation; return an error message or undefined when valid. */
   validate?: (value: FormValue, all: FormValues) => string | undefined;
 }

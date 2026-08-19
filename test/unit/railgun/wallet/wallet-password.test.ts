@@ -29,6 +29,7 @@ const provider = (
   return {
     notified,
     promptPassword: async () => answers.shift(),
+    promptRpcEndpoints: async () => undefined,
     promptNewWallet: async () => undefined,
     confirm: async () => false,
     notify: (m: string) => notified.push(m),

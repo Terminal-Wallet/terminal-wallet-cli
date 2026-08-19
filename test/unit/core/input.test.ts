@@ -10,6 +10,7 @@ const stubProvider = (
   over: Partial<WalletInputProvider> = {},
 ): WalletInputProvider => ({
   promptPassword: async () => undefined,
+  promptRpcEndpoints: async () => undefined,
   promptNewWallet: async () => undefined,
   confirm: async () => false,
   notify: () => undefined,

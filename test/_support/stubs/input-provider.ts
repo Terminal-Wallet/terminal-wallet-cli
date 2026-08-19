@@ -31,6 +31,9 @@ export const createStubInputProvider = (
   async promptPassword(): Promise<string | undefined> {
     return unanswered("prompt for a password");
   },
+  async promptRpcEndpoints(): Promise<undefined> {
+    return undefined;
+  },
   async promptNewWallet(): Promise<TMPWalletInfo | undefined> {
     return unanswered("collect new wallet details");
   },
