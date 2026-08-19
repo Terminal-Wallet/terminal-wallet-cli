@@ -339,12 +339,19 @@ export const fxCloseLines = ({
     `${tag("back", "gray")}   ${format(released, state.collateralDecimals)} ${back}` +
       (full ? "" : `  ${tag("(approx — the pool settles it)", "gray")}`),
   ];
-  if (repayAmount > state.debtAmount) {
+  if (repayAmount > requiredForFull) {
     // Overshooting is not an error — the excess simply is not used — but a
-    // number larger than the debt reads as if it will be spent.
+    // number larger than the requirement reads as if it will be spent.
+    //
+    // Measured against requiredForFull, not the bare debt. The gross-up over the
+    // debt is not surplus: it is the unshield and repay fees, and it is what
+    // MAKES the close full. Against the debt this fires on every close the card
+    // prefills, printing "the rest is not used" under "clears the debt" — an
+    // instruction to lower the amount into exactly the partial close the
+    // prefill exists to prevent.
     lines.push(
       tag(
-        `only ${format(state.debtAmount, 18)} fxUSD is owed; the rest is not used`,
+        `only ${format(requiredForFull, 18)} fxUSD is needed; the rest is not used`,
         "gray",
       ),
     );

@@ -239,6 +239,27 @@ test("repaying more than is owed says the excess is not used", () => {
   assert.ok(lines.some((l) => /clears the debt/.test(l)));
 });
 
+test("the amount that makes a close full is not called unused", () => {
+  // 1880.030086 grossed up through a 25bps unshield. This is what the card
+  // prefills, so measuring the advisory against the bare debt fired it on EVERY
+  // default close: "the rest is not used" printed under "clears the debt",
+  // telling the user to lower the amount into the partial the prefill exists to
+  // prevent. The gross-up is not surplus — it is the fee that makes it full.
+  const lines = close(1884741941327557218221n, {}, 25n);
+  assert.ok(lines.some((l) => /clears the debt/.test(l)));
+  assert.ok(
+    !lines.some((l) => /is not used/.test(l)),
+    "calls the fee gross-up unused on a close that needs it",
+  );
+});
+
+test("CONTROL: an overshoot past the fee-inclusive requirement is still called out", () => {
+  // The advisory must still exist, or the test above passes by deleting it.
+  const lines = close(3000000000000000000000n, {}, 25n);
+  assert.ok(lines.some((l) => /is not used/.test(l)));
+  assert.ok(lines.some((l) => /1884\.7419 fxUSD is needed/.test(l)));
+});
+
 test("a swap out is named, so the collateral is not reported as arriving unchanged", () => {
   const lines = fxCloseLines({
     state: state(),
