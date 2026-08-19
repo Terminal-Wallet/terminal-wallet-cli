@@ -69,6 +69,10 @@ export interface TxBuilderConfig {
   loadBuyTokens?: () =>
     | RailgunDisplayBalance[]
     | Promise<RailgunDisplayBalance[]>; // swaps: buy-token options
+  /** fx close: what may be sold to cover a shortfall in the debt token. */
+  loadSellTokens?: () =>
+    | RailgunDisplayBalance[]
+    | Promise<RailgunDisplayBalance[]>;
   /**
    * Vault flows: the vaults on offer, each already paired with the balance this
    * action would spend. Resolving the pair needs the vault's own asset/share
@@ -122,6 +126,7 @@ type Row = FieldKey | "__send" | "__cancel";
 const FIELD_LABELS: Record<FieldKey, string> = {
   token: "Token",
   buyToken: "Buy token",
+  sellToken: "Sell to cover",
   vault: "Vault",
   pool: "Pool",
   position: "Position",
@@ -411,6 +416,7 @@ export const runTxBuilder = async (
         // opening an editor. Named explicitly so adding a field cannot slip
         // through unhandled.
         case "buyToken":
+        case "sellToken":
         case "showSender":
           break;
         case "fee": {

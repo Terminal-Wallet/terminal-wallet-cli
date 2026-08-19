@@ -21,6 +21,7 @@ import { fmtAmount } from "../format/deck";
 export type FieldKey =
   | "token"
   | "buyToken"
+  | "sellToken"
   | "vault"
   | "pool"
   | "position"
@@ -100,6 +101,15 @@ export interface RecoveryChoice {
 export interface BuilderState {
   token?: RailgunDisplayBalance; // for swaps: the SELL token
   buyToken?: RailgunDisplayBalance; // swaps: the BUY token
+  /**
+   * fx close: a token to sell for the shortfall, in the SAME batch.
+   *
+   * A close is bounded by the debt token held, and the round trip guarantees
+   * that is short — mint, shield in at 25bps, then repay at the pool fee and
+   * unshield out at another 25bps. So the ordinary close cannot fund itself,
+   * and the difference is raised here rather than in a second transaction.
+   */
+  sellToken?: RailgunDisplayBalance;
   vault?: VaultChoice; // vault flows: the vault, and the token it spends
   pool?: PoolChoice; // fx flows: the pool, and the collateral it takes
   position?: PositionChoice; // fx flows acting on a position the wallet holds
@@ -207,6 +217,10 @@ export const fieldDisplay = (key: FieldKey, s: BuilderState): string => {
       return s.token
         ? `${s.token.symbol}  (have ${formatUnits(s.token.amount, s.token.decimals)})`
         : "‹select token›";
+    case "sellToken":
+      // Only asked for when the debt token is short, so "none" is the ordinary
+      // answer rather than something left undone.
+      return s.sellToken ? s.sellToken.symbol : "‹none — not needed›";
     case "buyToken":
       // Says what happens if it is left alone, because on the close it is a
       // conversion the user may not want and "‹select token›" reads as an

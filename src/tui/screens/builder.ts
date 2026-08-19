@@ -116,6 +116,9 @@ import {
   clearGasFeeSelection,
 } from "../../railgun/gas/gas-fee";
 import { getFeeDetailsForChain } from "../../railgun/gas/gas-util";
+import { createLogger } from "../../platform/logger";
+
+const log = createLogger("builder");
 
 export interface BuilderHost {
   ctx: DeckContext;
@@ -142,6 +145,7 @@ export interface Builder {
 const FIELD_LABELS: Record<FieldKey, string> = {
   token: "Token",
   buyToken: "Buy token",
+  sellToken: "Sell to cover",
   vault: "Vault",
   pool: "Pool",
   position: "Position",
@@ -156,6 +160,41 @@ const FIELD_LABELS: Record<FieldKey, string> = {
   gas: "Gas",
   fee: "Fee",
   showSender: "Sender",
+};
+
+/**
+ * Wide enough for the longest label, plus a gap.
+ *
+ * A hardcoded 12 ran "Sell to cover" straight into its own value the moment a
+ * 13-character label existed. Deriving it means the next long one cannot.
+ */
+const LABEL_W =
+  Math.max(...Object.values(FIELD_LABELS).map((l) => l.length)) + 2;
+
+/**
+ * The whole reason, not just the outermost wrapper.
+ *
+ * The cookbook wraps every step failure as `<step> step is invalid.` and hangs
+ * the actual cause off `error.cause` (steps/step.js). Reporting only the
+ * message names which step gave up and says nothing about why — "0x V2
+ * Exchange Swap step is invalid" is true of a bad quote, an unmatched input
+ * filter and a zero amount alike.
+ */
+const describeCause = (error: unknown, depth = 4): string => {
+  const parts: string[] = [];
+  // A for-loop rather than a `let` at this indentation: builder-reset.test.ts
+  // treats every two-space `let` in this file as a per-flow cache that must be
+  // cleared when a card opens, and a local in a module-level helper is neither.
+  for (
+    let current: unknown = error;
+    current instanceof Error && parts.length < depth;
+    current = (current as { cause?: unknown }).cause
+  ) {
+    const message = current.message.trim();
+    // The wrapper repeats verbatim at more than one level on nested recipes.
+    if (message && !parts.includes(message)) parts.push(message);
+  }
+  return parts.length ? parts.join(" — ") : "could not build the batch";
 };
 
 /** Which native-token wording a flow should use when offering the base asset. */
@@ -186,6 +225,14 @@ export const createBuilder = (host: BuilderHost): Builder => {
   let swapPreview: SwapQuotePreview | undefined;
   /** The steps the current build would run, and what they were built for. */
   let legsPreview: { legs: DefiLeg[]; forKey: string } | undefined;
+  /**
+   * Why the batch could not be previewed.
+   *
+   * An empty batch block and a preview that threw looked identical, and both
+   * looked like "nothing to show" — so a 0x quote failure rendered as a blank
+   * space and left no trace in the log either.
+   */
+  let legsPreviewError: string | undefined;
   /** Breakdown lines a flow contributes itself, when it has no token/amount. */
   let extraLines: string[] = [];
   /**
@@ -229,6 +276,23 @@ export const createBuilder = (host: BuilderHost): Builder => {
   /** Multi-leg flows use their real legs; single-token flows get a one-leg view. */
   const legsForValidation = (): LegsState | undefined => {
     if (cfg?.multiLeg && state.legs) return state.legs;
+    // A close funded by a swap does not spend `amount` of the debt token — the
+    // combo unshields the WHOLE held balance of it and buys the rest with the
+    // sell token, so nothing can be overspent. Validating against `amount`
+    // would report the shortfall the swap exists to cover and refuse a build
+    // that is correct.
+    if (cfg?.amountIsPositionDebt && state.sellToken && state.token) {
+      return {
+        legs: [
+          {
+            id: "__debt",
+            token: state.token,
+            amount: formatUnits(state.token.amount, state.token.decimals),
+          },
+        ],
+        seq: 1,
+      };
+    }
     if (state.token && state.amount) {
       return {
         legs: [{ id: "__single", token: state.token, amount: state.amount }],
@@ -364,11 +428,15 @@ export const createBuilder = (host: BuilderHost): Builder => {
     const held = state.position?.state;
     if (!held) return undefined;
     // On a close the amount is not a preference — it is the debt grossed up
-    // through both fees, so there is nothing to "reduce". Being short of the
-    // debt token means raising the difference, which is the whole reason Close
-    // fully exists. The generic overspend advice says the opposite, and taking
-    // it produces the dust position the prefill was written to prevent.
-    if (cfg?.amountIsPositionDebt) {
+    // through both fees, so there is nothing to "reduce", and the generic
+    // overspend advice ("reduce the amount") builds the dust position the
+    // prefill was written to prevent.
+    //
+    // Nor is being short unusual: mint, shield in at 25bps, then repay at the
+    // pool fee and unshield out at another 25bps, and the fxUSD a position
+    // minted never covers its own close. The difference is bought in the same
+    // batch, so all this needs is which token to sell.
+    if (cfg?.amountIsPositionDebt && !state.sellToken) {
       const [short] = currentOverspend();
       if (short) {
         const amount = fmtAmount(
@@ -376,9 +444,8 @@ export const createBuilder = (host: BuilderHost): Builder => {
           6,
         );
         return (
-          `Not enough ${short.token.symbol} to close this position — short by ` +
-          `${amount}. Reducing the amount leaves a dust debt still accruing; ` +
-          `use "Close fully" to sell another token for the difference.`
+          `Short ${amount} ${short.token.symbol} — pick a token under "Sell to ` +
+          `cover" and the difference is bought in this batch.`
         );
       }
     }
@@ -472,7 +539,10 @@ export const createBuilder = (host: BuilderHost): Builder => {
   const computeLegsPreview = async () => {
     if (!cfg?.previewLegs) return;
     if (!validate(cfg.fields, state, cfg.optionalFields).ok) {
+      // An incomplete form has no batch to fail at, so any earlier reason is
+      // now about state that no longer exists.
       legsPreview = undefined;
+      legsPreviewError = undefined;
       return;
     }
     const forKey = [
@@ -481,16 +551,24 @@ export const createBuilder = (host: BuilderHost): Builder => {
       state.position?.nft.tokenSubID,
       state.token?.tokenAddress,
       state.buyToken?.tokenAddress,
+      // Funding a close by selling something changes the whole batch, so it has
+      // to invalidate the cached preview like every other input does.
+      state.sellToken?.tokenAddress,
       state.amount,
       state.debt,
     ].join("|");
     if (legsPreview?.forKey === forKey) return;
     try {
       legsPreview = { legs: await cfg.previewLegs(state), forKey };
-    } catch {
-      // A preview that cannot be built is not an error the user has to act on
-      // — submit will surface the real failure with its real message.
+      legsPreviewError = undefined;
+    } catch (error) {
+      // Not fatal — the form is still editable and submit re-runs the real
+      // thing. But swallowing it outright meant a failed 0x quote showed as an
+      // empty space and wrote nothing to the log, so there was no way to find
+      // out what went wrong short of sending.
       legsPreview = undefined;
+      legsPreviewError = describeCause(error);
+      log.warn(`${cfg.flowId ?? "builder"} preview failed`, error);
     }
   };
 
@@ -545,7 +623,17 @@ export const createBuilder = (host: BuilderHost): Builder => {
     }
     if (row.startsWith("__lx:")) return tag("   ✕ remove", "gray");
     const key = row as FieldKey;
-    return `${FIELD_LABELS[key].padEnd(12)}${tag(fieldDisplay(key, state), "cyan")}`;
+    // The sell row is the one field whose necessity depends on the balance, and
+    // fieldDisplay is pure — it cannot see the shortfall. Left to itself it
+    // read "none — not needed" directly above a panel saying the close is short
+    // and to pick something here.
+    if (key === "sellToken" && !state.sellToken) {
+      const [short] = currentOverspend();
+      if (short) {
+        return `${FIELD_LABELS[key].padEnd(LABEL_W)}${tag("‹pick a token›", "yellow")}`;
+      }
+    }
+    return `${FIELD_LABELS[key].padEnd(LABEL_W)}${tag(fieldDisplay(key, state), "cyan")}`;
   };
 
   // --- breakdown -------------------------------------------------------------
@@ -605,6 +693,10 @@ export const createBuilder = (host: BuilderHost): Builder => {
       lines.push(...extraLines);
     }
 
+    if (legsPreviewError) {
+      lines.push("");
+      lines.push(tag(`▲ cannot build this batch — ${legsPreviewError}`, "yellow"));
+    }
     if (legsPreview?.legs.length) {
       lines.push("");
       lines.push(tag("this batch", "gray"));
@@ -894,6 +986,7 @@ export const createBuilder = (host: BuilderHost): Builder => {
     // showing the previous action's batch and risk until an edit happens to
     // recompute them — which reads as a description of what you are about to do.
     legsPreview = undefined;
+    legsPreviewError = undefined;
     extraLines = [];
     fxThresholds = undefined;
     feePreview = undefined;
@@ -1155,6 +1248,16 @@ export const createBuilder = (host: BuilderHost): Builder => {
           })),
         );
         if (address) state.token = balances.find((b) => b.tokenAddress === address);
+      }
+    } else if (key === "sellToken" && cfg.loadSellTokens) {
+      const choices = await cfg.loadSellTokens();
+      if (!choices.length) provider.notify("No tokens available to sell.");
+      else {
+        const address = await provider.select(
+          "Sell to cover the shortfall",
+          choices.map((b) => ({ label: b.symbol, value: b.tokenAddress, hint: b.name })),
+        );
+        if (address) state.sellToken = choices.find((b) => b.tokenAddress === address);
       }
     } else if (key === "buyToken" && cfg.loadBuyTokens) {
       const tokens = await cfg.loadBuyTokens();
@@ -1497,6 +1600,7 @@ export const createBuilder = (host: BuilderHost): Builder => {
         tags: true,
         mouse: true,
         clickable: true,
+        autoFocus: false, // a button triggers; it must never hold the keys
         content: "{center}[ Confirm ]{/}",
         style: { bg: "green", fg: "black", hover: { bg: "white" } },
       });
@@ -1509,6 +1613,7 @@ export const createBuilder = (host: BuilderHost): Builder => {
         tags: true,
         mouse: true,
         clickable: true,
+        autoFocus: false, // a button triggers; it must never hold the keys
         content: "{center}[ Cancel ]{/}",
         style: { bg: "red", fg: "white", hover: { bg: "white", fg: "black" } },
       });
