@@ -158,6 +158,24 @@ export const createModal = (
     shadow: true,
     padding: { left: 1, right: 1 },
     style: { border: { fg: accent }, label: { fg: accent } },
+    // The chrome takes clicks so the scrim underneath does not: screen.js
+    // breaks after the topmost clickable, so an unclickable box let a click on
+    // the title reach the scrim and dismiss the modal.
+    mouse: true,
+    clickable: true,
+    // CRITICAL, and the reason arrow keys died after clicking a modal's title.
+    // blessed autofocuses any clickable element on click:
+    //
+    //   screen.on('element click', el => {
+    //     if (el.clickable === true && el.options.autoFocus !== false) el.focus();
+    //   })
+    //
+    // A plain box takes focus happily and has no key handlers, so focus landed
+    // on the chrome and every arrow key went nowhere — with nothing on screen
+    // to say why. It runs AFTER the element's own click listeners, so a caller
+    // refocusing its list from `box.on("click")` was overridden a moment later
+    // and the workaround looked like it worked.
+    autoFocus: false,
   });
 
   if (opts.footer) {
@@ -257,6 +275,17 @@ export const createModal = (
   // on the already-focused input emits a blur on itself, which re-triggers the
   // keypress-listener race and double-counts keystrokes.
   const guardFocus = (el: any) => {
+    // Clicking the modal's own chrome — border, title, footer, empty space — is
+    // not an answer to anything it asked. Whatever owns the keys keeps them, so
+    // the arrows still work afterwards. This half applies to EVERY modal: a
+    // dismissable one is dismissed by clicking OUTSIDE, never by clicking
+    // itself.
+    box.on("click", () => {
+      if (screen.focused !== el) {
+        el.focus();
+        screen.render();
+      }
+    });
     if (dismissable && !opts.hardened) return;
     scrim.on("click", () => {
       if (screen.focused !== el) {

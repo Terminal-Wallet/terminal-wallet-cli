@@ -77,7 +77,7 @@ export const openEphemeralConsole = async (ctx: DeckContext): Promise<void> => {
 
   return new Promise<void>((resolveClosed) => {
     let done: () => void = () => undefined;
-    const { box, close } = createModal(blessed, ctx.screen, {
+    const { box, guardFocus, close } = createModal(blessed, ctx.screen, {
       title: `7702 ephemeral accounts · ${chainName}`,
       widthPct: 88,
       maxWidth: 160, // a panel, not a dialog — see modalWidth
@@ -299,6 +299,8 @@ export const openEphemeralConsole = async (ctx: DeckContext): Promise<void> => {
     list.key(["escape", "q"], done);
     box.key(["escape", "q"], done);
 
+    // Clicking the panel's chrome must not take the keys off the list.
+    guardFocus(list);
     list.focus();
     void run("Load", reload);
   });
