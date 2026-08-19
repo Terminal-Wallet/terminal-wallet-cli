@@ -149,7 +149,7 @@ export const runDeck = async (): Promise<void> => {
   const copyBox = (left: number, width: number) =>
     blessed.box({
       parent: screen, top: 1, left, height: 1, width, tags: true,
-      mouse: true, clickable: true, style: { hover: { bg: "blue" } },
+      mouse: true, clickable: true, autoFocus: false, style: { hover: { bg: "blue" } },
     });
   const pubCopy = copyBox(1, 20);
   const zkCopy = copyBox(22, 22);
@@ -263,7 +263,7 @@ export const runDeck = async (): Promise<void> => {
   const statusCardDefs = cardDefs.slice(0, -1);
   const cards = cardDefs.map((def) => {
     const box = blessed.box({
-      parent: screen, top: CARD_TOP, height: CARD_H, tags: true, mouse: true, clickable: true,
+      parent: screen, top: CARD_TOP, height: CARD_H, tags: true, mouse: true, clickable: true, autoFocus: false,
       border: { type: "line" }, label: def.label, padding: { left: 1, right: 1 },
       style: { border: { fg: "gray" }, hover: { border: { fg: "cyan" } } },
     });
@@ -309,7 +309,7 @@ export const runDeck = async (): Promise<void> => {
     padding: { left: 1, right: 1 },
   });
   const cmdBtn = blessed.box({
-    parent: screen, bottom: 0, left: 0, height: 1, width: 14, tags: true, mouse: true, clickable: true,
+    parent: screen, bottom: 0, left: 0, height: 1, width: 14, tags: true, mouse: true, clickable: true, autoFocus: false,
     content: tag(" : commands ", "cyan"), style: { hover: { bg: "cyan", fg: "black" } },
   });
   const footer = blessed.box({ parent: screen, bottom: 0, left: 14, width: "100%-14", height: 1, tags: true });

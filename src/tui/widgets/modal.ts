@@ -275,6 +275,24 @@ export const createModal = (
   // on the already-focused input emits a blur on itself, which re-triggers the
   // keypress-listener race and double-counts keystrokes.
   const guardFocus = (el: any) => {
+    // THE OPENING CLICK IS STILL BEING DISPATCHED.
+    //
+    // A modal opened from a click — a deck card, a palette tile, a button —
+    // runs inside that element's click handler. blessed emits 'element click'
+    // AFTER the handler returns and autofocuses whatever was clicked, so the
+    // card takes the keys back the instant the modal appears: it draws, it
+    // looks focused, and the arrows go to the deck underneath. Modals opened
+    // from a keypress were fine, which is what made it look like only some
+    // dialogs were broken.
+    //
+    // Every such element now passes autoFocus:false. This re-assert is the
+    // backstop for the next one that forgets, since the symptom is silent.
+    setImmediate(() => {
+      if (!box.detached && screen.focused !== el) {
+        el.focus();
+        screen.render();
+      }
+    });
     // Clicking the modal's own chrome — border, title, footer, empty space — is
     // not an answer to anything it asked. Whatever owns the keys keeps them, so
     // the arrows still work afterwards. This half applies to EVERY modal: a

@@ -184,11 +184,11 @@ export const createBlessedInputProvider = (
         style: { bg: "#2b303b", fg: "white", focus: { bg: "#1f4f82", fg: "white" } },
       });
       const unlock = blessed.box({
-        parent: box, bottom: 1, left: 1, width: 12, height: 1, tags: true, mouse: true, clickable: true,
+        parent: box, bottom: 1, left: 1, width: 12, height: 1, tags: true, mouse: true, clickable: true, autoFocus: false,
         content: "{center}[ Unlock ]{/}", style: { bg: "green", fg: "black", hover: { bg: "white" } },
       });
       const cancel = blessed.box({
-        parent: box, bottom: 1, left: 14, width: 12, height: 1, tags: true, mouse: true, clickable: true,
+        parent: box, bottom: 1, left: 14, width: 12, height: 1, tags: true, mouse: true, clickable: true, autoFocus: false,
         content: "{center}[ Cancel ]{/}", style: { bg: "red", fg: "white", hover: { bg: "white", fg: "black" } },
       });
       let closing = false;
@@ -250,6 +250,7 @@ export const createBlessedInputProvider = (
         tags: true,
         mouse: true,
         clickable: true,
+        autoFocus: false, // a button triggers; it must never hold the keys
         content: "{center}[ Yes ]{/}",
         style: { bg: "green", fg: "black", hover: { bg: "white" } },
       });
@@ -262,6 +263,7 @@ export const createBlessedInputProvider = (
         tags: true,
         mouse: true,
         clickable: true,
+        autoFocus: false, // a button triggers; it must never hold the keys
         content: "{center}[ No ]{/}",
         style: { bg: "red", fg: "white", hover: { bg: "white", fg: "black" } },
       });
@@ -390,7 +392,7 @@ export const createBlessedInputProvider = (
         height: listH + 6,
         accent: "cyan",
         footer:
-          "↑/↓ move · Space enable/disable · a add · r remove custom · p re-check · Enter save · Esc cancel",
+          "↑/↓ · Space on/off · o only-custom · a add · r remove · p re-check · Enter save · Esc",
         onDismiss: () => done(undefined),
       });
       const list = blessed.list({
@@ -420,6 +422,28 @@ export const createBlessedInputProvider = (
         r.probe = undefined;
         paint();
         if (r.enabled) onProbe([r], paint);
+      });
+      list.key(["o"], () => {
+        // "Only custom", in one keystroke. Working around a bad shipped
+        // endpoint otherwise means finding each default in the list and
+        // toggling it, which is the fiddly part of an already fiddly job.
+        // Reversible: if the defaults are already all off, this puts them back.
+        const defaults = visible().filter((r) => r.isDefault);
+        if (!defaults.length) {
+          notifyStatus("No shipped endpoints on this chain.");
+          return;
+        }
+        if (!visible().some((r) => !r.isDefault && r.enabled)) {
+          notifyStatus("Add or enable a custom endpoint first — this would leave none.");
+          return;
+        }
+        const turningOff = defaults.some((r) => r.enabled);
+        for (const r of defaults) {
+          r.enabled = !turningOff;
+          r.probe = undefined;
+        }
+        paint();
+        if (!turningOff) onProbe(defaults, paint);
       });
       list.key(["p"], () => {
         for (const r of visible()) if (r.enabled) r.probe = undefined;

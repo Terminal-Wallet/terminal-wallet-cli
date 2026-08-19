@@ -248,6 +248,7 @@ export const createPalette = (host: PaletteHost): Palette => {
         tags: true,
         mouse: true,
         clickable: true,
+        autoFocus: false, // a button triggers; it must never hold the keys
         border: { type: "line" },
         padding: { left: 1, right: 1 },
         // No hover style: `mouseover` below moves the CURSOR onto the card,
