@@ -38,7 +38,7 @@ const withSecretsModule = async (
       });
     }
     process.chdir(dir);
-    const mod = await import("../../../src/config/secrets");
+    const mod = await import("../../../src/config/secrets.js");
     mod.resetSecretsCache();
     await fn(mod);
     mod.resetSecretsCache();
