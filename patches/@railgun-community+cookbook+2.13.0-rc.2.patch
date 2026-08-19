@@ -1,0 +1,41 @@
+diff --git a/node_modules/@railgun-community/cookbook/dist/steps/swap/zero-x/zero-x-v2-swap-step.js b/node_modules/@railgun-community/cookbook/dist/steps/swap/zero-x/zero-x-v2-swap-step.js
+index c6118ae..a0eed11 100644
+--- a/node_modules/@railgun-community/cookbook/dist/steps/swap/zero-x/zero-x-v2-swap-step.js
++++ b/node_modules/@railgun-community/cookbook/dist/steps/swap/zero-x/zero-x-v2-swap-step.js
+@@ -40,6 +40,7 @@ class ZeroXV2SwapStep extends step_1.Step {
+             crossContractCalls: [crossContractCall],
+             spentERC20Amounts: [sellERC20AmountRecipient],
+             outputERC20Amounts: [outputBuyERC20Amount, ...unusedERC20Amounts],
++            acquiredERC20Amounts: [outputBuyERC20Amount],
+             outputNFTs: input.nfts,
+         };
+     }
+diff --git a/node_modules/@railgun-community/cookbook/dist/validators/step-validator.js b/node_modules/@railgun-community/cookbook/dist/validators/step-validator.js
+index 00a1e7f..5ce2307 100644
+--- a/node_modules/@railgun-community/cookbook/dist/validators/step-validator.js
++++ b/node_modules/@railgun-community/cookbook/dist/validators/step-validator.js
+@@ -44,6 +44,12 @@ const validateStepOutputERC20Amounts = (input, output) => {
+         outputERC20AmountMap[id] ??= 0n;
+         outputERC20AmountMap[id] = outputERC20AmountMap[id] + amount;
+     });
++    const acquiredERC20AmountMap = {};
++    (output.acquiredERC20Amounts ?? []).forEach(({ tokenAddress, expectedBalance, isBaseToken }) => {
++        const id = getTokenId(tokenAddress, isBaseToken);
++        acquiredERC20AmountMap[id] ??= 0n;
++        acquiredERC20AmountMap[id] = acquiredERC20AmountMap[id] + expectedBalance;
++    });
+     for (const id in inputERC20AmountMap) {
+         if (!(0, shared_models_1.isDefined)(outputERC20AmountMap[id])) {
+             throw new Error(`Missing output for ${id}.`);
+@@ -51,8 +57,9 @@ const validateStepOutputERC20Amounts = (input, output) => {
+         if (outputERC20AmountMap[id] === 0n) {
+             throw new Error(`Missing output value for ${id}.`);
+         }
+-        if (inputERC20AmountMap[id] !== outputERC20AmountMap[id]) {
+-            throw new Error(`Input erc20 amounts for ${id} (${inputERC20AmountMap[id]}) must match total outputs/spent/fees (${outputERC20AmountMap[id]}).`);
++        const conservedBalance = outputERC20AmountMap[id] - (acquiredERC20AmountMap[id] ?? 0n);
++        if (inputERC20AmountMap[id] !== conservedBalance) {
++            throw new Error(`Input erc20 amounts for ${id} (${inputERC20AmountMap[id]}) must match total outputs/spent/fees less acquired (${conservedBalance}).`);
+         }
+     }
+ };
