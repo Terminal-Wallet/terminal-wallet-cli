@@ -33,6 +33,13 @@ export const buildWalletInfo = (input: {
 
   let mnemonic: string | undefined;
   if (input.mode === "new") {
+    // A seed supplied against "new" is a contradiction, and generating over it
+    // is the expensive way to resolve it: the user believes they imported and
+    // holds a fresh empty wallet instead, with a masked field showing nothing
+    // that contradicts them. The two are one card apart and Mode defaults to
+    // "new", so the mistake is a keystroke wide. Refuse and let the caller say
+    // which of the two they meant.
+    if (input.mnemonic?.trim()) return undefined;
     mnemonic = HDNodeWallet.createRandom().mnemonic?.phrase ?? undefined;
   } else {
     const m = input.mnemonic?.trim();

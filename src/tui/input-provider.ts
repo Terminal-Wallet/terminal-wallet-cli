@@ -374,17 +374,25 @@ export const createBlessedInputProvider = (
         { key: "name", label: "Wallet name", type: "text", required: true },
         {
           key: "mnemonic", label: "Seed phrase", type: "password", secret: true,
-          hint: "12 / 24 words — import only",
+          // The row shows the word count once entered — the only way to tell a
+          // whole paste from a truncated one behind a mask.
+          hint: "12 / 24 words — import only. Check the word count on the row.",
         },
       ],
       submitLabel: "Create wallet",
       // Cross-field: import requires a valid seed (per-field validators are skipped
       // for a blank optional field, so enforce it here where it always runs).
       validate: (vals) => {
+        const m = String(vals.mnemonic ?? "").trim();
         if (vals.mode === "import") {
-          const m = String(vals.mnemonic ?? "").trim();
           if (!m) return "Import needs a seed phrase.";
           if (!Mnemonic.isValidMnemonic(m)) return "Enter a valid 12 / 24-word seed phrase.";
+        } else if (m) {
+          // Mode defaults to "new" and the seed field sits on the same card, so
+          // pasting a seed without switching Mode is one keystroke away — and
+          // it would generate a fresh wallet over the top, silently, behind a
+          // mask that shows nothing either way.
+          return "Mode is New — switch to Import to use this seed, or clear it.";
         }
         return undefined;
       },

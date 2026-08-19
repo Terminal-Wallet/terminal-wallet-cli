@@ -53,6 +53,36 @@ export interface FormSpec {
 
 const MASK = "••••••";
 
+/** Bullets per word, uniform width, so no word's LENGTH is disclosed. */
+const WORD_MASK = "••••";
+/** Beyond this the row is wider than the card; the count still lands. */
+const MASK_WORDS_SHOWN = 6;
+
+/**
+ * Mask a secret so a PASTE can be checked without reading it back.
+ *
+ * A fixed-width mask says the field is non-empty and nothing else, which is
+ * fine for a password the user just typed and useless for a 24-word seed
+ * arriving in one burst from a clipboard. A phrase that lost its last words to
+ * a truncated paste, or gained a line break, renders identically to a correct
+ * one — and the cost of noticing later is the whole wallet.
+ *
+ * So: word count first, because it is the actionable signal and the one thing
+ * that must survive clipping, then one uniform group per word for the shape.
+ * Word lengths are deliberately NOT reflected — BIP39 words are 3-8 characters
+ * and their lengths would narrow the candidates for anyone reading the screen.
+ */
+export const maskSecret = (raw: string): string => {
+  const words = raw.trim().split(/\s+/).filter(Boolean);
+  if (words.length < 2) return MASK;
+  const shown = words
+    .slice(0, MASK_WORDS_SHOWN)
+    .map(() => WORD_MASK)
+    .join(" ");
+  const ellipsis = words.length > MASK_WORDS_SHOWN ? "…" : "";
+  return `${words.length} words · ${shown}${ellipsis}`;
+};
+
 const isBlank = (v: FormValue): boolean =>
   v === undefined || v === "" || (typeof v === "string" && v.trim() === "");
 
@@ -64,7 +94,7 @@ export const formFieldDisplay = (
   const v = values[field.key];
   if (field.type === "toggle") return v ? "On" : "Off";
   if (isBlank(v)) return field.placeholder ?? "—";
-  if (field.secret) return MASK;
+  if (field.secret) return maskSecret(typeof v === "string" ? v : "");
   if (field.type === "select" && field.staticOptions) {
     return field.staticOptions.find((o) => o.value === v)?.label ?? String(v);
   }
