@@ -1,11 +1,37 @@
 diff --git a/node_modules/@railgun-community/cookbook/dist/steps/swap/zero-x/zero-x-v2-swap-step.js b/node_modules/@railgun-community/cookbook/dist/steps/swap/zero-x/zero-x-v2-swap-step.js
-index c6118ae..a0eed11 100644
+index c6118ae..aea63a9 100644
 --- a/node_modules/@railgun-community/cookbook/dist/steps/swap/zero-x/zero-x-v2-swap-step.js
 +++ b/node_modules/@railgun-community/cookbook/dist/steps/swap/zero-x/zero-x-v2-swap-step.js
-@@ -40,6 +40,7 @@ class ZeroXV2SwapStep extends step_1.Step {
+@@ -36,10 +36,32 @@ class ZeroXV2SwapStep extends step_1.Step {
+             minBalance: minimumBuyAmount,
+             approvedSpender: undefined,
+         };
++        // Fold the purchase into any balance of the same token that is already
++        // being carried through. Left as two entries they are one token to the
++        // validator but two rows to the next step, and Step.getValidInputERC20Amount
++        // takes exactly one row — so a later step sees only part of what it will
++        // actually hold, or refuses outright with "received 2".
++        const buyTokenId = buyERC20Amount.tokenAddress.toLowerCase();
++        const sameToken = (a) => a.tokenAddress.toLowerCase() === buyTokenId &&
++            (a.isBaseToken ?? false) === (buyERC20Amount.isBaseToken ?? false);
++        const carriedSameToken = unusedERC20Amounts.filter(sameToken);
++        const otherERC20Amounts = unusedERC20Amounts.filter(a => !sameToken(a));
++        const mergedBuyERC20Amount = carriedSameToken.length
++            ? {
++                ...outputBuyERC20Amount,
++                expectedBalance: carriedSameToken.reduce((sum, a) => sum + a.expectedBalance, outputBuyERC20Amount.expectedBalance),
++                minBalance: carriedSameToken.reduce((sum, a) => sum + a.minBalance, outputBuyERC20Amount.minBalance),
++                // The purchase arrives unapproved, so the merged balance is too.
++                approvedSpender: undefined,
++            }
++            : outputBuyERC20Amount;
+         return {
              crossContractCalls: [crossContractCall],
              spentERC20Amounts: [sellERC20AmountRecipient],
-             outputERC20Amounts: [outputBuyERC20Amount, ...unusedERC20Amounts],
+-            outputERC20Amounts: [outputBuyERC20Amount, ...unusedERC20Amounts],
++            outputERC20Amounts: [mergedBuyERC20Amount, ...otherERC20Amounts],
++            // Only the bought portion is new; the carried part still has to
++            // conserve. The validator subtracts this before comparing.
 +            acquiredERC20Amounts: [outputBuyERC20Amount],
              outputNFTs: input.nfts,
          };
