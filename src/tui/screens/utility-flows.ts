@@ -8,6 +8,7 @@ import { NetworkName } from "@railgun-community/shared-models";
 import { getInputProvider, RpcRowInput } from "../../core/input";
 import { probeRpcEndpoint } from "../../railgun/network/rpc-probe";
 import configDefaults from "../../config/config-defaults";
+import { loadAppConfig } from "../../config/config-manager";
 import {
   switchRailgunNetwork,
   switchRailgunWallet,
@@ -102,16 +103,26 @@ export const runEditRpcFlow = async (
 ): Promise<boolean> => {
   const provider = getInputProvider();
   const options = getProviderOptions(chainName);
-  const defaults = new Set(
+  // The EFFECTIVE base list, which twallet.config.json replaces outright when
+  // it carries an override — so on a machine with one, there are no built-ins
+  // in play and a list of one endpoint is correct, not broken.
+  const base = new Set(
     configDefaults.networkConfig[chainName].providers.map(
       (p: { provider: string }) => p.provider,
     ),
   );
+  const fromConfig = new Set(loadAppConfig().providers?.[chainName] ?? []);
 
   const rows: RpcRowInput[] = options.map((o) => ({
     url: o.provider,
     enabled: o.enabled,
-    isDefault: defaults.has(o.provider),
+    // Only an endpoint added in the editor lives on the keychain and can be
+    // removed there. Anything in the base list comes back on the next load.
+    origin: fromConfig.has(o.provider)
+      ? "config"
+      : base.has(o.provider)
+        ? "builtin"
+        : "custom",
   }));
 
   // Probing is the flow's job, not the modal's — the seam stays free of the

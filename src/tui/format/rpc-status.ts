@@ -5,7 +5,7 @@
  *
  *   enabled  — the user's setting. Says nothing about whether it works.
  *   block    — whether it ANSWERS, and how current it is.
- *   custom   — whether it can be removed, or only disabled.
+ *   origin   — where it came from, and therefore where it can be changed.
  *
  * The old editor showed the first alone and called it "enabled", which is why
  * an endpoint could be dead for weeks with nothing on screen saying so. Any
@@ -14,12 +14,27 @@
  */
 import { RpcProbe } from "../../railgun/network/rpc-probe";
 
+/**
+ * Where an endpoint came from, which is what decides whether it can be removed
+ * HERE or only somewhere else.
+ *
+ * - `builtin` ships with the app.
+ * - `config`  comes from twallet.config.json (or the remote config), which
+ *              REPLACES the built-in list outright — so a machine with an
+ *              override has no built-ins in play at all, and a list of one is
+ *              correct rather than broken.
+ * - `custom`  was added in this editor and lives on the keychain.
+ *
+ * Only `custom` is removable here. Calling the other two "shipped" was wrong:
+ * it told someone their own configured endpoint came from us.
+ */
+export type RpcOrigin = "builtin" | "config" | "custom";
+
 export interface RpcRow {
   url: string;
   /** The user's setting. Independent of whether it works. */
   enabled: boolean;
-  /** Shipped with the app; only custom entries can be removed. */
-  isDefault: boolean;
+  origin: RpcOrigin;
   /** undefined while the probe is still out. */
   probe?: RpcProbe;
 }
@@ -90,9 +105,14 @@ export const rpcRowLine = (
     rpcStatusLabel(row, opts.lead),
     rpcStatusTone(row, opts.lead),
   );
-  // "custom" is a capability, not decoration: it is the difference between an
-  // endpoint that can be removed and one that can only be turned off.
-  const kind = row.isDefault ? "" : `  ${paint("custom", "cyan")}`;
+  // Origin is a capability, not decoration: it is the difference between an
+  // endpoint that can be removed here and one that can only be turned off.
+  const kind =
+    row.origin === "custom"
+      ? `  ${paint("custom", "cyan")}`
+      : row.origin === "config"
+        ? `  ${paint("config", "magenta")}`
+        : "";
   return `${box} ${shortenUrl(row.url).padEnd(width + 2)}${status}${kind}`;
 };
 
@@ -104,13 +124,23 @@ export const rpcRowLine = (
  * answering" is the thing worth knowing before a send fails.
  */
 export const rpcSummaryLine = (rows: RpcRow[]): string => {
+  // An override replaces the built-in list, so a short list is the override
+  // working — but "where did my endpoints go" is the obvious reading unless it
+  // is said out loud.
+  const overridden = rows.some((r) => r.origin === "config")
+    ? " · built-ins replaced by twallet.config.json"
+    : "";
   const enabled = rows.filter((r) => r.enabled);
-  if (!enabled.length) return "no endpoints enabled — the wallet cannot reach this chain";
+  if (!enabled.length) {
+    return `no endpoints enabled — the wallet cannot reach this chain${overridden}`;
+  }
   const pending = enabled.filter((r) => !r.probe).length;
   const live = enabled.filter((r) => r.probe?.ok).length;
-  if (pending) return `${live} of ${enabled.length} answering · ${pending} still checking`;
-  if (!live) return `NONE of ${enabled.length} enabled endpoints answered`;
-  return `${live} of ${enabled.length} enabled endpoints answering`;
+  if (pending) {
+    return `${live} of ${enabled.length} answering · ${pending} checking${overridden}`;
+  }
+  if (!live) return `NONE of ${enabled.length} enabled endpoints answered${overridden}`;
+  return `${live} of ${enabled.length} enabled answering${overridden}`;
 };
 
 /** The furthest-ahead height anything reported, or undefined if nothing did. */
@@ -132,12 +162,12 @@ export const leadBlock = (rows: RpcRow[]): bigint | undefined => {
 export const onlyCustomToggle = (
   rows: RpcRow[],
 ): { rows: RpcRow[]; changed: boolean; reason?: string } => {
-  const defaults = rows.filter((r) => r.isDefault);
-  if (!defaults.length) {
-    return { rows, changed: false, reason: "no shipped endpoints on this chain" };
+  const others = rows.filter((r) => r.origin !== "custom");
+  if (!others.length) {
+    return { rows, changed: false, reason: "every endpoint here is already a custom one" };
   }
-  const turningOff = defaults.some((r) => r.enabled);
-  if (turningOff && !rows.some((r) => !r.isDefault && r.enabled)) {
+  const turningOff = others.some((r) => r.enabled);
+  if (turningOff && !rows.some((r) => r.origin === "custom" && r.enabled)) {
     return {
       rows,
       changed: false,
@@ -146,8 +176,16 @@ export const onlyCustomToggle = (
   }
   return {
     rows: rows.map((r) =>
-      r.isDefault ? { ...r, enabled: !turningOff, probe: undefined } : r,
+      r.origin !== "custom" ? { ...r, enabled: !turningOff, probe: undefined } : r,
     ),
     changed: true,
   };
 };
+
+/** Why this endpoint cannot be removed here, and where it can be changed. */
+export const rpcRemovalRefusal = (row: RpcRow): string | undefined =>
+  row.origin === "custom"
+    ? undefined
+    : row.origin === "config"
+      ? "set in twallet.config.json — edit that file, or press space to disable"
+      : "a built-in endpoint — press space to disable it instead";

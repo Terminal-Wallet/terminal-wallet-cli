@@ -25,6 +25,7 @@ import {
   RpcRow,
   leadBlock,
   onlyCustomToggle,
+  rpcRemovalRefusal,
   rpcRowLine,
   rpcSummaryLine,
   rpcUrlWidth,
@@ -375,8 +376,11 @@ export const createBlessedInputProvider = (
         widthPct: 80,
         height: listH + 7,
         accent: "cyan",
-        footer:
-          "↑/↓ · space on/off · a add · r remove · o only-custom · p re-check · enter save · esc cancel",
+        // The border footer holds only what always fits. The key hints live on
+        // a line INSIDE the box, because a footer wider than the modal wraps
+        // onto the summary and its first half scrolls out of sight — which is
+        // how "r remove" ended up invisible on a narrower terminal.
+        footer: "enter save · esc cancel",
         onDismiss: () => done(undefined),
       });
       const list = blessed.list({
@@ -404,7 +408,13 @@ export const createBlessedInputProvider = (
         if ((list.selected as number) >= Math.max(items.length, 1)) {
           list.select(Math.max(items.length - 1, 0));
         }
-        noteLine.setContent(note ? `{yellow-fg}${note}{/}` : "");
+        // The hint line doubles as the note line: a note is always about what
+        // was just pressed, so it belongs where the keys are listed.
+        noteLine.setContent(
+          note
+            ? `{yellow-fg}▲ ${note}{/}`
+            : "{gray-fg}space on/off · a add · r remove · o only-custom · p recheck{/}",
+        );
         summary.setContent(`{gray-fg}${rpcSummaryLine(items)}{/}`);
         screen.render();
       };
@@ -456,10 +466,11 @@ export const createBlessedInputProvider = (
       list.key(["r"], () => {
         const r = selected();
         if (!r) return;
-        if (r.isDefault) {
-          // Removing a shipped endpoint would be undone by the next config
-          // load, so the honest action is to disable it.
-          note = "shipped endpoints cannot be removed — press space to disable";
+        const refusal = rpcRemovalRefusal(r);
+        if (refusal) {
+          // Only an endpoint added here lives on the keychain; the others come
+          // back on the next config load, so removing them here would be a lie.
+          note = refusal;
           paint();
           return;
         }
@@ -483,7 +494,7 @@ export const createBlessedInputProvider = (
           }
           // Re-adding one removed a moment ago is an undo, not a duplicate.
           removed.delete(trimmed);
-          const added: RpcRow = { url: trimmed, enabled: true, isDefault: false };
+          const added: RpcRow = { url: trimmed, enabled: true, origin: "custom" };
           if (!rows.some((r) => r.url === trimmed)) rows.push(added);
           note = undefined;
           back();

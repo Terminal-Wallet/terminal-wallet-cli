@@ -29,7 +29,8 @@ export interface InputChoice {
 export interface RpcRowInput {
   url: string;
   enabled: boolean;
-  isDefault: boolean;
+  /** builtin = ships with the app, config = twallet.config.json, custom = added here. */
+  origin: "builtin" | "config" | "custom";
   probe?: { ok: true; blockNumber: bigint; latencyMs: number } | { ok: false; reason: string };
 }
 
