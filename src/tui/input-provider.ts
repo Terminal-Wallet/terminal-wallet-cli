@@ -590,6 +590,11 @@ export const createBlessedInputProvider = (
         {
           key: "mnemonic", label: "Seed phrase", type: "password", secret: true,
           countWords: true,
+          // A fresh wallet generates its own seed, so this field means nothing
+          // in that mode — and accepting a paste there, only to refuse it at
+          // submit, is how someone ends up believing the button is broken.
+          inert: (vals) =>
+            vals.mode === "import" ? undefined : "not used — switch Mode to Import",
           // The row shows the word count once entered — the only way to tell a
           // whole paste from a truncated one behind a mask.
           hint: "12 / 24 words — import only. Check the word count on the row.",

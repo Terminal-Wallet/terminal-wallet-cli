@@ -8,7 +8,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { Mnemonic } from "ethers";
 import { buildWalletInfo } from "../../../src/flows/new-wallet";
-import { maskSecret } from "../../../src/tui/form-core";
+import { maskSecret, formFieldDisplay } from "../../../src/tui/form-core";
 
 // A real BIP39 phrase, so the import path validates rather than short-circuits.
 const SEED =
@@ -103,4 +103,37 @@ test("odd whitespace does not inflate the count", () => {
   // A phrase pasted out of a wrapped document arrives with newlines and runs
   // of spaces; counting those as words would report 24 for a 12-word seed.
   assert.match(maskSecret("  alpha \n beta \t gamma  "), /^3 words/);
+});
+
+// --- the seed row must not be a trap ----------------------------------------
+
+/** The real spec's rule, kept here so a change to it has to change a test. */
+const seedInert = (vals: { mode?: string }) =>
+  vals.mode === "import" ? undefined : "not used — switch Mode to Import";
+
+test("the seed row is inert unless the mode is import", () => {
+  // Accepting a paste and then refusing it at submit is how a working button
+  // reads as a dead one: the answer was invited, the refusal was not visible.
+  assert.equal(seedInert({ mode: "new" }), "not used — switch Mode to Import");
+  assert.equal(seedInert({}), "not used — switch Mode to Import");
+  assert.equal(seedInert({ mode: "import" }), undefined);
+});
+
+test("an inert field renders its reason instead of a value", () => {
+  const shown = formFieldDisplay(
+    { key: "mnemonic", label: "Seed phrase", type: "password", secret: true,
+      inert: (v) => seedInert(v as { mode?: string }) },
+    { mode: "new", mnemonic: SEED },
+  );
+  assert.match(shown, /switch Mode to Import/);
+  assert.ok(!shown.includes("test"), "an inert row leaked the value it holds");
+});
+
+test("CONTROL: once the mode is import the row shows the mask, not the reason", () => {
+  const shown = formFieldDisplay(
+    { key: "mnemonic", label: "Seed phrase", type: "password", secret: true,
+      inert: (v) => seedInert(v as { mode?: string }) },
+    { mode: "import", mnemonic: SEED },
+  );
+  assert.match(shown, /^12 words/);
 });

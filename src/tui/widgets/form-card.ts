@@ -33,6 +33,8 @@ export const runFormCard = (
 
   return new Promise((resolve) => {
     let close: (result?: { ok: boolean; message?: string }) => void = () => undefined;
+    /** Why the last submit was refused. Cleared as soon as an answer changes. */
+    let submitError: string | undefined;
     const { box, guardFocus, close: closeChrome } = createModal(blessed, screen, {
       title: spec.title,
       widthPct: 72,
@@ -64,8 +66,16 @@ export const runFormCard = (
       const v = validateForm(spec, values);
       const line = summarizeForm(spec, values);
       const errs = Object.values(v.errors);
+      // A refused submit has to CHANGE something. The reason was already on the
+      // line in gray before the key was pressed, so pressing it moved nothing
+      // on screen and read as a dead button — and provider.notify goes to the
+      // deck's status line, which this modal's scrim is covering.
       summary.setContent(
-        v.ok ? `{green-fg}${line}{/}` : `{yellow-fg}${line}{/}  {gray-fg}(${errs[0]}){/}`,
+        submitError
+          ? `{red-fg}▲ ${submitError}{/}`
+          : v.ok
+            ? `{green-fg}${line}{/}`
+            : `{yellow-fg}${line}{/}  {gray-fg}(${errs[0]}){/}`,
       );
       screen.render();
     };
@@ -83,6 +93,15 @@ export const runFormCard = (
     guardFocus(list);
 
     const edit = async (f: FormFieldSpec) => {
+      const inert = f.inert?.(values);
+      if (inert !== undefined) {
+        // Refusing at submit for an answer the form invited is the trap this
+        // avoids. Say it on the row, now, instead.
+        submitError = `${f.label} is ${inert}.`;
+        reclaim();
+        return;
+      }
+      submitError = undefined;
       switch (f.type) {
         case "toggle":
           values[f.key] = !values[f.key];
@@ -125,9 +144,12 @@ export const runFormCard = (
     const trySubmit = async () => {
       const v = validateForm(spec, values);
       if (!v.ok) {
-        provider.notify(Object.values(v.errors)[0] ?? "Incomplete form.");
+        submitError = Object.values(v.errors)[0] ?? "Incomplete form.";
+        refresh();
+        provider.notify(submitError);
         return;
       }
+      submitError = undefined;
       closeChrome();
       const res: { ok: boolean; error?: string; message?: string } = await spec
         .submit(values)

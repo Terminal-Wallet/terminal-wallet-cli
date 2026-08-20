@@ -36,6 +36,15 @@ export interface FormFieldSpec {
   secret?: boolean; // never echo the value in display/summary (keys, mnemonics)
   /** Live word count while typing — a masked seed has no other paste feedback. */
   countWords?: boolean;
+  /**
+   * Why this field cannot be edited right now, given the other answers.
+   *
+   * A field that is meaningless for the current mode but still opens an editor
+   * is a trap: the answer is accepted, then refused at submit by a message the
+   * user may never see. Saying so on the row removes the trap instead of
+   * policing it afterwards.
+   */
+  inert?: (values: FormValues) => string | undefined;
   /** Per-field validation; return an error message or undefined when valid. */
   validate?: (value: FormValue, all: FormValues) => string | undefined;
 }
@@ -94,6 +103,8 @@ export const formFieldDisplay = (
   values: FormValues,
 ): string => {
   const v = values[field.key];
+  const inert = field.inert?.(values);
+  if (inert !== undefined) return `‹${inert}›`;
   if (field.type === "toggle") return v ? "On" : "Off";
   if (isBlank(v)) return field.placeholder ?? "—";
   if (field.secret) return maskSecret(typeof v === "string" ? v : "");
