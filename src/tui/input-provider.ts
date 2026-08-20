@@ -376,11 +376,10 @@ export const createBlessedInputProvider = (
         widthPct: 80,
         height: listH + 7,
         accent: "cyan",
-        // The border footer holds only what always fits. The key hints live on
-        // a line INSIDE the box, because a footer wider than the modal wraps
-        // onto the summary and its first half scrolls out of sight — which is
-        // how "r remove" ended up invisible on a narrower terminal.
-        footer: "enter save · esc cancel",
+        // No border footer: this modal renders its own bottom line so save and
+        // discard can carry colour and say whether anything would be lost.
+        // A footer wider than the modal also wraps onto the summary and its
+        // first half scrolls out of sight, which is how "r remove" went missing.
         onDismiss: () => done(undefined),
       });
       const list = blessed.list({
@@ -394,6 +393,24 @@ export const createBlessedInputProvider = (
       const summary = blessed.text({
         parent: box, bottom: 1, left: 1, right: 1, tags: true, content: "",
       });
+      const actions = blessed.text({
+        parent: box, bottom: 0, left: 1, right: 1, tags: true, content: "",
+      });
+
+      /** What pressing enter would write. Also what pressing esc would throw away. */
+      const pendingEdits = (): RpcEndpointEdit[] => {
+        const edits: RpcEndpointEdit[] = [];
+        for (const url of removed) {
+          // Added and then removed in the same sitting is a no-op, not an edit.
+          if (startEnabled.has(url)) edits.push({ url, action: "remove" });
+        }
+        for (const r of visible()) {
+          if (startEnabled.get(r.url) !== r.enabled || !startEnabled.has(r.url)) {
+            edits.push({ url: r.url, action: r.enabled ? "enable" : "disable" });
+          }
+        }
+        return edits;
+      };
 
       const paint = () => {
         const items = visible();
@@ -416,6 +433,17 @@ export const createBlessedInputProvider = (
             : "{gray-fg}space on/off · a add · r remove · o only-custom · p recheck{/}",
         );
         summary.setContent(`{gray-fg}${rpcSummaryLine(items)}{/}`);
+        // Save and discard mean nothing without knowing whether anything is
+        // pending — "esc cancel" on an untouched list is just "close", and on a
+        // touched one it throws work away.
+        const pending = pendingEdits().length;
+        actions.setContent(
+          pending
+            ? `{yellow-fg}${pending} unsaved change${pending === 1 ? "" : "s"}{/}   ` +
+              `{green-fg}{bold}Enter{/bold}{/} save   ` +
+              `{red-fg}{bold}Esc{/bold}{/} discard`
+            : `{gray-fg}no changes{/}   {gray-fg}{bold}Esc{/bold}{/} close`,
+        );
         screen.render();
       };
 
@@ -427,6 +455,7 @@ export const createBlessedInputProvider = (
       };
 
       const selected = (): RpcRow | undefined => visible()[list.selected as number];
+
 
       list.key(["space"], () => {
         const r = selected();
@@ -504,19 +533,7 @@ export const createBlessedInputProvider = (
 
       done = (v?: RpcEndpointEdit[]) => { close(); resolve(v); };
       list.key(["escape"], () => done(undefined));
-      list.key(["enter"], () => {
-        const edits: RpcEndpointEdit[] = [];
-        for (const url of removed) {
-          // Never configured, never saved: adding then removing is a no-op.
-          if (startEnabled.has(url)) edits.push({ url, action: "remove" });
-        }
-        for (const r of visible()) {
-          if (startEnabled.get(r.url) !== r.enabled || !startEnabled.has(r.url)) {
-            edits.push({ url: r.url, action: r.enabled ? "enable" : "disable" });
-          }
-        }
-        done(edits);
-      });
+      list.key(["enter"], () => done(pendingEdits()));
       box.on("click", () => back());
 
       paint();
