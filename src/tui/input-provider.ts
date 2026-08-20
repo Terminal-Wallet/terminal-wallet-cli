@@ -20,11 +20,14 @@ import { buildWalletInfo } from "../flows/new-wallet";
 import { FormSpec } from "./form-core";
 import { runFormCard } from "./widgets/form-card";
 import { createModal, shifted } from "./widgets/modal";
+import { tag } from "./format/tags";
 import {
   RpcRow,
   leadBlock,
-  rpcStatusLabel,
+  onlyCustomToggle,
+  rpcRowLine,
   rpcSummaryLine,
+  rpcUrlWidth,
   shortenUrl,
 } from "./format/rpc-status";
 import { RpcEndpointEdit } from "../core/input";
@@ -341,16 +344,14 @@ export const createBlessedInputProvider = (
     });
 
   /**
-   * Live RPC endpoint editor: one screen, focused on open.
+   * RPC endpoint editor. One screen that STAYS on screen.
    *
-   * Replaces a chain of selects (pick a URL, then pick Enable/Disable/Remove,
-   * then back out and repeat) where the only status was the user's own
-   * enabled flag. That flag is a preference; it never said whether the endpoint
-   * answers, and a dead one looked exactly like a working one.
-   *
-   * Every enabled endpoint is probed for its head block as the modal opens, so
-   * the list reports what is actually reachable and how far behind the leader
-   * each one is. Toggling is Space, in place — no round trip.
+   * The version this replaces did one thing and unwound to the deck, so
+   * changing three endpoints meant walking in from the utilities menu three
+   * times — and it only ever showed the user's own enabled flag, which says
+   * nothing about whether an endpoint answers. Every row here carries the three
+   * facts that matter together (enabled, block height, custom-or-shipped) via
+   * the shared formatter, and every action lands back on this list.
    */
   const promptRpcEndpoints = (
     title: string,
@@ -362,43 +363,29 @@ export const createBlessedInputProvider = (
       const rows: RpcRow[] = initial.map((r) => ({ ...r }));
       const removed = new Set<string>();
       const startEnabled = new Map(rows.map((r) => [r.url, r.enabled]));
+      /** Last thing that happened, shown in place rather than on a hidden status line. */
+      let note: string | undefined;
 
       const visible = () => rows.filter((r) => !removed.has(r.url));
-      const urlW = Math.min(
-        46,
-        visible().reduce((m, r) => Math.max(m, shortenUrl(r.url).length), 0),
-      );
-
-      const rowFor = (r: RpcRow) => {
-        const box = r.enabled ? "{green-fg}[x]{/}" : "[ ]";
-        const status = rpcStatusLabel(r, leadBlock(visible()));
-        // Disabled endpoints are not probed, so do not imply they were.
-        const cell = !r.enabled
-          ? "{gray-fg}disabled{/}"
-          : !r.probe
-            ? `{gray-fg}${status}{/}`
-            : r.probe.ok
-              ? `{green-fg}${status}{/}`
-              : `{red-fg}${status}{/}`;
-        const tail = r.isDefault ? "" : " {gray-fg}(custom){/}";
-        return `${box} ${shortenUrl(r.url).padEnd(urlW + 2)}${cell}${tail}`;
-      };
 
       const screenH = (screen.height as number) || 24;
-      const listH = Math.max(3, Math.min(Math.max(rows.length, 1), screenH - 10));
+      const listH = Math.max(4, Math.min(Math.max(rows.length + 2, 4), screenH - 11));
       const { box, guardFocus, close } = createModal(blessed, screen, {
         title,
-        widthPct: 78,
-        height: listH + 6,
+        widthPct: 80,
+        height: listH + 7,
         accent: "cyan",
         footer:
-          "↑/↓ · Space on/off · o only-custom · a add · r remove · p re-check · Enter save · Esc",
+          "↑/↓ · space on/off · a add · r remove · o only-custom · p re-check · enter save · esc cancel",
         onDismiss: () => done(undefined),
       });
       const list = blessed.list({
         parent: box, top: 0, left: 0, right: 0, height: listH,
-        tags: true, keys: true, mouse: true, scrollable: true,
+        tags: true, keys: true, mouse: true, vi: true, scrollable: true,
         style: { selected: { bg: "#1f4f82", fg: "white" }, item: { fg: "white" } },
+      });
+      const noteLine = blessed.text({
+        parent: box, bottom: 2, left: 1, right: 1, tags: true, content: "",
       });
       const summary = blessed.text({
         parent: box, bottom: 1, left: 1, right: 1, tags: true, content: "",
@@ -406,9 +393,27 @@ export const createBlessedInputProvider = (
 
       const paint = () => {
         const items = visible();
-        list.setItems(items.length ? items.map(rowFor) : ["{gray-fg}none configured{/}"]);
+        const lead = leadBlock(items);
+        const width = rpcUrlWidth(items);
+        list.setItems(
+          items.length
+            ? items.map((r) => rpcRowLine(r, { lead, urlWidth: width, tag }))
+            : ["{gray-fg}none configured — press a to add one{/}"],
+        );
+        // Keep the cursor on a real row after a removal shortens the list.
+        if ((list.selected as number) >= Math.max(items.length, 1)) {
+          list.select(Math.max(items.length - 1, 0));
+        }
+        noteLine.setContent(note ? `{yellow-fg}${note}{/}` : "");
         summary.setContent(`{gray-fg}${rpcSummaryLine(items)}{/}`);
         screen.render();
+      };
+
+      /** Every action ends here: cursor back on the list, screen redrawn. */
+      const back = () => {
+        screen.grabKeys = true;
+        list.focus();
+        paint();
       };
 
       const selected = (): RpcRow | undefined => visible()[list.selected as number];
@@ -417,72 +422,83 @@ export const createBlessedInputProvider = (
         const r = selected();
         if (!r) return;
         r.enabled = !r.enabled;
-        // Newly enabled means newly worth asking; newly disabled means the old
-        // answer is about to be misleading.
+        // Newly enabled is newly worth asking; newly disabled makes the old
+        // answer misleading.
         r.probe = undefined;
+        note = undefined;
         paint();
         if (r.enabled) onProbe([r], paint);
       });
+
       list.key(["o"], () => {
-        // "Only custom", in one keystroke. Working around a bad shipped
-        // endpoint otherwise means finding each default in the list and
-        // toggling it, which is the fiddly part of an already fiddly job.
-        // Reversible: if the defaults are already all off, this puts them back.
-        const defaults = visible().filter((r) => r.isDefault);
-        if (!defaults.length) {
-          notifyStatus("No shipped endpoints on this chain.");
+        const result = onlyCustomToggle(visible());
+        if (!result.changed) {
+          note = result.reason;
+          paint();
           return;
         }
-        if (!visible().some((r) => !r.isDefault && r.enabled)) {
-          notifyStatus("Add or enable a custom endpoint first — this would leave none.");
-          return;
+        for (const updated of result.rows) {
+          const target = rows.find((r) => r.url === updated.url);
+          if (target) { target.enabled = updated.enabled; target.probe = updated.probe; }
         }
-        const turningOff = defaults.some((r) => r.enabled);
-        for (const r of defaults) {
-          r.enabled = !turningOff;
-          r.probe = undefined;
-        }
+        note = undefined;
         paint();
-        if (!turningOff) onProbe(defaults, paint);
+        onProbe(visible().filter((r) => r.enabled && !r.probe), paint);
       });
+
       list.key(["p"], () => {
         for (const r of visible()) if (r.enabled) r.probe = undefined;
+        note = undefined;
         paint();
         onProbe(visible().filter((r) => r.enabled), paint);
       });
+
       list.key(["r"], () => {
         const r = selected();
-        // Defaults come from the shipped config; removing one would be undone
-        // on the next load, so it is disabled instead.
-        if (!r || r.isDefault) {
-          notifyStatus("Only custom endpoints can be removed — disable this one instead.");
+        if (!r) return;
+        if (r.isDefault) {
+          // Removing a shipped endpoint would be undone by the next config
+          // load, so the honest action is to disable it.
+          note = "shipped endpoints cannot be removed — press space to disable";
+          paint();
           return;
         }
         removed.add(r.url);
+        note = `removed ${shortenUrl(r.url)} — enter to save, esc to discard`;
         paint();
       });
+
       list.key(["a"], () => {
         void (async () => {
           const url = await promptText("Custom RPC URL", false, "https://… endpoint");
-          if (url?.trim()) {
-            const trimmed = url.trim();
-            if (!visible().some((r) => r.url === trimmed)) {
-              const added: RpcRow = { url: trimmed, enabled: true, isDefault: false };
-              rows.push(added);
-              paint();
-              onProbe([added], paint);
-            }
+          const trimmed = url?.trim();
+          if (!trimmed) { note = undefined; back(); return; }
+          if (!/^https?:\/\//i.test(trimmed)) {
+            note = "an endpoint URL has to start with http:// or https://";
+            back(); return;
           }
-          guardFocus(list);
-          list.focus();
-          paint();
+          if (visible().some((r) => r.url === trimmed)) {
+            note = "that endpoint is already listed";
+            back(); return;
+          }
+          // Re-adding one removed a moment ago is an undo, not a duplicate.
+          removed.delete(trimmed);
+          const added: RpcRow = { url: trimmed, enabled: true, isDefault: false };
+          if (!rows.some((r) => r.url === trimmed)) rows.push(added);
+          note = undefined;
+          back();
+          onProbe([rows.find((r) => r.url === trimmed) ?? added], paint);
         })();
       });
+
       done = (v?: RpcEndpointEdit[]) => { close(); resolve(v); };
       list.key(["escape"], () => done(undefined));
       list.key(["enter"], () => {
         const edits: RpcEndpointEdit[] = [];
-        for (const url of removed) edits.push({ url, action: "remove" });
+        for (const url of removed) {
+          // Never configured, never saved: adding then removing is a no-op.
+          if (startEnabled.has(url)) edits.push({ url, action: "remove" });
+        }
         for (const r of visible()) {
           if (startEnabled.get(r.url) !== r.enabled || !startEnabled.has(r.url)) {
             edits.push({ url: r.url, action: r.enabled ? "enable" : "disable" });
@@ -490,12 +506,10 @@ export const createBlessedInputProvider = (
         }
         done(edits);
       });
-      box.on("click", () => { list.focus(); screen.render(); });
+      box.on("click", () => back());
 
       paint();
       guardFocus(list);
-      // Focused on open: the previous editor needed a click before any key did
-      // anything.
       list.focus();
       screen.render();
       onProbe(visible().filter((r) => r.enabled), paint);

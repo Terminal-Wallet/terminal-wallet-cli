@@ -11,6 +11,8 @@ import { parseBlockNumberResponse } from "../../../src/railgun/network/rpc-probe
 import {
   RpcRow,
   leadBlock,
+  onlyCustomToggle,
+  rpcRowLine,
   rpcStatusLabel,
   rpcSummaryLine,
   shortenUrl,
@@ -141,4 +143,70 @@ test("a long URL keeps its tail, so two keys are still distinguishable", () => {
 
 test("a short URL is left alone", () => {
   assert.equal(shortenUrl("https://rpc.example.com"), "https://rpc.example.com");
+});
+
+// --- the row every surface renders -----------------------------------------
+
+test("a row carries all three facts: enabled, block, custom", () => {
+  // They are independent — a shipped endpoint can be enabled and dead, a custom
+  // one disabled and fine — so a surface that drops one of them misleads.
+  const line = rpcRowLine(
+    { url: "https://a.example", enabled: true, isDefault: false, probe: ok(25789846n) },
+    { lead: 25789846n },
+  );
+  assert.match(line, /^\[x\]/, "enabled state missing");
+  assert.match(line, /25,789,846/, "block height missing");
+  assert.match(line, /custom/, "custom marker missing");
+});
+
+test("a shipped endpoint is not marked custom", () => {
+  const line = rpcRowLine({ url: "https://a.example", enabled: true, isDefault: true, probe: ok(1n) });
+  assert.ok(!line.includes("custom"), "a shipped endpoint claimed it could be removed");
+});
+
+test("a disabled row says disabled rather than reporting a stale height", () => {
+  const line = rpcRowLine({ url: "https://a.example", enabled: false, isDefault: true, probe: ok(25789846n) });
+  assert.match(line, /^\[ \]/);
+  assert.match(line, /disabled/);
+  assert.ok(!line.includes("25,789,846"), "a disabled endpoint showed a height as if it were live");
+});
+
+// --- only-custom -------------------------------------------------------------
+
+const three = (): RpcRow[] => [
+  { url: "d1", enabled: true, isDefault: true },
+  { url: "d2", enabled: true, isDefault: true },
+  { url: "c1", enabled: true, isDefault: false },
+];
+
+test("only-custom turns every shipped endpoint off and leaves customs alone", () => {
+  const r = onlyCustomToggle(three());
+  assert.equal(r.changed, true);
+  assert.deepEqual(r.rows.map((x) => x.enabled), [false, false, true]);
+});
+
+test("only-custom is a toggle — it puts the shipped ones back", () => {
+  const off = onlyCustomToggle(three()).rows;
+  const on = onlyCustomToggle(off);
+  assert.equal(on.changed, true);
+  assert.deepEqual(on.rows.map((x) => x.enabled), [true, true, true]);
+});
+
+test("CONTROL: it refuses when it would leave nothing enabled", () => {
+  // A chain with no reachable endpoint is not a state to arrive at by
+  // keystroke, and the refusal has to say why.
+  const noCustom: RpcRow[] = [
+    { url: "d1", enabled: true, isDefault: true },
+    { url: "c1", enabled: false, isDefault: false },
+  ];
+  const r = onlyCustomToggle(noCustom);
+  assert.equal(r.changed, false);
+  assert.match(r.reason ?? "", /custom endpoint first/);
+  assert.deepEqual(r.rows.map((x) => x.enabled), [true, false], "rows were mutated on a refusal");
+});
+
+test("only-custom says so when the chain ships no defaults", () => {
+  const r = onlyCustomToggle([{ url: "c1", enabled: true, isDefault: false }]);
+  assert.equal(r.changed, false);
+  assert.match(r.reason ?? "", /no shipped endpoints/);
 });
