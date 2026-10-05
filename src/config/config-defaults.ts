@@ -5,6 +5,7 @@ import {
 } from "@railgun-community/shared-models";
 import {
   TokenAddressArbitrum,
+  TokenAddressBase,
   TokenAddressBSC,
   TokenAddressEthereum,
   TokenAddressPolygonPOS,
@@ -41,7 +42,7 @@ export default {
     zeroXApi: "",
   },
   engine: {
-    artifactPath: ".artifacts-2.5",
+    artifactPath: ".railgun.artifacts",
     databasePath: ".railgun.db",
     keyChainPath: ".zKeyChains",
     defaultChain: NetworkName.Ethereum,
@@ -94,6 +95,16 @@ export default {
       TokenAddressArbitrum.USDT,
       TokenAddressArbitrum.WBTC,
       TokenAddressArbitrum.WETH,
+    ],
+    [NetworkName.Base]: [
+      TokenAddressBase.cbBTC,
+      TokenAddressBase.cbETH,
+      TokenAddressBase.DAI,
+      TokenAddressBase.USDbC,
+      TokenAddressBase.USDC,
+      TokenAddressBase.USDT,
+      TokenAddressBase.WETH,
+      TokenAddressBase.wstETH,
     ],
     [NetworkName.ArbitrumGoerli_DEPRECATED]: [],
     [NetworkName.EthereumSepolia]: [],
@@ -150,6 +161,13 @@ export default {
         getProviderObjectFromURL("https://arbitrum.drpc.org"),
         getProviderObjectFromURL("https://arbitrum-one.public.blastapi.io"),
       ],
+    },
+    [NetworkName.Base]: {
+      chainId: 8453,
+      providers: [],
+      name: "Base",
+      blockscan: "https://basescan.org/",
+      type: ChainType.EVM,
     },
     [NetworkName.EthereumGoerli_DEPRECATED]: {
       chainId: 5,

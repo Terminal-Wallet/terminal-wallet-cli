@@ -56,7 +56,7 @@ const assertNotInCheckout = () => {
       "Refusing to run in the repo checkout — this opens .railgun.db, which a",
       "running wallet may hold. Copy the state somewhere scratch and run there:",
       "",
-      "  mkdir -p /tmp/tw-probe && cp -r .railgun.db .zKeyChains .artifacts-2.5 /tmp/tw-probe/",
+      "  mkdir -p /tmp/tw-probe && cp -r .railgun.db .zKeyChains .railgun.artifacts /tmp/tw-probe/",
       "  (cd /tmp/tw-probe && npx tsx <repo>/scripts/shield-base-probe.ts 0.001)",
       "",
       "Close the wallet before copying, so the snapshot is not mid-write.",

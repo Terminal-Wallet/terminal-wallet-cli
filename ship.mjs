@@ -35,6 +35,41 @@ const POSIEDON_HASH_WASM = Path.join(
 );
 const POSIEDON_HASH_WASM_BUILD = Path.join(BUILD_DIR, "index.node");
 
+const NATIVE_TWINS = {
+  "@railgun-community/poseidon-hash-wasm": {
+    rsjs: "@railgun-community/poseidon-hash-rsjs",
+    pairs: { "1.0.1": "1.0.1", "1.0.3": "1.0.1" },
+  },
+  "@railgun-community/curve25519-scalarmult-wasm": {
+    rsjs: "@railgun-community/curve25519-scalarmult-rsjs",
+    pairs: { "0.1.5": "0.2.4" },
+  },
+};
+
+const installedVersion = (name) =>
+  JSON.parse(
+    FS.readFileSync(Path.join(BUILD_NODE_MODULES, name, "package.json"), "utf8"),
+  ).version;
+
+const checkNativeTwins = () => {
+  const problems = [];
+  for (const [wasm, { rsjs, pairs }] of Object.entries(NATIVE_TWINS)) {
+    const wasmVersion = installedVersion(wasm);
+    const rsjsVersion = installedVersion(rsjs);
+    const expected = pairs[wasmVersion];
+    if (!expected) {
+      problems.push(
+        `${wasm}@${wasmVersion} has no paired ${rsjs} release in NATIVE_TWINS`,
+      );
+    } else if (rsjsVersion !== expected) {
+      problems.push(
+        `${wasm}@${wasmVersion} pairs with ${rsjs}@${expected}, but ${rsjsVersion} is installed`,
+      );
+    }
+  }
+  return problems;
+};
+
 const preserveNodeModules = [
   Path.join(
     BUILD_NODE_MODULES,
@@ -69,6 +104,22 @@ const isPreserved = (path) =>
     console.log('Cleaning "build" folder...');
     rimrafSync(BUILD_DIR);
     mkdirpSync(BUILD_DIR);
+  }
+
+  const unbuiltAddons = Object.values(NATIVE_TWINS)
+    .map(({ rsjs }) => rsjs)
+    .filter(
+      (rsjs) => !FS.existsSync(Path.join(SOURCE_NODE_MODULES, rsjs, "index.node")),
+    );
+  if (unbuiltAddons.length) {
+    unbuiltAddons.forEach((rsjs) =>
+      console.error(`ERR ${rsjs} has no index.node: its native addon was never compiled`),
+    );
+    console.error(
+      "Install Rust and nj-cli (`cargo install nj-cli`), then run " +
+        `\`npm rebuild ${unbuiltAddons.join(" ")}\`.`,
+    );
+    process.exit(1);
   }
 
   // Move transpiled source
@@ -109,7 +160,7 @@ const isPreserved = (path) =>
   } else if (platform === "linux" && arch === "x64") {
     leveldownNodeFile = ["linux-x64", "node.napi.glibc.node"];
   } else if (platform === "linux" && arch === "arm64") {
-    leveldownNodeFile = ["linux-arm64", "node.napi.glibc.node"];
+    leveldownNodeFile = ["linux-arm64", "node.napi.armv8.node"];
   } else if (platform === "win32" && arch === "x64") {
     leveldownNodeFile = ["win32-x64", "node.napi.node"];
   } else if (platform === "win32" && arch === "ia32") {
@@ -136,6 +187,13 @@ const isPreserved = (path) =>
     ),
   );
 
+  console.log("Checking native hasher pairs...");
+  const twinProblems = checkNativeTwins();
+  if (twinProblems.length) {
+    twinProblems.forEach((problem) => console.error(`ERR ${problem}`));
+    process.exit(1);
+  }
+
   // Create a single bundled JavaScript file
   console.log("Bundling with esbuild...");
   rimrafSync(BUNDLE);
@@ -150,10 +208,9 @@ const isPreserved = (path) =>
     alias: {
       "default-gateway": "no-op",
       "@achingbrain/ssdp": "no-op",
-      "@railgun-community/curve25519-scalarmult-wasm":
-        "@railgun-community/curve25519-scalarmult-rsjs",
-      "@railgun-community/poseidon-hash-wasm":
-        "@railgun-community/poseidon-hash-rsjs",
+      ...Object.fromEntries(
+        Object.entries(NATIVE_TWINS).map(([wasm, { rsjs }]) => [wasm, rsjs]),
+      ),
     },
   });
 
